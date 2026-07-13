@@ -1,0 +1,12 @@
+# SwiftPM / Xcode build artifacts
+.build/
+.swiftpm/
+*.xcodeproj
+DerivedData/
+
+# Generated demo output
+oracle-demo/
+scratch-demo*/
+
+# macOS
+.DS_Store

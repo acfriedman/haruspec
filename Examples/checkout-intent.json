@@ -1,0 +1,6 @@
+{
+  "expectedNewEvents": ["LoyaltyPointsEarned"],
+  "expectedValueChanges": {
+    "CheckoutDidComplete": ["pointsEarned"]
+  }
+}
