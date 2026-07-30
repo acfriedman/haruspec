@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "haruspec": {
+      "command": ".build/debug/haruspec",
+      "args": ["mcp"]
+    }
+  }
+}

@@ -57,10 +57,14 @@ let package = Package(
         .target(name: "HaruspecMacros", dependencies: ["HaruspecMacroPlugin", "HaruspecTrace"], path: "Sources/Macros"),
 
         .target(name: "HaruspecDemo", dependencies: ["HaruspecCore", "HaruspecTrace", "HaruspecMacros"], path: "Sources/Demo"),
+
+        // The MCP stdio server (`haruspec mcp`) — the tool surface other agents call. A library so the
+        // protocol layer is unit-testable; the CLI subcommand is a two-line shell around it.
+        .target(name: "HaruspecMCP", dependencies: ["HaruspecCore"], path: "Sources/MCP"),
         // The CLI target is `HaruspecCLI` (its product/binary is `haruspec`): a target literally
         // named `haruspec` would differ only in case from the `Haruspec` umbrella module, which collides
         // at the build-artifact layer on case-insensitive filesystems (macOS/Windows).
-        .executableTarget(name: "HaruspecCLI", dependencies: ["HaruspecCore", "HaruspecTrace", "HaruspecDemo"], path: "Sources/CLI"),
+        .executableTarget(name: "HaruspecCLI", dependencies: ["HaruspecCore", "HaruspecTrace", "HaruspecDemo", "HaruspecMCP"], path: "Sources/CLI"),
 
         // The developer-facing Scenario DSL (result-builder + Haruspec.verify). Prototype.
         .target(name: "HaruspecScenario", dependencies: ["HaruspecCore", "HaruspecTrace", "HaruspecSeams"], path: "Sources/Scenario"),
@@ -79,6 +83,8 @@ let package = Package(
         .testTarget(name: "HaruspecMacrosTests", dependencies: ["HaruspecCore", "HaruspecTrace", "HaruspecMacros"], path: "Tests/MacrosTests"),
         .testTarget(name: "HaruspecDemoTests", dependencies: ["HaruspecCore", "HaruspecTrace", "HaruspecDemo", "HaruspecSeams"], path: "Tests/DemoTests"),
         .testTarget(name: "HaruspecScenarioTests", dependencies: ["HaruspecScenario", "HaruspecCore", "HaruspecTrace", "HaruspecMacros", "HaruspecSeams", "LegacyObjC"], path: "Tests/ScenarioTests"),
+
+        .testTarget(name: "HaruspecMCPTests", dependencies: ["HaruspecMCP", "HaruspecCore"], path: "Tests/MCPTests"),
 
         // Consumer's-eye view: depends on ONLY the umbrella, so it fails to compile if a single
         // `import Haruspec` doesn't surface the macros, capture, seams, and Scenario DSL.

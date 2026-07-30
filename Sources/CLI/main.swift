@@ -2,6 +2,7 @@ import Foundation
 import HaruspecCore
 import HaruspecTrace
 import HaruspecDemo
+import HaruspecMCP
 
 // A thin, dependency-free CLI over the engine. Subcommands:
 //   haruspec diff <baseline.json> <candidate.json> [--tolerance <spec.json>] [--intent <spec.json>] [--agent] [--json]
@@ -79,6 +80,11 @@ USAGE:
 
   haruspec canonicalize <trace.json> [--tolerance <spec.json>] [--out <file.json>]
       Emit the canonical, redacted form of a trace.
+
+  haruspec mcp
+      Serve the engine as MCP tools over stdio (verify_behavioral_parity, canonicalize_trace),
+      so agents (Claude Code, Cursor, …) can gate changes on behavioral proof. Register with:
+      { "command": "haruspec", "args": ["mcp"] }
 """
 
 func runDiff(_ rest: [String]) -> Never {
@@ -187,6 +193,7 @@ switch command {
 case "diff": runDiff(rest)
 case "demo": runDemo(rest)
 case "canonicalize": runCanonicalize(rest)
+case "mcp": MCPServer().run()
 case "help", "--help", "-h": print(usage); exit(ExitCode.ok.rawValue)
 default: fail("unknown command \"\(command)\"\n\n\(usage)", code: .usage)
 }
