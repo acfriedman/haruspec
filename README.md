@@ -133,9 +133,13 @@ instrumentation.
 ## Try it
 
 ```bash
-swift test          # 92 tests: diff primitive, seam harness, coverage, property gen + validation gate
+swift test          # 140 tests: diff primitive, seam harness, coverage, property gen, plan replay, MCP
 swift run haruspec demo   # capture baseline/refactor/regression, print both verdicts
+swift run haruspec mcp    # serve verify_behavioral_parity + canonicalize_trace as MCP tools (stdio)
 ```
+
+Agents get the same verdict as tools: `haruspec mcp` speaks MCP over stdio, and this repo's
+`.mcp.json` registers it for Claude Code (`swift build` once so `.build/debug/haruspec` exists).
 
 `haruspec demo` writes three traces and prints:
 
@@ -157,6 +161,17 @@ swift run haruspec demo   # capture baseline/refactor/regression, print both ver
 The "buggy" variant compiles and reads fine; a cursory review would pass it. Its three planted
 regressions — an off-by-one from integer-division rounding, a dropped notification, and a blown
 timing budget — are each caught and localized by the trace, not by tests.
+
+### Using it from an Xcode app
+
+Add the package (local path or git) and link the single **`Haruspec`** product — one
+`import Haruspec` surfaces capture, macros, seams, and the Scenario DSL. The macro plugin builds
+as a macOS *host tool* automatically; SwiftSyntax never enters your app's link. One footgun:
+build with `-destination 'platform=iOS Simulator,…'` and **never pass `-sdk iphonesimulator…`
+to `xcodebuild`** — `-sdk` overrides `SDKROOT` for every target in the graph including the macro
+host tool, which then gets planned for the simulator and fails every macro expansion with
+*"produced malformed response."* (The dogfood app, `example-xcode-migration`, is the working
+reference.)
 
 Diff two saved traces directly:
 
@@ -185,9 +200,9 @@ small) module.
 
 ## Not yet built (deferred)
 
-Characterization-test generation, an MCP tool wrapper, simulator/XCUITest accessibility-tree capture,
-`xcresult`/MetricKit ingestion for crash-repro, and the Swift-6 module ratchet — all future callers of
-this same engine.
+Characterization-test generation, simulator/XCUITest accessibility-tree capture, `xcresult`/MetricKit
+ingestion for crash-repro, and the Swift-6 module ratchet — all future callers of this same engine.
+(The MCP tool wrapper has since shipped — see `haruspec mcp` above.)
 
 The other major track is **killing the feedback loop** so verdicts land in seconds on CI: a
 record-and-replay **seam harness** (record the dependency boundary once, replay the same transcript

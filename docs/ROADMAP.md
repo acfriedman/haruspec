@@ -53,6 +53,18 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   `--agent` prints a prompt-injected guide teaching a consuming agent how to relay the verdict.
   Demonstrated end-to-end by `CartServiceV3` (a loyalty feature carrying a collateral dropped
   notification).
+- ✅ **Continuous (PR) shape — cross-build golden-master** — the two-*builds* analog of the Scenario
+  DSL's two-*types* `verify(against:)`: `record()` on the base build pins the whole explored surface
+  (call orderings × seam cassettes, each with its golden trace) into a serializable `ScenarioPlan`;
+  `verify(replaying:)` on the changed build replays the *identical* inputs into current code and diffs
+  against the stored goldens. `ScenarioVerdict` now routes through `VerificationResult` (coverage-aware,
+  `Codable` — it *is* the `result.json` PR artifact a reviewer re-runs to reproduce), and `IntentSpec`
+  wires in via `Scenario.intend(_:)` so extension-mode PRs gate only on collateral. Sound across the
+  boundary: an op the current build can't replay (rename drift) or a seam read past the recording is an
+  `.unrecorded` coverage gap → CANNOT-VERIFY, never a silent skip. `--scope` selection rides the
+  trace-derived `coveredClasses` index (`covers(anyOf:)`), so CI re-runs only plans whose recorded reach
+  intersects the diff. *Deferred (automation layer):* `git diff` → scope derivation, a scenario CLI
+  subcommand, CI artifact collection.
 - ⏳ **Richer narration + surprise score** — LLM-authored per-divergence explanations (what changed,
   where it originates, whether it's plausibly the feature) and a ranked surprise score, beyond the
   current deterministic labels + relay guide.
@@ -66,21 +78,19 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
 
 - ✅ **Runtime interception** — `NotificationInterceptor` (auto-captures `NotificationCenter` posts),
   `KVOInterceptor` (observed property changes). No service-side code.
-- ✅ **Collaborator spying (silent side effects)** — `CollaboratorSpy` (`HaruspecTrace`) closes the blind
-  spot where a SUT hands work to a singleton/collaborator that mutates the world but emits *no* other
-  signal (no notification, no KVO). `.spy(on: Ledger.self)` on a `Scenario` intercepts every
-  ObjC-dispatched instance method of a declared class and records each outbound call as a semantic-tier
-  `effect` event (`Class.selector` + canonicalized args) into the ambient recorder, before invoking the
-  original. A port that *drops* the call now diverges as a `missingEvent`; one that *alters an argument*
-  as a `valueMismatch` — over the covered surface. Capture-all within the boundary by default, with a
-  selector-level opt-out (`.spy(on:excluding:)`, the boundary-scoped analog of `.ignore(notifications:)`).
-  Generic interception is a `forwardInvocation:` trampoline in a tiny first-party ObjC target
-  (`HaruspecObjCShim`) — `NSInvocation` is unavailable in Swift, which is why the arg-reading lives there;
-  it's the arg-reading sibling of `SeamSwizzle.exchange`. Proven in `CollaboratorSpyTests` (the `swift test`
-  analog of the dogfood `silentSideEffectDropIsMissed` repro), including the without-spy false EQUIVALENT.
-  Boundary (see LIMITATIONS): reaches only ObjC-dispatched methods; a pure-Swift `static`/`final` singleton
-  needs `@Traced`/`@TracedForwarder`/DI. *Next (tier 3, deferred):* static seam-crossing analysis to
-  abstain (`CANNOT-VERIFY`) when the SUT reaches an *undeclared* boundary the spy doesn't cover.
+- ✅ **Collaborator observation (silent side effects)** — closes the blind spot where a SUT hands work
+  to a singleton/collaborator that mutates the world but emits *no* other signal (no notification, no
+  KVO): the **injectability precondition** (a one-file settable-`.shared`-behind-a-protocol refactor)
+  plus a generated **`@TracedForwarder`** the harness injects, recording each outbound call as a
+  semantic-tier `effect` event (label + canonicalized args) before forwarding. A port that *drops* the
+  call diverges as a `missingEvent`; one that *alters an argument* as a `valueMismatch` — over the
+  covered surface. This **retired the runtime `forwardInvocation:` spy** (`CollaboratorSpy` /
+  `HaruspecObjCShim`, removed) and its whole ObjC-dispatch edge-list — a forwarder is an ordinary typed
+  method wrapping a *protocol*, so pure-Swift `static`/`final` collaborators work too (see
+  LIMITATIONS for the full retirement rationale; the no-source *binary* holdout still needs
+  `SeamSwizzle`). Proven end-to-end in the dogfood cart migration (`silentSideEffectDropIsCaught`).
+  *Next (tier 3, deferred):* static seam-crossing analysis to abstain (`CANNOT-VERIFY`) when the SUT
+  reaches an *undeclared* boundary no forwarder covers.
 - ✅ **Automatic value capture** — `Codable → CanonicalValue` bridge; `RuntimeValue` for type-erased
   runtime values.
 - ✅ **`@Traced` / `@TracedMethod` macros** — zero-code method call/args/return capture against an
@@ -174,8 +184,15 @@ the golden branch, replay the *same* transcript into both branches, and diff. Se
 
 ## Distribution & rails
 
-- ⏳ **MCP tool wrapper** — expose capture + diff as tools other agents (Claude Code, Cursor) can call:
-  "verify behavioral parity of this change."
+- ✅ **MCP tool wrapper** — `haruspec mcp` serves the engine over MCP stdio (dependency-free JSON-RPC,
+  ~200 lines in `HaruspecMCP`): `verify_behavioral_parity` wraps the `diff --tolerance --intent
+  --agent` path — text content carries the report + agent relay guide, `structuredContent` the verdict
+  + intended/collateral counts + full diff JSON — and `canonicalize_trace` exposes the canonical form
+  for debugging. Tool-execution failures ride `isError` (visible to the model), never protocol errors.
+  Recording golden traces is deliberately *not* a tool: capture runs inside the consumer's test target
+  (`Scenario.record(to:)`) — an external process verifies artifacts, it can't faithfully run someone
+  else's app. Proven over stdio against the demo (EQUIVALENT refactor / DIVERGED regression);
+  `.mcp.json` registers the server for agent sessions in this repo.
 
 ## Applications (callers of the engine)
 
