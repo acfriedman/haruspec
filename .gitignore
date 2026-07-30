@@ -5,7 +5,7 @@
 DerivedData/
 
 # Generated demo output
-oracle-demo/
+haruspec-demo/
 scratch-demo*/
 
 # macOS

@@ -1,4 +1,4 @@
-# Oracle — iOS Behavioral Oracle
+# Haruspec — the behavioral-oracle engine
 
 A verification instrument for AI coding agents working on iOS/Swift. It captures **ground-truth
 behavior** of running code (call/return sequences, side-effect notifications, state changes, timed
@@ -36,12 +36,12 @@ Everything is a caller of one reusable capability:
 
 | Module        | Role |
 |---------------|------|
-| `OracleCore`  | The evergreen primitive: trace model, canonicalization, tolerance spec, and the LCS-based behavioral diff. Pure, dependency-free, fully unit-tested. |
-| `OracleTrace` | The runtime capture library: the `TraceRecorder` (call/ret/stateChange/signpost, thread-safe, injectable clock), the ambient `TraceContext`, zero-code backends — `NotificationInterceptor` records `NotificationCenter` posts, `KVOInterceptor` records observed property changes — and a `Codable → CanonicalValue` bridge for automatic value capture. |
-| `OracleMacros` | The opt-in `@Traced` / `@TracedMethod` macros for zero-code method capture. Backed by `OracleMacroPlugin` (the only SwiftSyntax user); kept out of the engine core. |
-| `OracleSeams` | The record/replay **seam** library: the `Cassette` primitive (record once, replay into both branches, misses surfaced not fabricated) plus injected seams — clock, RNG, `UserDefaults`, `URLSession` (via `URLProtocol`, no swizzle), locale/timezone, keychain, file I/O — and `OracleSeam`, the ambient provider the `@Seamed` macro rewrites bare `Date()`/`UUID()` into (DEBUG-only) to reach un-injected legacy code. Depends only on `OracleCore`. See [`SEAMS.md`](docs/SEAMS.md). |
-| `OracleDemo`  | A sample application: a checkout module in four variants — baseline, a behavior-preserving refactor, a subtly-buggy version, and a *feature* change (loyalty points) that also carries a collateral regression — that exercises the engine end-to-end. |
-| `oracle`      | A thin CLI: `diff`, `demo`, `canonicalize`. |
+| `HaruspecCore`  | The evergreen primitive: trace model, canonicalization, tolerance spec, and the LCS-based behavioral diff. Pure, dependency-free, fully unit-tested. |
+| `HaruspecTrace` | The runtime capture library: the `TraceRecorder` (call/ret/stateChange/signpost, thread-safe, injectable clock), the ambient `TraceContext`, zero-code backends — `NotificationInterceptor` records `NotificationCenter` posts, `KVOInterceptor` records observed property changes — and a `Codable → CanonicalValue` bridge for automatic value capture. |
+| `HaruspecMacros` | The opt-in `@Traced` / `@TracedMethod` macros for zero-code method capture. Backed by `HaruspecMacroPlugin` (the only SwiftSyntax user); kept out of the engine core. |
+| `HaruspecSeams` | The record/replay **seam** library: the `Cassette` primitive (record once, replay into both branches, misses surfaced not fabricated) plus injected seams — clock, RNG, `UserDefaults`, `URLSession` (via `URLProtocol`, no swizzle), locale/timezone, keychain, file I/O — and `HaruspecSeam`, the ambient provider the `@Seamed` macro rewrites bare `Date()`/`UUID()` into (DEBUG-only) to reach un-injected legacy code. Depends only on `HaruspecCore`. See [`SEAMS.md`](docs/SEAMS.md). |
+| `HaruspecDemo`  | A sample application: a checkout module in four variants — baseline, a behavior-preserving refactor, a subtly-buggy version, and a *feature* change (loyalty points) that also carries a collateral regression — that exercises the engine end-to-end. |
+| `haruspec`    | A thin CLI: `diff`, `demo`, `canonicalize`. |
 
 No Swift-6-specific (or migration-specific) logic lives in the core — applications configure the
 engine via a `ToleranceSpec`.
@@ -57,7 +57,7 @@ The goal is that a team turns the oracle on rather than hand-instrumenting for i
 - **Timing, baked in.** Mark a method `@Timed` (or a whole type with `@Traced(timing: true)`) and the
   macro records the method's duration as a signpost interval — no hand-written timing region. For a
   *sub-region* of a method (finer than a whole method, which a macro can't express) use
-  `Oracle.interval`.
+  `Haruspec.interval`.
 - **Runtime interception (live, zero-code).** `NotificationInterceptor` observes a `NotificationCenter`
   and records every product notification during a capture window — the demo services post ordinary
   notifications with no oracle awareness. `KVOInterceptor` does the same for observed properties.
@@ -66,7 +66,7 @@ The goal is that a team turns the oracle on rather than hand-instrumenting for i
 - **Temporal markers + two tiers (live).** The **structural** tier is internal call mechanics
   (`@Traced` calls/returns, timing) — named after code symbols, so it drifts under renames. The
   **semantic** tier is observable product behavior — notifications, KVO/state changes, and payload-free
-  `Oracle.marker("checkout_completed")` signposts — named after domain concepts, so it survives
+  `Haruspec.marker("checkout_completed")` signposts — named after domain concepts, so it survives
   refactors. Markers carry *no payload* on purpose: values are verified through production seams
   (notification userInfo, return values), never through instrumentation you authored ("don't test the
   test code"). `structuralComparison` chooses which tier gates: `strict` (default — the whole trace is
@@ -134,10 +134,10 @@ instrumentation.
 
 ```bash
 swift test          # 92 tests: diff primitive, seam harness, coverage, property gen + validation gate
-swift run oracle demo   # capture baseline/refactor/regression, print both verdicts
+swift run haruspec demo   # capture baseline/refactor/regression, print both verdicts
 ```
 
-`oracle demo` writes three traces and prints:
+`haruspec demo` writes three traces and prints:
 
 ```
 ── Refactor (expected: EQUIVALENT) ──
@@ -161,7 +161,7 @@ timing budget — are each caught and localized by the trace, not by tests.
 Diff two saved traces directly:
 
 ```bash
-swift run oracle diff baseline.json candidate.json --tolerance Examples/checkout-tolerances.json
+swift run haruspec diff baseline.json candidate.json --tolerance Examples/checkout-tolerances.json
 # exit 0 = equivalent, 3 = diverged  (CI-friendly)
 ```
 
@@ -169,7 +169,7 @@ Extension mode — declare the intended feature changes and gate only on collate
 guide for a consuming agent:
 
 ```bash
-swift run oracle diff baseline.json feature.json \
+swift run haruspec diff baseline.json feature.json \
   --tolerance Examples/checkout-tolerances.json \
   --intent Examples/checkout-intent.json \
   --agent
@@ -194,7 +194,7 @@ record-and-replay **seam harness** (record the dependency boundary once, replay 
 into both branches, diff the outputs) with **tiered isolation** — logic slice (pure Swift, no
 simulator) → module cut → sim fallback — and a three-tier verdict (`EQUIVALENT` / `DIVERGED` /
 `CANNOT-VERIFY`) that abstains rather than emit a false equivalent. The `Cassette` primitive and seven
-injected seams (`OracleSeams`) record and replay, are wired to the diff engine end-to-end, and reach
+injected seams (`HaruspecSeams`) record and replay, are wired to the diff engine end-to-end, and reach
 un-injected call-sites — `@Seamed` for bare `Date()`/`UUID()`, and the **injectability precondition** (a
 one-file settable-`.shared`-behind-a-protocol refactor, certified once by a swizzle bootstrap, then pure
 DI) for legacy singletons; a cassette's misses feed the coverage that downgrades to `CANNOT-VERIFY`. The next depth step is **property-based generation at the

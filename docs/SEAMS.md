@@ -44,7 +44,7 @@ determinism, and have clean interception points.
 | Seam | Mechanism | Record | Replay | Notes |
 |------|-----------|:------:|:------:|-------|
 | Injectable logical clock | ctor/ambient injection | ✅ | ✅ | Engine's canonical clock; **`SeamClock` adds cassette record/replay of wall-clock reads**. |
-| `Date()` / `Date.now` (bare call) | source shim (`@Seamed`) | ✅ | ✅ | `@Seamed` rewrites bare `Date()`/`Date.now` → ambient `OracleSeam` cassette, **DEBUG-only** (release keeps the bare call). No DI needed. |
+| `Date()` / `Date.now` (bare call) | source shim (`@Seamed`) | ✅ | ✅ | `@Seamed` rewrites bare `Date()`/`Date.now` → ambient `HaruspecSeam` cassette, **DEBUG-only** (release keeps the bare call). No DI needed. |
 | `CACurrentMediaTime`, `mach_absolute_time`, `DispatchTime.now` | interpose | 📋 | 📋 | Timing-budget captures depend on this. |
 | `Timer` / `RunLoop` scheduling | swizzle / virtualized clock | 🔬 | 🔬 | Needs a virtual scheduler to replay deterministically. |
 
@@ -111,7 +111,7 @@ injectability refactor is EQUIVALENT (then is retired), and as the irreducible n
 
 ---
 
-## Implemented — the `OracleSeams` target
+## Implemented — the `HaruspecSeams` target
 
 The **`Cassette`** primitive is built: record-once, replay-into-both, JSON-serializable (same bundle
 discipline as a trace), and it surfaces unrecorded interactions as `SeamMiss`es rather than fabricating
@@ -136,7 +136,7 @@ Seven seams knocked off the ledger against it, all pure-Swift and no simulator:
 - **`SeamKeychain`** (auth-gate token) — record the token, replay it headlessly.
 - **`SeamFileSystem`** (file I/O) — reads recorded/replayed by path; writes in-memory (read-your-writes).
 
-Most do the clean **injected** boundary. The **un-injected** reach has started too: `OracleSeam` (an
+Most do the clean **injected** boundary. The **un-injected** reach has started too: `HaruspecSeam` (an
 ambient, task-local cassette) plus the **`@Seamed`** macro, which rewrites bare `Date()` / `Date.now` /
 `UUID()` call-sites in a type's methods to route through it — **only under `#if DEBUG`**, so release
 builds keep the original calls and production is untouched. `UninjectedReachTests` proves it on a
@@ -185,7 +185,7 @@ Layered, cheapest-and-most-faithful first:
 4. **`URLProtocol` registration** — Apple's sanctioned network seam. High value, no swizzling.
 5. **Source shim (macro)** — rewrite `Date()` / RNG call-sites through an ambient provider, confined
    to the DEBUG/opt-in path like `@Traced`. Faithful, opt-in. **Implemented for `Date()`/`Date.now`/
-   `UUID()`:** `@Seamed` (on a type) rewrites those bare calls to the ambient `OracleSeam` cassette,
+   `UUID()`:** `@Seamed` (on a type) rewrites those bare calls to the ambient `HaruspecSeam` cassette,
    emitted only under `#if DEBUG` so release builds are byte-for-byte untouched. This is how the harness
    reaches legacy code with no DI. Manual value-level syntax walk (the prebuilt SwiftSyntax can't link a
    `SyntaxRewriter` subclass). `Int.random`/`arc4random` rewriting is the next extension.
@@ -209,7 +209,7 @@ the entire runtime-interception column. Every mechanism still lives in the exter
 - **Cassette** — an ordered, keyed transcript of boundary interactions captured during the golden run
   (same JSON-bundle discipline as trace capture).
 - **Matching** — a replayed call finds its recorded response by *seam id + canonicalized args + call
-  ordinal*, reusing `OracleCore` canonicalization so volatile fields don't defeat the match.
+  ordinal*, reusing `HaruspecCore` canonicalization so volatile fields don't defeat the match.
 - **Unrecorded interaction** — replay hits a call with no matching entry. This is **both** a
   behavioral-change signal (the change altered the boundary) **and** a coverage event. Policy:
   **surface it, never fabricate a response.** *Now wired to the verdict:* `Cassette.coverage(declaring:)`

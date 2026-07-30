@@ -1,6 +1,6 @@
 # Roadmap
 
-Feature roadmap for the iOS Behavioral Oracle. The north star: per commit, on CI, in seconds,
+Feature roadmap for Haruspec, the behavioral-oracle engine. The north star: per commit, on CI, in seconds,
 without touching production code, decide whether a change alters behavior — with a verdict that is
 **sound** (never a false "equivalent"), **localized**, **coverage-reported**, and **honest** (abstains
 when it can't faithfully isolate the change). Engine first, applications second — everything below is
@@ -16,7 +16,7 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
 ## Engine — the behavioral-diff primitive
 
 - ✅ **Trace model + canonicalization** — logical clock, symbolic object identity, logical threads,
-  volatile-field redaction. (`OracleCore`)
+  volatile-field redaction. (`HaruspecCore`)
 - ✅ **Behavioral diff v0** — LCS alignment; missing/unexpected/reordered/value/timing divergences;
   declared tolerances (volatile fields, numeric epsilon, timing budgets, unordered groups, ignored
   kinds). The crown jewel.
@@ -28,11 +28,11 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   fraction of the change's behavioral surface actually exercised. Sound by design — a false
   `EQUIVALENT` is the one catastrophic outcome, so uncovered surface downgrades the verdict rather
   than being assumed equivalent. *Landed:* `TraceDiff.Verdict` gains `.cannotVerify`; a new
-  `VerificationResult` (`OracleCore`) wraps the pure diff with a seam-agnostic `Coverage`
+  `VerificationResult` (`HaruspecCore`) wraps the pure diff with a seam-agnostic `Coverage`
   (declared/exercised/gaps + fraction) and carries the *resolved* verdict. The pure `BehavioralDiff.compare`
   is untouched — it still only emits equivalent/diverged; `VerificationResult.resolve` is the only place
   `CANNOT-VERIFY` is reached, downgrading an EQUIVALENT it can't stand behind (DIVERGED always stands).
-  The **first coverage source is the cassette**: `Cassette.coverage(declaring:)` (`OracleSeams`) turns
+  The **first coverage source is the cassette**: `Cassette.coverage(declaring:)` (`HaruspecSeams`) turns
   `SeamMiss`es into `.unrecorded` gaps (live-fallback = isolation broke = hard downgrade) and the
   recorded/exercised tracks into the covered surface; the declared seam registry is the coverage map
   (defaults to the golden's recorded seams). Proven end-to-end (`SeamCoverageTests`): a change that
@@ -49,7 +49,7 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   special case where intent = ∅ (`IntentSpec.none`). Field-specific: declaring one field of an event
   doesn't excuse a change to another.
 - ✅ **Per-divergence labeling + agent relay** — each divergence tagged `intended` / `collateral`
-  (`tolerated` deltas never become divergences); `oracle diff --intent` gates only on collateral, and
+  (`tolerated` deltas never become divergences); `haruspec diff --intent` gates only on collateral, and
   `--agent` prints a prompt-injected guide teaching a consuming agent how to relay the verdict.
   Demonstrated end-to-end by `CartServiceV3` (a loyalty feature carrying a collateral dropped
   notification).
@@ -66,7 +66,7 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
 
 - ✅ **Runtime interception** — `NotificationInterceptor` (auto-captures `NotificationCenter` posts),
   `KVOInterceptor` (observed property changes). No service-side code.
-- ✅ **Collaborator spying (silent side effects)** — `CollaboratorSpy` (`OracleTrace`) closes the blind
+- ✅ **Collaborator spying (silent side effects)** — `CollaboratorSpy` (`HaruspecTrace`) closes the blind
   spot where a SUT hands work to a singleton/collaborator that mutates the world but emits *no* other
   signal (no notification, no KVO). `.spy(on: Ledger.self)` on a `Scenario` intercepts every
   ObjC-dispatched instance method of a declared class and records each outbound call as a semantic-tier
@@ -75,7 +75,7 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   as a `valueMismatch` — over the covered surface. Capture-all within the boundary by default, with a
   selector-level opt-out (`.spy(on:excluding:)`, the boundary-scoped analog of `.ignore(notifications:)`).
   Generic interception is a `forwardInvocation:` trampoline in a tiny first-party ObjC target
-  (`OracleObjCShim`) — `NSInvocation` is unavailable in Swift, which is why the arg-reading lives there;
+  (`HaruspecObjCShim`) — `NSInvocation` is unavailable in Swift, which is why the arg-reading lives there;
   it's the arg-reading sibling of `SeamSwizzle.exchange`. Proven in `CollaboratorSpyTests` (the `swift test`
   analog of the dogfood `silentSideEffectDropIsMissed` repro), including the without-spy false EQUIVALENT.
   Boundary (see LIMITATIONS): reaches only ObjC-dispatched methods; a pure-Swift `static`/`final` singleton
@@ -85,10 +85,10 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   runtime values.
 - ✅ **`@Traced` / `@TracedMethod` macros** — zero-code method call/args/return capture against an
   ambient recorder; stable labels across renames; SwiftSyntax confined to the opt-in macro path.
-- ✅ **`@Timed` / `@Traced(timing:)`** — method-level timing baked into the macro; `Oracle.interval`
+- ✅ **`@Timed` / `@Traced(timing:)`** — method-level timing baked into the macro; `Haruspec.interval`
   for sub-method regions.
 - ✅ **Semantic tier + two-tier durability** — the durable contract is *observable product behavior*:
-  notifications, KVO/state changes, and payload-free `Oracle.marker(...)` temporal signposts. The
+  notifications, KVO/state changes, and payload-free `Haruspec.marker(...)` temporal signposts. The
   fragile structural tier is internal call mechanics (calls/returns/timing). `structuralComparison:
   strict | advisory | ignored` chooses which gates, so rename-heavy refactors (imperative → reactive)
   gate on the durable tier while mechanical migrations keep structural at full coverage. Markers carry
@@ -130,12 +130,12 @@ the golden branch, replay the *same* transcript into both branches, and diff. Se
   synthesized mocks) drive the changed unit headlessly; both branches replay the same cassette so any
   divergence is attributable to the code. Unrecorded interactions surface as a signal, never fabricate.
   *Landed:* the `Cassette` primitive (record-once → replay-into-both, JSON-serializable, misses surfaced
-  not fabricated) in the `OracleSeams` target, plus seven injected seams record+replay — time, RNG,
+  not fabricated) in the `HaruspecSeams` target, plus seven injected seams record+replay — time, RNG,
   UserDefaults, `URLSession` (via `URLProtocol`, no swizzle), locale/tz, keychain, file reads. See
   [`SEAMS.md`](SEAMS.md#implemented--the-oracleseams-target). Now **wired to the diff engine end-to-end**:
   a replayed seam run whose readings flow into behavior diffs `EQUIVALENT` vs. its golden and `DIVERGED`
   (localized) for a code change. **Un-injected reach started:** the `@Seamed` macro rewrites bare
-  `Date()`/`Date.now`/`UUID()` (DEBUG-only) to the ambient `OracleSeam` cassette, so pure-Swift legacy
+  `Date()`/`Date.now`/`UUID()` (DEBUG-only) to the ambient `HaruspecSeam` cassette, so pure-Swift legacy
   code with no DI is reachable (`UninjectedReachTests`). **Singletons & ObjC** are handled at runtime
   (dispatch decides the tool): `SeamSwizzle` (`method_exchangeImplementations`) for `@objc dynamic`/ObjC
   methods — replaces the impl once, catching all callers — and a `.shared`-swap recording decorator for

@@ -11,7 +11,7 @@ Each entry: **what breaks / is missed**, **why it's this way**, and a note on **
 
 ## Structural value capture (`RuntimeValue.canonical`)
 
-`Sources/OracleTrace/RuntimeValue.swift` turns a type-erased runtime `Any` into a diffable
+`Sources/HaruspecTrace/RuntimeValue.swift` turns a type-erased runtime `Any` into a diffable
 `CanonicalValue`. Order: bridged JSON scalars/collections → `Encodable` → **structural reflection**
 (Obj-C property list, then Swift `Mirror`) → `String(describing:)`. The reflection fallback deletes the
 old "must be `Encodable`" tax (no hand-written `Codable` mirror DTO needed), but has edges:
@@ -58,7 +58,7 @@ refactor that makes the boundary injectable (settable-`.shared` behind a protoco
 injects a generated `@TracedForwarder` that records each outbound call as a semantic `effect` event before
 forwarding. A dropped call surfaces as a `missingEvent`; an altered argument as a `valueMismatch`.
 
-This **retired the runtime `forwardInvocation:` spy** (`CollaboratorSpy` / `OracleObjCShim`, removed), and
+This **retired the runtime `forwardInvocation:` spy** (`CollaboratorSpy` / `HaruspecObjCShim`, removed), and
 with it its whole edge-list — the entire column collapsed rather than being patched one caveat at a time:
 
 - No **`_objc_msgForward` / `_stret`** hazard — there is no message-forwarding trampoline; a forwarder is

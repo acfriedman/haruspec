@@ -1,6 +1,6 @@
 # docs — durable reference
 
-Evergreen documentation for the iOS Behavioral Oracle: the design/feature detail and the
+Evergreen documentation for Haruspec, the behavioral-oracle engine: the design/feature detail and the
 interceptable-seam catalog. These change slowly.
 
 ## Contents
