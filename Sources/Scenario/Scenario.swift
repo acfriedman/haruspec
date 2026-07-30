@@ -76,6 +76,7 @@ public struct Scenario<S> {
     var notificationNames: Set<String>? = nil
     var observationCenter: NotificationCenter? = nil
     var tolerances: ToleranceSpec = .strict
+    var intent: IntentSpec = .none
     var seamDomains: [String: SeamDomain] = [:]
     var exploreOrdering = false
     var maxOrderings = 100
@@ -126,6 +127,13 @@ public struct Scenario<S> {
     /// Declared acceptable deltas.
     public func tolerate(_ spec: ToleranceSpec) -> Scenario<S> {
         var c = self; c.tolerances = spec; return c
+    }
+
+    /// Extension mode: declare the deltas the change was *meant* to make. Declared divergences are
+    /// reported as `intended` and don't gate; the verdict gates on the residual collateral. The default
+    /// (`IntentSpec.none`) is parity mode — every divergence gates. See `IntentSpec`.
+    public func intend(_ spec: IntentSpec) -> Scenario<S> {
+        var c = self; c.intent = spec; return c
     }
 
     /// What to vary — seam domains and/or call ordering.

@@ -24,6 +24,11 @@ public extension ScenarioVerdict {
             HTML.tile(label: "Divergences", value: "\(diff.divergences.count)",
                             accent: diff.divergences.isEmpty ? "ok" : "bad"),
         ]
+        if let fraction = coverage.fraction {
+            tiles.append(HTML.tile(label: "Coverage",
+                                         value: "\(Int((fraction * 100).rounded()))% of \(coverage.declared.count)",
+                                         accent: coverage.unrecordedReach.isEmpty ? "ok" : "bad"))
+        }
         let seams = counterexampleSeamPairs
         if !seams.isEmpty {
             tiles.append(HTML.tile(label: "Counterexample",

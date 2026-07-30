@@ -3,15 +3,23 @@ import HaruspecCore
 import HaruspecTrace
 import HaruspecSeams
 
-/// The outcome of a scenario run: the three-tier verdict, how much was explored, and — for an
-/// order-dependent divergence — the minimal failing call sequence.
-public struct ScenarioVerdict {
-    public let verdict: TraceDiff.Verdict
-    public let diff: TraceDiff
+/// The outcome of a scenario run: the three-tier verdict *with the coverage it was measured over*, how
+/// much was explored, and — for an order-dependent divergence — the minimal failing call sequence.
+/// `Codable`, so a verify run is writable as a `result.json` artifact a reviewer can read and reproduce.
+public struct ScenarioVerdict: Codable, Sendable {
+    /// The diff + coverage pair carrying the *resolved* verdict (see `VerificationResult`): an
+    /// EQUIVALENT the replay can't stand behind (an op or seam fell back to live) downgrades to
+    /// CANNOT-VERIFY; a DIVERGED always stands.
+    public let result: VerificationResult
     public let orderingsExplored: Int
     public let failingOrder: [String]?
     /// The generated input that triggered a divergence (its varied seam values are the counterexample).
     public let counterexample: CassetteData?
+
+    public var verdict: TraceDiff.Verdict { result.verdict }
+    public var diff: TraceDiff { result.diff }
+    /// The declared interrogation surface (`op:` boundaries + seams) and how much of it was exercised.
+    public var coverage: Coverage { result.coverage }
 
     /// A compact rendering built from the diff's public surface (a caller / LLM would print this).
     public func report() -> String {
@@ -23,11 +31,24 @@ public struct ScenarioVerdict {
         }
         var lines = ["\(banner)  \(diff.baselineName) → \(diff.candidateName)",
                      "  orderings explored: \(orderingsExplored)"]
+        if let fraction = coverage.fraction {
+            var line = "  coverage: \(Int((fraction * 100).rounded()))% of \(coverage.declared.count) declared boundaries"
+            if let domain = coverage.domainFraction, domain > 0 {
+                line += " · domain-swept \(Int((domain * 100).rounded()))%"
+            }
+            lines.append(line)
+            for gap in coverage.unrecordedReach {
+                lines.append("    ⚠︎ unrecorded reach: \(gap.boundary) (replay fell back to live)")
+            }
+        }
         if diff.divergences.isEmpty {
             lines.append("  behavior matches across everything explored (0 divergences)")
         } else {
             lines.append("  \(diff.divergences.count) divergence(s):")
-            for d in diff.divergences { lines.append("    ≠ \(d.label): \(d.detail)") }
+            for d in diff.divergences {
+                let mark = d.classification == .intended ? "✓ intended " : "≠ "
+                lines.append("    \(mark)\(d.label): \(d.detail)")
+            }
         }
         if let failing = failingOrder {
             lines.append("  ↳ failing order: \(failing.joined(separator: " → "))")
@@ -51,6 +72,13 @@ public struct ScenarioVerdict {
     }
 }
 
+/// The generation constants shared by the live differential (`verify(against:)`) and the recorded plan
+/// (`record()` / `verify(replaying:)`) — one surface, whichever side of a build boundary it runs on.
+enum ScenarioDefaults {
+    static let seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+    static let variantCount = 64
+}
+
 public extension Scenario {
     /// Differentially verify a candidate implementation against this scenario's baseline: run both
     /// against the *same* generated inputs (call orderings × seam values) and diff. The baseline branch
@@ -66,28 +94,33 @@ public extension Scenario {
         for order in orderings {
             let cassettes = seamDomains.isEmpty
                 ? [golden]
-                : golden.generatedVariants(count: 64, varying: seamDomains, seed: 0x9E37_79B9_7F4A_7C15)
+                : golden.generatedVariants(count: ScenarioDefaults.variantCount,
+                                           varying: seamDomains, seed: ScenarioDefaults.seed)
             for cassette in cassettes {
-                if let diff = diverges(candidate: candidate, order: order, cassette: cassette) {
+                let run = compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette)
+                guard run.diff.isEquivalent else {
                     let shrunk = shrink(candidate: candidate, failing: order, cassette: cassette)
-                    return ScenarioVerdict(verdict: .diverged, diff: diff,
+                    let coverage = coverage(replays: [run.candidateReplay], domainHeld: false)
+                    return ScenarioVerdict(result: VerificationResult(diff: run.diff, coverage: coverage),
                                            orderingsExplored: orderings.count,
                                            failingOrder: exploreOrdering ? shrunk.map(\.label) : nil,
                                            counterexample: seamDomains.isEmpty ? nil : cassette)
                 }
             }
         }
-        // Held across the whole explored surface.
+        // Held across the whole explored surface: the swept seams earn domain-coverage credit.
         let representative = compare(make: makeSystem, candidate: candidate, order: operations, cassette: golden)
-        return ScenarioVerdict(verdict: representative.verdict, diff: representative,
+        let coverage = coverage(replays: [representative.candidateReplay], domainHeld: true)
+        return ScenarioVerdict(result: VerificationResult(diff: representative.diff, coverage: coverage),
                                orderingsExplored: orderings.count, failingOrder: nil, counterexample: nil)
     }
 
     // MARK: - Hidden machinery
 
     /// Drive one (system, ordering, cassette) and return its behavior trace — the recorder, interceptor,
-    /// and ambient context the developer never touches.
-    private func capture(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) -> Trace {
+    /// and ambient context the developer never touches. (Internal: `record`/`verify(replaying:)` drive
+    /// the same primitive across a build boundary.)
+    func capture(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) -> Trace {
         let recorder = TraceRecorder(name: name, clock: ManualClock())
         let center = observationCenter ?? NotificationCenter()
         let interceptor = NotificationInterceptor(recorder: recorder, center: center, names: notificationNames)
@@ -100,16 +133,60 @@ public extension Scenario {
         return recorder.trace()
     }
 
+    /// One differential run, keeping the candidate's replay cassette so the verdict can carry the
+    /// coverage it was measured over. The diff is already intent-classified: with a declared intent the
+    /// loop must not stop on an intended-only divergence set, so classification lives here, not at exits.
     private func compare(make: (SeamContext) -> S, candidate: (SeamContext) -> S,
-                         order: [Op<S>], cassette: CassetteData) -> TraceDiff {
+                         order: [Op<S>], cassette: CassetteData) -> (diff: TraceDiff, candidateReplay: Cassette) {
         let baseline = capture(make: make, order: order, cassette: Cassette(replaying: cassette))
-        let candidateTrace = capture(make: candidate, order: order, cassette: Cassette(replaying: cassette))
-        return BehavioralDiff.compare(baseline: baseline, candidate: candidateTrace, tolerances: tolerances)
+        let replay = Cassette(replaying: cassette)
+        let candidateTrace = capture(make: candidate, order: order, cassette: replay)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidateTrace, tolerances: tolerances)
+            .classified(against: intent)
+        return (diff, replay)
     }
 
     private func diverges(candidate: (SeamContext) -> S, order: [Op<S>], cassette: CassetteData) -> TraceDiff? {
-        let diff = compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette)
+        let diff = compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette).diff
         return diff.isEquivalent ? nil : diff
+    }
+
+    /// Assemble the scenario's coverage: the declared surface is the *interrogation* surface — every op
+    /// (as an `op:<label>` boundary) plus every seam the replays declared. Ops all ran by construction
+    /// here (the replay path is where an op can go unrecorded); seams merge across the given replays,
+    /// and a seam missed anywhere is never counted exercised. `domainHeld` awards the swept seams
+    /// domain-coverage credit — additive evidence, only when the property held over the surface.
+    func coverage(replays: [Cassette], domainHeld: Bool,
+                  declaredOps: [String]? = nil, missingOps: [String] = [],
+                  sweptSeams: [String]? = nil) -> Coverage {
+        var declared = Set<String>(), exercised = Set<String>()
+        var gaps: [Coverage.Gap] = []
+        var seenGaps = Set<String>()
+        for replay in replays {
+            let seams = replay.coverage()
+            declared.formUnion(seams.declared)
+            exercised.formUnion(seams.exercised)
+            for gap in seams.gaps where gap.reason == .unrecorded {
+                let key = "\(gap.boundary)#\(gap.ordinal ?? -1)"
+                if seenGaps.insert(key).inserted { gaps.append(gap) }
+            }
+        }
+        let missedSeams = Set(gaps.map(\.boundary))
+        exercised.subtract(missedSeams)
+        for seam in declared where !exercised.contains(seam) && !missedSeams.contains(seam) {
+            gaps.append(Coverage.Gap(boundary: seam, reason: .unexercised))
+        }
+
+        let ops = declaredOps ?? operations.map(\.label)
+        let opBoundaries = ops.map { "op:\($0)" }
+        let exercisedOps = ops.filter { !missingOps.contains($0) }.map { "op:\($0)" }
+        gaps += missingOps.map { Coverage.Gap(boundary: "op:\($0)", reason: .unrecorded) }
+
+        let swept = domainHeld ? Set(sweptSeams ?? Array(seamDomains.keys)).intersection(declared) : []
+        return Coverage(declared: opBoundaries + declared.sorted(),
+                        exercised: exercisedOps + exercised.sorted(),
+                        gaps: gaps,
+                        domainExercised: swept.sorted())
     }
 
     /// Delta-debug the failing call sequence: drop ops that aren't needed to reproduce → the minimal
