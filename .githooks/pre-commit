@@ -1,0 +1,35 @@
+#!/bin/sh
+# Auto-formats staged Swift files and blocks the commit only on real SwiftLint
+# errors (warnings are printed but never block — matches the Xcode build-phase
+# policy in example-xcode-migration). Enable with:
+#   git config core.hooksPath .githooks
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT" || exit 1
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+
+STAGED_SWIFT=$(git diff --cached --name-only --diff-filter=ACMR -z -- '*.swift')
+if [ -z "$STAGED_SWIFT" ]; then
+    exit 0
+fi
+
+if command -v swiftformat >/dev/null 2>&1; then
+    if ! printf '%s' "$STAGED_SWIFT" | xargs -0 swiftformat --quiet; then
+        echo "pre-commit: swiftformat reported a problem formatting staged files — check output above." >&2
+    fi
+    printf '%s' "$STAGED_SWIFT" | xargs -0 git add
+else
+    echo "pre-commit: swiftformat not found (brew install swiftformat) — skipping format" >&2
+fi
+
+if command -v swiftlint >/dev/null 2>&1; then
+    if ! printf '%s' "$STAGED_SWIFT" | xargs -0 swiftlint lint --quiet; then
+        echo "pre-commit: SwiftLint reported blocking errors above — commit aborted." >&2
+        echo "pre-commit: warnings alone don't block; use 'git commit --no-verify' to bypass in a pinch." >&2
+        exit 1
+    fi
+else
+    echo "pre-commit: swiftlint not found (brew install swiftlint) — skipping lint" >&2
+fi
+
+exit 0
