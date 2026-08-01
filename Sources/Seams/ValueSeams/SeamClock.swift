@@ -13,8 +13,11 @@ public struct SeamClock {
     private let seam: String
     private let live: () -> Double
 
-    public init(cassette: Cassette, seam: String = "clock",
-                live: @escaping () -> Double = { Date().timeIntervalSince1970 }) {
+    public init(
+        cassette: Cassette,
+        seam: String = "clock",
+        live: @escaping () -> Double = { Date().timeIntervalSince1970 }
+    ) {
         self.cassette = cassette
         self.seam = seam
         self.live = live

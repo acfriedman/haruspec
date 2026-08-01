@@ -22,9 +22,11 @@ public struct IntentSpec: Sendable, Equatable {
     /// field does NOT excuse a change to another field of the same event — intent must be specific.
     public var expectedValueChanges: [String: [String]]
 
-    public init(expectedNewEvents: [String] = [],
-                expectedRemovedEvents: [String] = [],
-                expectedValueChanges: [String: [String]] = [:]) {
+    public init(
+        expectedNewEvents: [String] = [],
+        expectedRemovedEvents: [String] = [],
+        expectedValueChanges: [String: [String]] = [:]
+    ) {
         self.expectedNewEvents = expectedNewEvents
         self.expectedRemovedEvents = expectedRemovedEvents
         self.expectedValueChanges = expectedValueChanges

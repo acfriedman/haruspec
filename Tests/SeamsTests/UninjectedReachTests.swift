@@ -37,8 +37,11 @@ final class UninjectedReachTests: XCTestCase {
         let service = LegacySession()
         // With no cassette bound, the rewritten calls pass through to the real Date()/UUID(): the code
         // behaves exactly as it did before — the fresh UUID alone guarantees two runs differ.
-        XCTAssertNotEqual(service.fingerprint(), service.fingerprint(),
-                          "outside a binding, bare calls stay live and nondeterministic")
+        XCTAssertNotEqual(
+            service.fingerprint(),
+            service.fingerprint(),
+            "outside a binding, bare calls stay live and nondeterministic"
+        )
     }
 
     func testRecordedTranscriptSurvivesReload() throws {

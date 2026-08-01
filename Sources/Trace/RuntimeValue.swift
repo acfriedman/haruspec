@@ -20,7 +20,9 @@ public enum RuntimeValue {
     }
 
     private static func canonical(
-        _ any: Any, depth: Int, visited: Set<ObjectIdentifier>
+        _ any: Any,
+        depth: Int,
+        visited: Set<ObjectIdentifier>
     ) -> CanonicalValue {
         switch any {
         case let value as CanonicalValue:
@@ -70,7 +72,9 @@ public enum RuntimeValue {
     /// `Mirror`. Returns `nil` when the value exposes no keyed structure (or the depth cap is hit),
     /// leaving the caller to fall back to `String(describing:)`.
     private static func structural(
-        _ any: Any, depth: Int, visited: Set<ObjectIdentifier>
+        _ any: Any,
+        depth: Int,
+        visited: Set<ObjectIdentifier>
     ) -> CanonicalValue? {
         guard depth < maxDepth else { return nil }
         if let object = any as? NSObject,
@@ -84,7 +88,9 @@ public enum RuntimeValue {
     /// reading each declared property via KVC. Returns `nil` if the class declares no properties,
     /// so a bare `NSObject` subclass falls through to `Mirror`/string.
     private static func objcObject(
-        _ object: NSObject, depth: Int, visited: Set<ObjectIdentifier>
+        _ object: NSObject,
+        depth: Int,
+        visited: Set<ObjectIdentifier>
     ) -> CanonicalValue? {
         let id = ObjectIdentifier(object)
         guard !visited.contains(id) else { return nil }
@@ -112,7 +118,9 @@ public enum RuntimeValue {
     /// structure (all children labeled) becomes an `.object`, recursing each child. Anything else
     /// (tuples, enums, collections already handled above, opaque values) yields `nil`.
     private static func mirrorObject(
-        _ any: Any, depth: Int, visited: Set<ObjectIdentifier>
+        _ any: Any,
+        depth: Int,
+        visited: Set<ObjectIdentifier>
     ) -> CanonicalValue? {
         let mirror = Mirror(reflecting: any)
 

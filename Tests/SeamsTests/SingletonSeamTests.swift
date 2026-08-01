@@ -75,8 +75,11 @@ final class SingletonSeamTests: XCTestCase {
     }
 
     func testSwizzledSingletonPassesThroughWhenUnbound() {
-        XCTAssertNotEqual(LegacyDeviceManager.shared.deviceToken(), LegacyDeviceManager.shared.deviceToken(),
-                          "with no cassette bound the swizzled method is live — production behavior unchanged")
+        XCTAssertNotEqual(
+            LegacyDeviceManager.shared.deviceToken(),
+            LegacyDeviceManager.shared.deviceToken(),
+            "with no cassette bound the swizzled method is live — production behavior unchanged"
+        )
     }
 
     /// Pure-Swift path: swap `.shared` to a recording decorator; the call-site stays untouched.
@@ -90,7 +93,10 @@ final class SingletonSeamTests: XCTestCase {
         let data = recording.snapshot()
 
         LegacySessionManager.shared = RecordingSessionManager(Cassette(replaying: data))
-        XCTAssertEqual(LegacySessionManager.shared.token(), golden,
-                       "the .shared decorator replays through the cassette")
+        XCTAssertEqual(
+            LegacySessionManager.shared.token(),
+            golden,
+            "the .shared decorator replays through the cassette"
+        )
     }
 }

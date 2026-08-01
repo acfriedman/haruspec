@@ -12,13 +12,18 @@ public enum CheckoutScenario {
     /// against `TraceContext.current` (bound here), and a `NotificationInterceptor` observes a
     /// dedicated `NotificationCenter` (isolated, so parallel runs and system noise can't leak in). The
     /// service is a plain business object with no knowledge of the oracle.
-    public static func capture(name: String,
-                               _ makeService: (NotificationCenter) -> CartService) -> Trace {
+    public static func capture(
+        name: String,
+        _ makeService: (NotificationCenter) -> CartService
+    ) -> Trace {
         let clock = ManualClock()
         let recorder = TraceRecorder(name: name, clock: clock)
         let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center,
-                                                  names: checkoutNotificationNames)
+        let interceptor = NotificationInterceptor(
+            recorder: recorder,
+            center: center,
+            names: checkoutNotificationNames
+        )
         interceptor.start()
         defer { interceptor.stop() }
 

@@ -14,8 +14,10 @@ final class RuntimeValueTests: XCTestCase {
 
     func testConvertsCollections() {
         XCTAssertEqual(RuntimeValue.canonical([1, 2, 3] as [Any]), [1, 2, 3])
-        XCTAssertEqual(RuntimeValue.canonical(["a": 1, "b": "two"] as [String: Any]),
-                       ["a": 1, "b": "two"])
+        XCTAssertEqual(
+            RuntimeValue.canonical(["a": 1, "b": "two"] as [String: Any]),
+            ["a": 1, "b": "two"]
+        )
     }
 
     /// A non-Encodable Swift struct is canonicalized structurally by reflection — no `Codable`
@@ -38,8 +40,10 @@ final class RuntimeValueTests: XCTestCase {
     func testCanonicalizesNestedStructureAndUnwrapsOptionals() {
         struct Line { let sku = "X"; let qty = 2 }
         struct Order { let line = Line(); let note: String? = nil; let ref: Int? = 7 }
-        XCTAssertEqual(RuntimeValue.canonical(Order()),
-                       ["line": ["sku": "X", "qty": 2], "note": .null, "ref": 7])
+        XCTAssertEqual(
+            RuntimeValue.canonical(Order()),
+            ["line": ["sku": "X", "qty": 2], "note": .null, "ref": 7]
+        )
     }
 
     func testStillFallsBackToDescriptionForStructurelessValues() {

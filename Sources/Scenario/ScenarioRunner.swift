@@ -108,25 +108,34 @@ public extension Scenario {
         for order in orderings {
             let cassettes = seamDomains.isEmpty
                 ? [golden]
-                : golden.generatedVariants(count: ScenarioDefaults.variantCount,
-                                           varying: seamDomains, seed: ScenarioDefaults.seed)
+                : golden.generatedVariants(
+                    count: ScenarioDefaults.variantCount,
+                    varying: seamDomains,
+                    seed: ScenarioDefaults.seed
+                )
             for cassette in cassettes {
                 let run = compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette)
                 guard run.diff.isEquivalent else {
                     let shrunk = shrink(candidate: candidate, failing: order, cassette: cassette)
                     let coverage = coverage(replays: [run.candidateReplay], domainHeld: false)
-                    return ScenarioVerdict(result: VerificationResult(diff: run.diff, coverage: coverage),
-                                           orderingsExplored: orderings.count,
-                                           failingOrder: exploreOrdering ? shrunk.map(\.label) : nil,
-                                           counterexample: seamDomains.isEmpty ? nil : cassette)
+                    return ScenarioVerdict(
+                        result: VerificationResult(diff: run.diff, coverage: coverage),
+                        orderingsExplored: orderings.count,
+                        failingOrder: exploreOrdering ? shrunk.map(\.label) : nil,
+                        counterexample: seamDomains.isEmpty ? nil : cassette
+                    )
                 }
             }
         }
         // Held across the whole explored surface: the swept seams earn domain-coverage credit.
         let representative = compare(make: makeSystem, candidate: candidate, order: operations, cassette: golden)
         let coverage = coverage(replays: [representative.candidateReplay], domainHeld: true)
-        return ScenarioVerdict(result: VerificationResult(diff: representative.diff, coverage: coverage),
-                               orderingsExplored: orderings.count, failingOrder: nil, counterexample: nil)
+        return ScenarioVerdict(
+            result: VerificationResult(diff: representative.diff, coverage: coverage),
+            orderingsExplored: orderings.count,
+            failingOrder: nil,
+            counterexample: nil
+        )
     }
 
     // MARK: - Hidden machinery
@@ -152,8 +161,12 @@ public extension Scenario {
     /// One differential run, keeping the candidate's replay cassette so the verdict can carry the
     /// coverage it was measured over. The diff is already intent-classified: with a declared intent the
     /// loop must not stop on an intended-only divergence set, so classification lives here, not at exits.
-    private func compare(make: (SeamContext) -> S, candidate: (SeamContext) -> S,
-                         order: [Op<S>], cassette: CassetteData) -> (diff: TraceDiff, candidateReplay: Cassette) {
+    private func compare(
+        make: (SeamContext) -> S,
+        candidate: (SeamContext) -> S,
+        order: [Op<S>],
+        cassette: CassetteData
+    ) -> (diff: TraceDiff, candidateReplay: Cassette) {
         let baseline = capture(make: make, order: order, cassette: Cassette(replaying: cassette))
         let replay = Cassette(replaying: cassette)
         let candidateTrace = capture(make: candidate, order: order, cassette: replay)
@@ -172,9 +185,13 @@ public extension Scenario {
     /// here (the replay path is where an op can go unrecorded); seams merge across the given replays,
     /// and a seam missed anywhere is never counted exercised. `domainHeld` awards the swept seams
     /// domain-coverage credit — additive evidence, only when the property held over the surface.
-    func coverage(replays: [Cassette], domainHeld: Bool,
-                  declaredOps: [String]? = nil, missingOps: [String] = [],
-                  sweptSeams: [String]? = nil) -> Coverage {
+    func coverage(
+        replays: [Cassette],
+        domainHeld: Bool,
+        declaredOps: [String]? = nil,
+        missingOps: [String] = [],
+        sweptSeams: [String]? = nil
+    ) -> Coverage {
         var declared = Set<String>(), exercised = Set<String>()
         var gaps: [Coverage.Gap] = []
         var seenGaps = Set<String>()
@@ -201,10 +218,12 @@ public extension Scenario {
         gaps += missingOps.map { Coverage.Gap(boundary: "op:\($0)", reason: .unrecorded) }
 
         let swept = domainHeld ? Set(sweptSeams ?? Array(seamDomains.keys)).intersection(declared) : []
-        return Coverage(declared: opBoundaries + declared.sorted(),
-                        exercised: exercisedOps + exercised.sorted(),
-                        gaps: gaps,
-                        domainExercised: swept.sorted())
+        return Coverage(
+            declared: opBoundaries + declared.sorted(),
+            exercised: exercisedOps + exercised.sorted(),
+            gaps: gaps,
+            domainExercised: swept.sorted()
+        )
     }
 
     /// Delta-debug the failing call sequence: drop ops that aren't needed to reproduce → the minimal

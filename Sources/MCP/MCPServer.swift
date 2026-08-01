@@ -240,7 +240,8 @@ public struct MCPServer {
 
     private func encode(_ object: [String: Any]) -> String {
         guard let data = try? JSONSerialization.data(
-            withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]
+            withJSONObject: object,
+            options: [.sortedKeys, .withoutEscapingSlashes]
         ) else {
             return #"{"jsonrpc":"2.0","id":null,"#
                 + #""error":{"code":-32603,"message":"internal error: response encoding failed"}}"#

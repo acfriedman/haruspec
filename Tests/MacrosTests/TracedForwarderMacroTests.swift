@@ -174,7 +174,12 @@ final class TracedForwarderMacroTests: XCTestCase {
 
         XCTAssertEqual(forwarded, ported)
         XCTAssertEqual(forwarded.map(\.label), [
-            "Cart.add", "Cart.add", "Cart.applyPromo", "Cart.applyPromo", "Cart.checkout", "Cart.checkout"
+            "Cart.add",
+            "Cart.add",
+            "Cart.applyPromo",
+            "Cart.applyPromo",
+            "Cart.checkout",
+            "Cart.checkout"
         ])
         XCTAssertEqual(forwarded[0].payload, ["product": ["sku": "A"], "quantity": 3]) // canonical args
         XCTAssertEqual(forwarded[3].payload, .bool(true)) // Bool return captured

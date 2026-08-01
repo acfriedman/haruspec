@@ -53,12 +53,21 @@ public final class CartServiceV3: CartService {
         let taxable = subtotal - discount
         let tax = Pricing.tax(taxable: taxable)
         let points = subtotal / 100 // FEATURE: 1 loyalty point per dollar of subtotal.
-        let receipt = Receipt(subtotalCents: subtotal, discountCents: discount, taxCents: tax,
-                              totalCents: taxable + tax, lineCount: items.count,
-                              orderID: Pricing.freshOrderID(), issuedAt: Pricing.issuedNow())
+        let receipt = Receipt(
+            subtotalCents: subtotal,
+            discountCents: discount,
+            taxCents: tax,
+            totalCents: taxable + tax,
+            lineCount: items.count,
+            orderID: Pricing.freshOrderID(),
+            issuedAt: Pricing.issuedNow()
+        )
         // FEATURE: the completion broadcast now carries points earned (a production value change)...
-        center.post(name: .checkoutDidComplete, object: self,
-                    userInfo: ["totalCents": receipt.totalCents, "pointsEarned": points])
+        center.post(
+            name: .checkoutDidComplete,
+            object: self,
+            userInfo: ["totalCents": receipt.totalCents, "pointsEarned": points]
+        )
         // FEATURE: ...and a brand-new production side effect announces the reward.
         center.post(name: .loyaltyPointsEarned, object: self, userInfo: ["points": points])
         // Payload-free milestone marker — same as the baseline, so it aligns cleanly.

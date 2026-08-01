@@ -57,8 +57,11 @@ final class SeamCoverageTests: XCTestCase {
     private func runSession(cassette: Cassette, extraSeam: Bool) -> Trace {
         let recorder = TraceRecorder(name: "session", clock: ManualClock())
         let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center,
-                                                  names: ["CheckoutCompleted"])
+        let interceptor = NotificationInterceptor(
+            recorder: recorder,
+            center: center,
+            names: ["CheckoutCompleted"]
+        )
         interceptor.start(); defer { interceptor.stop() }
 
         TraceContext.$current.withValue(recorder) {
@@ -70,8 +73,11 @@ final class SeamCoverageTests: XCTestCase {
                 // observably identical — but the input was NOT held identical, so it's uncertifiable.
                 total += Int(cassette.int(seam: "surcharge", live: { 0 }))
             }
-            center.post(name: Notification.Name("CheckoutCompleted"), object: nil,
-                        userInfo: ["total": total])
+            center.post(
+                name: Notification.Name("CheckoutCompleted"),
+                object: nil,
+                userInfo: ["total": total]
+            )
             Haruspec.marker("checkout.completed")
         }
         return recorder.trace()
@@ -109,7 +115,9 @@ final class SeamCoverageTests: XCTestCase {
         let verified = candidateCassette.verify(diff)
         XCTAssertEqual(verified.verdict, .cannotVerify)
         XCTAssertEqual(verified.coverage.unrecordedReach.map(\.boundary), ["surcharge"])
-        XCTAssertTrue(verified.report().contains("⚠️ CANNOT-VERIFY"),
-                      "the report abstains loudly:\n\(verified.report())")
+        XCTAssertTrue(
+            verified.report().contains("⚠️ CANNOT-VERIFY"),
+            "the report abstains loudly:\n\(verified.report())"
+        )
     }
 }

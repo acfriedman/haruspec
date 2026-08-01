@@ -57,7 +57,9 @@ let package = Package(
         .target(name: "HaruspecMacros", dependencies: ["HaruspecMacroPlugin", "HaruspecTrace"], path: "Sources/Macros"),
 
         .target(name: "HaruspecDemo", dependencies: [
-            "HaruspecCore", "HaruspecTrace", "HaruspecMacros"
+            "HaruspecCore",
+            "HaruspecTrace",
+            "HaruspecMacros"
         ], path: "Sources/Demo"),
 
         // The MCP stdio server (`haruspec mcp`) — the tool surface other agents call. A library so the
@@ -67,12 +69,17 @@ let package = Package(
         // named `haruspec` would differ only in case from the `Haruspec` umbrella module, which collides
         // at the build-artifact layer on case-insensitive filesystems (macOS/Windows).
         .executableTarget(name: "HaruspecCLI", dependencies: [
-            "HaruspecCore", "HaruspecTrace", "HaruspecDemo", "HaruspecMCP"
+            "HaruspecCore",
+            "HaruspecTrace",
+            "HaruspecDemo",
+            "HaruspecMCP"
         ], path: "Sources/CLI"),
 
         // The developer-facing Scenario DSL (result-builder + Haruspec.verify). Prototype.
         .target(name: "HaruspecScenario", dependencies: [
-            "HaruspecCore", "HaruspecTrace", "HaruspecSeams"
+            "HaruspecCore",
+            "HaruspecTrace",
+            "HaruspecSeams"
         ], path: "Sources/Scenario"),
 
         // The consumer umbrella. Re-export only (`@_exported import` of the five consumer modules) —
@@ -80,24 +87,43 @@ let package = Package(
         // holds. Depending on HaruspecScenario here is also what makes it reachable to consumers (it is
         // deliberately not its own product; the umbrella is the single supported import).
         .target(name: "Haruspec", dependencies: [
-            "HaruspecCore", "HaruspecTrace", "HaruspecMacros", "HaruspecSeams", "HaruspecScenario"
+            "HaruspecCore",
+            "HaruspecTrace",
+            "HaruspecMacros",
+            "HaruspecSeams",
+            "HaruspecScenario"
         ]),
 
         .testTarget(name: "HaruspecCoreTests", dependencies: ["HaruspecCore"], path: "Tests/CoreTests"),
         .testTarget(name: "HaruspecTraceTests", dependencies: [
-            "HaruspecCore", "HaruspecTrace"
+            "HaruspecCore",
+            "HaruspecTrace"
         ], path: "Tests/TraceTests"),
         .testTarget(name: "HaruspecSeamsTests", dependencies: [
-            "HaruspecCore", "HaruspecTrace", "HaruspecSeams", "HaruspecMacros", "LegacyObjC"
+            "HaruspecCore",
+            "HaruspecTrace",
+            "HaruspecSeams",
+            "HaruspecMacros",
+            "LegacyObjC"
         ], path: "Tests/SeamsTests"),
         .testTarget(name: "HaruspecMacrosTests", dependencies: [
-            "HaruspecCore", "HaruspecTrace", "HaruspecMacros"
+            "HaruspecCore",
+            "HaruspecTrace",
+            "HaruspecMacros"
         ], path: "Tests/MacrosTests"),
         .testTarget(name: "HaruspecDemoTests", dependencies: [
-            "HaruspecCore", "HaruspecTrace", "HaruspecDemo", "HaruspecSeams"
+            "HaruspecCore",
+            "HaruspecTrace",
+            "HaruspecDemo",
+            "HaruspecSeams"
         ], path: "Tests/DemoTests"),
         .testTarget(name: "HaruspecScenarioTests", dependencies: [
-            "HaruspecScenario", "HaruspecCore", "HaruspecTrace", "HaruspecMacros", "HaruspecSeams", "LegacyObjC"
+            "HaruspecScenario",
+            "HaruspecCore",
+            "HaruspecTrace",
+            "HaruspecMacros",
+            "HaruspecSeams",
+            "LegacyObjC"
         ], path: "Tests/ScenarioTests"),
 
         .testTarget(name: "HaruspecMCPTests", dependencies: ["HaruspecMCP", "HaruspecCore"], path: "Tests/MCPTests"),

@@ -15,12 +15,18 @@ final class PropertyShowcaseTests: XCTestCase {
     /// Drive a real `CartService`: unit price 999¢, quantity from the `coffeeQty` seam, promo applied.
     /// (No `removeItem`, so the isolated signal is the rounding off-by-one — not the dropped notification
     /// the existing fixed-scenario demo already catches.)
-    private func capture(name: String, cassette: Cassette,
-                         _ make: (NotificationCenter) -> CartService) -> Trace {
+    private func capture(
+        name: String,
+        cassette: Cassette,
+        _ make: (NotificationCenter) -> CartService
+    ) -> Trace {
         let recorder = TraceRecorder(name: name, clock: ManualClock())
         let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center,
-                                                  names: checkoutNotificationNames)
+        let interceptor = NotificationInterceptor(
+            recorder: recorder,
+            center: center,
+            names: checkoutNotificationNames
+        )
         interceptor.start(); defer { interceptor.stop() }
         let service = make(center)
         TraceContext.$current.withValue(recorder) {
@@ -35,15 +41,21 @@ final class PropertyShowcaseTests: XCTestCase {
     /// Fresh order id / timestamp are volatile; the recompute interval gets a generous budget so the
     /// isolated signal is the value-dependent discount, not timing.
     private var tolerances: ToleranceSpec {
-        ToleranceSpec(volatileFields: [.key("orderID"), .key("issuedAt")], numericEpsilon: 0,
-                      timingBudgets: ["CartService.checkout": 500],
-                      unorderedGroups: [["CartDidChange", "AnalyticsDidTrack"]], ignoredKinds: [])
+        ToleranceSpec(
+            volatileFields: [.key("orderID"), .key("issuedAt")],
+            numericEpsilon: 0,
+            timingBudgets: ["CartService.checkout": 500],
+            unorderedGroups: [["CartDidChange", "AnalyticsDidTrack"]],
+            ignoredKinds: []
+        )
     }
 
     /// A differential property: baseline = V1, candidate = `makeCandidate`. Golden records coffeeQty = 10
     /// → subtotal 9990 (a multiple of 10), where the truncation bug is benign.
-    private func property(candidateName: String,
-                          _ makeCandidate: @escaping (NotificationCenter) -> CartService) -> DifferentialProperty {
+    private func property(
+        candidateName: String,
+        _ makeCandidate: @escaping (NotificationCenter) -> CartService
+    ) -> DifferentialProperty {
         let recording = Cassette()
         _ = capture(name: "cartservice.v1", cassette: recording) { CartServiceV1(center: $0) }
         let golden = recording.snapshot()

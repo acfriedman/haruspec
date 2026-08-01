@@ -13,7 +13,11 @@ final class EncodableBridgeTests: XCTestCase {
     func testEncodesStructIntoCanonicalObject() throws {
         let value = try CanonicalValue(encoding: Order(id: 7, sku: "COFFEE", paid: true, ratio: 1.5, tags: ["a", "b"]))
         XCTAssertEqual(value, [
-            "id": 7, "sku": "COFFEE", "paid": true, "ratio": 1.5, "tags": ["a", "b"]
+            "id": 7,
+            "sku": "COFFEE",
+            "paid": true,
+            "ratio": 1.5,
+            "tags": ["a", "b"]
         ])
     }
 

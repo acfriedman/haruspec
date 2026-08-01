@@ -39,8 +39,11 @@ public final class NotificationInterceptor: @unchecked Sendable {
         guard tokens.isEmpty else { return }
         if let names {
             for name in names {
-                let token = center.addObserver(forName: Notification.Name(name),
-                                               object: nil, queue: nil) { [weak self] in
+                let token = center.addObserver(
+                    forName: Notification.Name(name),
+                    object: nil,
+                    queue: nil
+                ) { [weak self] in
                     self?.record($0)
                 }
                 tokens.append(token)

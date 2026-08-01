@@ -8,22 +8,27 @@ REPO_ROOT=$(git rev-parse --show-toplevel)
 cd "$REPO_ROOT" || exit 1
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 
-STAGED_SWIFT=$(git diff --cached --name-only --diff-filter=ACMR -z -- '*.swift')
-if [ -z "$STAGED_SWIFT" ]; then
+# The staged list lives in a file, not a variable: command substitution strips
+# the NUL separators, which would concatenate every path into one bad argument.
+STAGED_LIST=$(mktemp)
+trap 'rm -f "$STAGED_LIST"' EXIT
+git diff --cached --name-only --diff-filter=ACMR -z -- '*.swift' >"$STAGED_LIST"
+
+if [ ! -s "$STAGED_LIST" ]; then
     exit 0
 fi
 
 if command -v swiftformat >/dev/null 2>&1; then
-    if ! printf '%s' "$STAGED_SWIFT" | xargs -0 swiftformat --quiet; then
+    if ! xargs -0 swiftformat --quiet <"$STAGED_LIST"; then
         echo "pre-commit: swiftformat reported a problem formatting staged files — check output above." >&2
     fi
-    printf '%s' "$STAGED_SWIFT" | xargs -0 git add
+    xargs -0 git add <"$STAGED_LIST"
 else
     echo "pre-commit: swiftformat not found (brew install swiftformat) — skipping format" >&2
 fi
 
 if command -v swiftlint >/dev/null 2>&1; then
-    if ! printf '%s' "$STAGED_SWIFT" | xargs -0 swiftlint lint --quiet; then
+    if ! xargs -0 swiftlint lint --quiet <"$STAGED_LIST"; then
         echo "pre-commit: SwiftLint reported blocking errors above — commit aborted." >&2
         echo "pre-commit: warnings alone don't block; use 'git commit --no-verify' to bypass in a pinch." >&2
         exit 1

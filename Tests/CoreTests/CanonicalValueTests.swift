@@ -12,8 +12,13 @@ final class CanonicalValueTests: XCTestCase {
 
     func testJSONRoundTrip() throws {
         let value: CanonicalValue = [
-            "n": .null, "flag": true, "count": 7, "ratio": 1.5,
-            "name": "cart", "tags": ["a", "b"], "nested": ["x": 1]
+            "n": .null,
+            "flag": true,
+            "count": 7,
+            "ratio": 1.5,
+            "name": "cart",
+            "tags": ["a", "b"],
+            "nested": ["x": 1]
         ]
         let data = try JSONEncoder().encode(value)
         let decoded = try JSONDecoder().decode(CanonicalValue.self, from: data)

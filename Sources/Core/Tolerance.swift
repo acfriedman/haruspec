@@ -110,13 +110,15 @@ public struct ToleranceSpec: Sendable, Equatable {
     /// How the structural (auto-captured) tier participates in the verdict. Defaults to `.strict`.
     public var structuralComparison: StructuralComparison
 
-    public init(volatileFields: [VolatileField] = [],
-                numericEpsilon: Double = 0,
-                timingBudgets: [String: Int64] = [:],
-                unorderedGroups: [[String]] = [],
-                ignoredKinds: [EventKind] = [],
-                ignoredNotificationNames: [String] = [],
-                structuralComparison: StructuralComparison = .strict) {
+    public init(
+        volatileFields: [VolatileField] = [],
+        numericEpsilon: Double = 0,
+        timingBudgets: [String: Int64] = [:],
+        unorderedGroups: [[String]] = [],
+        ignoredKinds: [EventKind] = [],
+        ignoredNotificationNames: [String] = [],
+        structuralComparison: StructuralComparison = .strict
+    ) {
         self.volatileFields = volatileFields
         self.numericEpsilon = numericEpsilon
         self.timingBudgets = timingBudgets
@@ -151,17 +153,24 @@ extension VolatileField: Codable {
         case (nil, let path?):
             guard let components = VolatileField.parsePath(path) else {
                 throw DecodingError.dataCorruptedError(
-                    forKey: .path, in: container,
+                    forKey: .path,
+                    in: container,
                     debugDescription: "path \"\(path)\" must be dot-separated non-empty components"
                 )
             }
             self.init(position: .path(components), label: label)
         case (.some, .some):
-            throw DecodingError.dataCorruptedError(forKey: .key, in: container,
-                                                   debugDescription: "a volatile field takes key or path, not both")
+            throw DecodingError.dataCorruptedError(
+                forKey: .key,
+                in: container,
+                debugDescription: "a volatile field takes key or path, not both"
+            )
         case (nil, nil):
-            throw DecodingError.dataCorruptedError(forKey: .key, in: container,
-                                                   debugDescription: "a volatile field needs a key or a path")
+            throw DecodingError.dataCorruptedError(
+                forKey: .key,
+                in: container,
+                debugDescription: "a volatile field needs a key or a path"
+            )
         }
     }
 

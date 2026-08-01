@@ -11,13 +11,19 @@ final class MCPServerTests: XCTestCase {
     private let server = MCPServer()
 
     private func send(_ object: [String: Any]) -> [String: Any]? {
-        let line = String(decoding: try! JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        guard let encoded = try? JSONSerialization.data(withJSONObject: object) else {
+            XCTFail("request object is not encodable as JSON")
+            return nil
+        }
+        let line = String(decoding: encoded, as: UTF8.self)
         guard let reply = server.handle(line) else { return nil }
         return (try? JSONSerialization.jsonObject(with: Data(reply.utf8))) as? [String: Any]
     }
 
     private func callTool(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
-        let reply = send(["jsonrpc": "2.0", "id": 9, "method": "tools/call",
+        let reply = send(["jsonrpc": "2.0",
+                          "id": 9,
+                          "method": "tools/call",
                           "params": ["name": name, "arguments": arguments]])
         return (reply?["result"] as? [String: Any]) ?? [:]
     }
@@ -34,8 +40,13 @@ final class MCPServerTests: XCTestCase {
         func trace(_ name: String, total: Int) -> Trace {
             Trace(name: name, events: [
                 TraceEvent(seq: 1, kind: .call, label: "Cart.checkout"),
-                TraceEvent(seq: 2, kind: .notification, label: "CheckoutCompleted",
-                           payload: .object(["total": .int(Int64(total))]), tier: .semantic),
+                TraceEvent(
+                    seq: 2,
+                    kind: .notification,
+                    label: "CheckoutCompleted",
+                    payload: .object(["total": .int(Int64(total))]),
+                    tier: .semantic
+                ),
                 TraceEvent(seq: 3, kind: .ret, label: "Cart.checkout")
             ])
         }
@@ -50,7 +61,9 @@ final class MCPServerTests: XCTestCase {
     }
 
     func testHandshakeAndToolListing() {
-        let initReply = send(["jsonrpc": "2.0", "id": 1, "method": "initialize",
+        let initReply = send(["jsonrpc": "2.0",
+                              "id": 1,
+                              "method": "initialize",
                               "params": ["protocolVersion": "2025-06-18",
                                          "clientInfo": ["name": "test", "version": "0"],
                                          "capabilities": [:]]])
@@ -65,14 +78,18 @@ final class MCPServerTests: XCTestCase {
         let tools = ((listReply?["result"] as? [String: Any])?["tools"] as? [[String: Any]]) ?? []
         let names = Set(tools.compactMap { $0["name"] as? String })
         XCTAssertEqual(names, ["verify_behavioral_parity", "canonicalize_trace"])
-        XCTAssertTrue(tools.allSatisfy { ($0["inputSchema"] as? [String: Any]) != nil },
-                      "every tool must publish a JSON Schema for its inputs")
+        XCTAssertTrue(
+            tools.allSatisfy { ($0["inputSchema"] as? [String: Any]) != nil },
+            "every tool must publish a JSON Schema for its inputs"
+        )
     }
 
     func testEquivalentTracesVerifyEquivalent() throws {
         let traces = try writeTraces()
-        let result = callTool("verify_behavioral_parity",
-                              ["baseline_trace": traces.golden.path, "candidate_trace": traces.same.path])
+        let result = callTool(
+            "verify_behavioral_parity",
+            ["baseline_trace": traces.golden.path, "candidate_trace": traces.same.path]
+        )
 
         XCTAssertEqual(result["isError"] as? Bool, false)
         let structured = result["structuredContent"] as? [String: Any]
@@ -82,8 +99,10 @@ final class MCPServerTests: XCTestCase {
 
     func testDivergenceIsReportedWithRelayGuide() throws {
         let traces = try writeTraces()
-        let result = callTool("verify_behavioral_parity",
-                              ["baseline_trace": traces.golden.path, "candidate_trace": traces.diverged.path])
+        let result = callTool(
+            "verify_behavioral_parity",
+            ["baseline_trace": traces.golden.path, "candidate_trace": traces.diverged.path]
+        )
 
         XCTAssertEqual(result["isError"] as? Bool, false, "a divergence is a verdict, not a tool failure")
         let structured = result["structuredContent"] as? [String: Any]
@@ -101,19 +120,26 @@ final class MCPServerTests: XCTestCase {
         try Data(#"{"expectedValueChanges": {"CheckoutCompleted": ["total"]}}"#.utf8).write(to: intent)
         addTeardownBlock { try? FileManager.default.removeItem(at: intent) }
 
-        let result = callTool("verify_behavioral_parity",
-                              ["baseline_trace": traces.golden.path,
-                               "candidate_trace": traces.diverged.path,
-                               "intent": intent.path])
+        let result = callTool(
+            "verify_behavioral_parity",
+            ["baseline_trace": traces.golden.path,
+             "candidate_trace": traces.diverged.path,
+             "intent": intent.path]
+        )
         let structured = result["structuredContent"] as? [String: Any]
-        XCTAssertEqual(structured?["verdict"] as? String, "equivalent",
-                       "the declared value change is intended; nothing collateral remains")
+        XCTAssertEqual(
+            structured?["verdict"] as? String,
+            "equivalent",
+            "the declared value change is intended; nothing collateral remains"
+        )
         XCTAssertGreaterThan(structured?["intendedCount"] as? Int ?? 0, 0)
     }
 
     func testMissingFileIsAToolErrorNotAProtocolError() {
-        let result = callTool("verify_behavioral_parity",
-                              ["baseline_trace": "/nonexistent/a.json", "candidate_trace": "/nonexistent/b.json"])
+        let result = callTool(
+            "verify_behavioral_parity",
+            ["baseline_trace": "/nonexistent/a.json", "candidate_trace": "/nonexistent/b.json"]
+        )
         XCTAssertEqual(result["isError"] as? Bool, true)
         XCTAssertFalse(text(of: result).isEmpty)
     }

@@ -258,10 +258,15 @@ final class ScenarioPrototypeTests: XCTestCase {
         // Baseline posts to `.default`; a silent candidate omits it. The divergence can only appear
         // if the baseline's post to `.default` — reached via no injected center — was observed.
         let verdict = scenario.verify(against: { _ in DefaultPinger(posts: false) })
-        XCTAssertEqual(verdict.verdict, .diverged,
-                       "a post to NotificationCenter.default is observed under .observing(on:)")
-        XCTAssertTrue(verdict.diff.divergences.contains { $0.kind == .missingEvent && $0.label == "Pinged" },
-                      "the captured baseline post shows up as missing in the silent candidate")
+        XCTAssertEqual(
+            verdict.verdict,
+            .diverged,
+            "a post to NotificationCenter.default is observed under .observing(on:)"
+        )
+        XCTAssertTrue(
+            verdict.diff.divergences.contains { $0.kind == .missingEvent && $0.label == "Pinged" },
+            "the captured baseline post shows up as missing in the silent candidate"
+        )
     }
 
     func testArgParameterizationCatchesValueBug() {
@@ -294,10 +299,15 @@ final class ScenarioPrototypeTests: XCTestCase {
     /// so a candidate that drops it diverges as a `missingEvent` — no `.observe` call, no blind spot.
     func testCaptureAllDefaultSurfacesUnlistedDroppedNotification() {
         let verdict = analyticsCart().verify(against: makeSilent)
-        XCTAssertEqual(verdict.verdict, .diverged,
-                       "a notification no one allowlisted is captured by default; dropping it must diverge")
-        XCTAssertTrue(verdict.diff.divergences.contains { $0.kind == .missingEvent && $0.label == "AnalyticsDidTrack" },
-                      "the dropped analytics post shows up as a missing event")
+        XCTAssertEqual(
+            verdict.verdict,
+            .diverged,
+            "a notification no one allowlisted is captured by default; dropping it must diverge"
+        )
+        XCTAssertTrue(
+            verdict.diff.divergences.contains { $0.kind == .missingEvent && $0.label == "AnalyticsDidTrack" },
+            "the dropped analytics post shows up as a missing event"
+        )
     }
 
     /// The opt-out denylist removes a named channel from *both* sides at diff time, so once
@@ -307,14 +317,20 @@ final class ScenarioPrototypeTests: XCTestCase {
         let viaConvenience = analyticsCart()
             .ignore(notifications: ["AnalyticsDidTrack"])
             .verify(against: makeSilent)
-        XCTAssertEqual(viaConvenience.verdict, .equivalent,
-                       ".ignore(notifications:) drops the noisy channel from the diff → EQUIVALENT")
+        XCTAssertEqual(
+            viaConvenience.verdict,
+            .equivalent,
+            ".ignore(notifications:) drops the noisy channel from the diff → EQUIVALENT"
+        )
 
         // … and equivalently via the raw tolerance field.
         let viaTolerance = analyticsCart()
             .tolerate(ToleranceSpec(ignoredNotificationNames: ["AnalyticsDidTrack"]))
             .verify(against: makeSilent)
-        XCTAssertEqual(viaTolerance.verdict, .equivalent,
-                       "ToleranceSpec.ignoredNotificationNames drops the channel identically")
+        XCTAssertEqual(
+            viaTolerance.verdict,
+            .equivalent,
+            "ToleranceSpec.ignoredNotificationNames drops the channel identically"
+        )
     }
 }

@@ -49,8 +49,14 @@ public struct ScenarioPlan: Codable, Sendable, Equatable {
     /// which is the payoff of keeping `@Traced` on — a semantic-tier-only scenario can't be scoped.
     public var coveredClasses: [String]
 
-    public init(schemaVersion: Int = 1, scenarioName: String, seed: UInt64,
-                variedSeams: [String], probes: [ScenarioProbe], coveredClasses: [String]) {
+    public init(
+        schemaVersion: Int = 1,
+        scenarioName: String,
+        seed: UInt64,
+        variedSeams: [String],
+        probes: [ScenarioProbe],
+        coveredClasses: [String]
+    ) {
         self.schemaVersion = schemaVersion
         self.scenarioName = scenarioName
         self.seed = seed
@@ -112,8 +118,11 @@ public extension Scenario {
         let orderings = exploreOrdering ? linearExtensions(operations, max: maxOrderings) : [operations]
         let cassettes = seamDomains.isEmpty
             ? [golden]
-            : golden.generatedVariants(count: ScenarioDefaults.variantCount,
-                                       varying: seamDomains, seed: ScenarioDefaults.seed)
+            : golden.generatedVariants(
+                count: ScenarioDefaults.variantCount,
+                varying: seamDomains,
+                seed: ScenarioDefaults.seed
+            )
 
         let declaredLabels = operations.map(\.label)
         var probes = [probe(order: operations, cassette: golden)]
@@ -131,9 +140,13 @@ public extension Scenario {
                 }
             }
         }
-        return ScenarioPlan(scenarioName: name, seed: ScenarioDefaults.seed,
-                            variedSeams: seamDomains.keys.sorted(), probes: probes,
-                            coveredClasses: classes.sorted())
+        return ScenarioPlan(
+            scenarioName: name,
+            seed: ScenarioDefaults.seed,
+            variedSeams: seamDomains.keys.sorted(),
+            probes: probes,
+            coveredClasses: classes.sorted()
+        )
     }
 
     /// `record()` and write the plan artifact.
@@ -163,36 +176,54 @@ public extension Scenario {
         var representative: TraceDiff?
         for probe in replayable {
             let replay = Cassette(replaying: probe.cassette)
-            let current = capture(make: makeSystem,
-                                  order: probe.ordering.compactMap { opsByLabel[$0] },
-                                  cassette: replay)
-            let diff = BehavioralDiff.compare(baseline: probe.golden, candidate: current,
-                                              tolerances: tolerances)
-                .classified(against: intent)
+            let current = capture(
+                make: makeSystem,
+                order: probe.ordering.compactMap { opsByLabel[$0] },
+                cassette: replay
+            )
+            let diff = BehavioralDiff.compare(
+                baseline: probe.golden,
+                candidate: current,
+                tolerances: tolerances
+            )
+            .classified(against: intent)
             replays.append(replay)
             if representative == nil {
                 representative = diff
             }
 
             guard diff.isEquivalent else {
-                let coverage = coverage(replays: [replay], domainHeld: false,
-                                        declaredOps: planOps, missingOps: missingOps)
-                return ScenarioVerdict(result: VerificationResult(diff: diff, coverage: coverage),
-                                       orderingsExplored: distinctOrderings,
-                                       failingOrder: distinctOrderings > 1 ? probe.ordering : nil,
-                                       counterexample: variedInputs ? probe.cassette : nil)
+                let coverage = coverage(
+                    replays: [replay],
+                    domainHeld: false,
+                    declaredOps: planOps,
+                    missingOps: missingOps
+                )
+                return ScenarioVerdict(
+                    result: VerificationResult(diff: diff, coverage: coverage),
+                    orderingsExplored: distinctOrderings,
+                    failingOrder: distinctOrderings > 1 ? probe.ordering : nil,
+                    counterexample: variedInputs ? probe.cassette : nil
+                )
             }
         }
 
         // Every replayable probe held. Coverage decides whether that EQUIVALENT can be trusted:
         // unreplayable ops or seam misses anywhere downgrade it to CANNOT-VERIFY.
         let diff = representative ?? emptyDiff(golden: plan.scenarioName)
-        let coverage = coverage(replays: replays, domainHeld: true,
-                                declaredOps: planOps, missingOps: missingOps,
-                                sweptSeams: plan.variedSeams)
-        return ScenarioVerdict(result: VerificationResult(diff: diff, coverage: coverage),
-                               orderingsExplored: distinctOrderings,
-                               failingOrder: nil, counterexample: nil)
+        let coverage = coverage(
+            replays: replays,
+            domainHeld: true,
+            declaredOps: planOps,
+            missingOps: missingOps,
+            sweptSeams: plan.variedSeams
+        )
+        return ScenarioVerdict(
+            result: VerificationResult(diff: diff, coverage: coverage),
+            orderingsExplored: distinctOrderings,
+            failingOrder: nil,
+            counterexample: nil
+        )
     }
 
     /// `verify(replaying:)` against a plan artifact on disk.
@@ -211,9 +242,11 @@ public extension Scenario {
     /// When *no* probe was replayable there is nothing to diff; an empty comparison stands in so the
     /// coverage gaps (every op unrecorded) can carry the CANNOT-VERIFY.
     private func emptyDiff(golden: String) -> TraceDiff {
-        BehavioralDiff.compare(baseline: Trace(name: "\(golden).golden", events: []),
-                               candidate: Trace(name: name, events: []),
-                               tolerances: tolerances)
+        BehavioralDiff.compare(
+            baseline: Trace(name: "\(golden).golden", events: []),
+            candidate: Trace(name: name, events: []),
+            tolerances: tolerances
+        )
     }
 }
 

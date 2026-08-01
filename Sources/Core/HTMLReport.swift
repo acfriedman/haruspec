@@ -47,8 +47,12 @@ public enum HTML {
     // MARK: - Hero
 
     /// The verdict banner hero: three-tier banner, colored left border, and `baseline → candidate` chips.
-    public static func hero(_ verdict: TraceDiff.Verdict, title: String, baseline: String,
-                            candidate: String) -> String {
+    public static func hero(
+        _ verdict: TraceDiff.Verdict,
+        title: String,
+        baseline: String,
+        candidate: String
+    ) -> String {
         """
         <div class="hero \(accent(verdict))">
           <div class="verdict">\(banner(verdict))</div>
@@ -470,11 +474,13 @@ public extension VerificationResult {
     func htmlReport() -> String {
         var tiles = diff.statTiles
         if let fraction = coverage.fraction {
-            tiles.append(HTML.tile(
-                label: "Coverage",
-                value: "\(coverage.exercised.count)/\(coverage.declared.count) (\(percent(fraction)))",
-                accent: coverage.trustsEquivalent ? "ok" : "warn"
-            ))
+            tiles.append(
+                HTML.tile(
+                    label: "Coverage",
+                    value: "\(coverage.exercised.count)/\(coverage.declared.count) (\(percent(fraction)))",
+                    accent: coverage.trustsEquivalent ? "ok" : "warn"
+                )
+            )
         }
 
         var sections = [

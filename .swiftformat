@@ -6,3 +6,13 @@
 # Opening braces stay on the signature's last line even for multiline declarations,
 # agreeing with SwiftLint's opening_brace rule.
 --disable wrapMultilineStatementBraces
+
+# Wrapping: SwiftFormat owns line length (matches SwiftLint's line_length limit).
+# Arguments that don't fit go one-per-line with the closing paren on its own line,
+# never aligned under the opening paren.
+--max-width 120
+--wrap-arguments before-first
+--wrap-parameters before-first
+--closing-paren balanced
+--call-site-paren balanced
+--allow-partial-wrapping false

@@ -35,9 +35,15 @@ public struct Divergence: Codable, Sendable, Equatable {
         !isAdvisory && classification == .collateral
     }
 
-    public init(kind: Kind, label: String, baselineSeq: Int?, candidateSeq: Int?,
-                detail: String, isAdvisory: Bool = false,
-                classification: DivergenceClass = .collateral) {
+    public init(
+        kind: Kind,
+        label: String,
+        baselineSeq: Int?,
+        candidateSeq: Int?,
+        detail: String,
+        isAdvisory: Bool = false,
+        classification: DivergenceClass = .collateral
+    ) {
         self.kind = kind
         self.label = label
         self.baselineSeq = baselineSeq
@@ -100,9 +106,11 @@ public enum BehavioralDiff {
         let thread: LogicalThread
     }
 
-    public static func compare(baseline rawBaseline: Trace,
-                               candidate rawCandidate: Trace,
-                               tolerances spec: ToleranceSpec = .strict) -> TraceDiff {
+    public static func compare(
+        baseline rawBaseline: Trace,
+        candidate rawCandidate: Trace,
+        tolerances spec: ToleranceSpec = .strict
+    ) -> TraceDiff {
         var baseline = Canonicalizer.canonicalize(rawBaseline, spec: spec).events
         var candidate = Canonicalizer.canonicalize(rawCandidate, spec: spec).events
 
@@ -127,8 +135,13 @@ public enum BehavioralDiff {
 
         // 4a. Aligned (in-order) pairs: compare values + timing.
         for (baselineIndex, candidateIndex) in matched {
-            compareAligned(baseline[baselineIndex], candidate[candidateIndex], spec: spec,
-                           isAdvisory: advisory(baseline[baselineIndex].tier), into: &divergences)
+            compareAligned(
+                baseline[baselineIndex],
+                candidate[candidateIndex],
+                spec: spec,
+                isAdvisory: advisory(baseline[baselineIndex].tier),
+                into: &divergences
+            )
         }
 
         // 3/4b. Reconcile the unmatched: pair equal signatures as moves, rest are missing/unexpected.
@@ -137,33 +150,50 @@ public enum BehavioralDiff {
             if let slot = unmatchedInsertions.firstIndex(where: { candidateSig[$0] == baselineSig[baselineIndex] }) {
                 let candidateIndex = unmatchedInsertions.remove(at: slot)
                 if !spec.isUnordered(label: baseline[baselineIndex].label) {
-                    divergences.append(Divergence(
-                        kind: .reordered, label: baseline[baselineIndex].label,
-                        baselineSeq: baseline[baselineIndex].seq, candidateSeq: candidate[candidateIndex].seq,
-                        detail: "event order changed (baseline #\(baseline[baselineIndex].seq) "
-                            + "→ candidate #\(candidate[candidateIndex].seq))",
-                        isAdvisory: advisory(baseline[baselineIndex].tier)
-                    ))
+                    divergences.append(
+                        Divergence(
+                            kind: .reordered,
+                            label: baseline[baselineIndex].label,
+                            baselineSeq: baseline[baselineIndex].seq,
+                            candidateSeq: candidate[candidateIndex].seq,
+                            detail: "event order changed (baseline #\(baseline[baselineIndex].seq) "
+                                + "→ candidate #\(candidate[candidateIndex].seq))",
+                            isAdvisory: advisory(baseline[baselineIndex].tier)
+                        )
+                    )
                 }
                 // A moved event can still carry a value/timing regression — check it either way.
-                compareAligned(baseline[baselineIndex], candidate[candidateIndex], spec: spec,
-                               isAdvisory: advisory(baseline[baselineIndex].tier), into: &divergences)
+                compareAligned(
+                    baseline[baselineIndex],
+                    candidate[candidateIndex],
+                    spec: spec,
+                    isAdvisory: advisory(baseline[baselineIndex].tier),
+                    into: &divergences
+                )
             } else {
-                divergences.append(Divergence(
-                    kind: .missingEvent, label: baseline[baselineIndex].label,
-                    baselineSeq: baseline[baselineIndex].seq, candidateSeq: nil,
-                    detail: "\(baseline[baselineIndex].kind.rawValue) present in baseline, absent in candidate",
-                    isAdvisory: advisory(baseline[baselineIndex].tier)
-                ))
+                divergences.append(
+                    Divergence(
+                        kind: .missingEvent,
+                        label: baseline[baselineIndex].label,
+                        baselineSeq: baseline[baselineIndex].seq,
+                        candidateSeq: nil,
+                        detail: "\(baseline[baselineIndex].kind.rawValue) present in baseline, absent in candidate",
+                        isAdvisory: advisory(baseline[baselineIndex].tier)
+                    )
+                )
             }
         }
         for candidateIndex in unmatchedInsertions {
-            divergences.append(Divergence(
-                kind: .unexpectedEvent, label: candidate[candidateIndex].label,
-                baselineSeq: nil, candidateSeq: candidate[candidateIndex].seq,
-                detail: "\(candidate[candidateIndex].kind.rawValue) present in candidate, absent in baseline",
-                isAdvisory: advisory(candidate[candidateIndex].tier)
-            ))
+            divergences.append(
+                Divergence(
+                    kind: .unexpectedEvent,
+                    label: candidate[candidateIndex].label,
+                    baselineSeq: nil,
+                    candidateSeq: candidate[candidateIndex].seq,
+                    detail: "\(candidate[candidateIndex].kind.rawValue) present in candidate, absent in baseline",
+                    isAdvisory: advisory(candidate[candidateIndex].tier)
+                )
+            )
         }
 
         divergences.sort { lhs, rhs in
@@ -184,25 +214,47 @@ public enum BehavioralDiff {
 
     // MARK: - Aligned-pair comparison
 
-    private static func compareAligned(_ baseline: TraceEvent, _ candidate: TraceEvent, spec: ToleranceSpec,
-                                       isAdvisory: Bool, into out: inout [Divergence]) {
+    private static func compareAligned(
+        _ baseline: TraceEvent,
+        _ candidate: TraceEvent,
+        spec: ToleranceSpec,
+        isAdvisory: Bool,
+        into out: inout [Divergence]
+    ) {
         for path in valueDivergences(baseline.payload ?? .null, candidate.payload ?? .null, path: "", spec: spec) {
-            out.append(Divergence(kind: .valueMismatch, label: baseline.label,
-                                  baselineSeq: baseline.seq, candidateSeq: candidate.seq, detail: path,
-                                  isAdvisory: isAdvisory))
+            out.append(
+                Divergence(
+                    kind: .valueMismatch,
+                    label: baseline.label,
+                    baselineSeq: baseline.seq,
+                    candidateSeq: candidate.seq,
+                    detail: path,
+                    isAdvisory: isAdvisory
+                )
+            )
         }
         if let budget = spec.timingBudget(for: baseline.label),
            let base = baseline.durationTicks, let cand = candidate.durationTicks, cand - base > budget {
-            out.append(Divergence(kind: .timingRegression, label: baseline.label,
-                                  baselineSeq: baseline.seq, candidateSeq: candidate.seq,
-                                  detail: "duration \(base)→\(cand) ticks exceeds budget +\(budget) (Δ=\(cand - base))",
-                                  isAdvisory: isAdvisory))
+            out.append(
+                Divergence(
+                    kind: .timingRegression,
+                    label: baseline.label,
+                    baselineSeq: baseline.seq,
+                    candidateSeq: candidate.seq,
+                    detail: "duration \(base)→\(cand) ticks exceeds budget +\(budget) (Δ=\(cand - base))",
+                    isAdvisory: isAdvisory
+                )
+            )
         }
     }
 
     /// Structural, tolerance-aware value comparison. Returns one message per differing leaf path.
-    private static func valueDivergences(_ baseline: CanonicalValue, _ candidate: CanonicalValue,
-                                         path: String, spec: ToleranceSpec) -> [String] {
+    private static func valueDivergences(
+        _ baseline: CanonicalValue,
+        _ candidate: CanonicalValue,
+        path: String,
+        spec: ToleranceSpec
+    ) -> [String] {
         if let baselineNumber = numeric(baseline), let candidateNumber = numeric(candidate) {
             return abs(baselineNumber - candidateNumber) <= spec.numericEpsilon
                 ? [] : [mismatch(path, baseline, candidate)]
@@ -225,8 +277,12 @@ public enum BehavioralDiff {
         case let (.object(baselineObject), .object(candidateObject)):
             let keys = Set(baselineObject.keys).union(candidateObject.keys).sorted()
             return keys.flatMap { key in
-                valueDivergences(baselineObject[key] ?? .null, candidateObject[key] ?? .null,
-                                 path: path.isEmpty ? key : "\(path).\(key)", spec: spec)
+                valueDivergences(
+                    baselineObject[key] ?? .null,
+                    candidateObject[key] ?? .null,
+                    path: path.isEmpty ? key : "\(path).\(key)",
+                    spec: spec
+                )
             }
         default:
             return [mismatch(path, baseline, candidate)] // type mismatch

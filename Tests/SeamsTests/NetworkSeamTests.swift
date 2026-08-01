@@ -19,7 +19,8 @@ final class NetworkSeamTests: XCTestCase {
         // Record: the live handler stands in for the real server.
         let recording = Cassette()
         let recSession = URLSession(configuration: CassetteURLProtocol.install(
-            cassette: recording, liveHandler: { _ in (200, goldenBody) }
+            cassette: recording,
+            liveHandler: { _ in (200, goldenBody) }
         ))
         let recorded = try await fetch(recSession)
         XCTAssertEqual(recorded.status, 200)
@@ -40,7 +41,10 @@ final class NetworkSeamTests: XCTestCase {
         let empty = Cassette(replaying: CassetteData(tracks: [:]))
         let session = URLSession(configuration: CassetteURLProtocol.install(cassette: empty))
         _ = try? await fetch(session)
-        XCTAssertEqual(empty.misses.map(\.seam), ["url:GET \(url.absoluteString)"],
-                       "an unrecorded request is surfaced, not fabricated")
+        XCTAssertEqual(
+            empty.misses.map(\.seam),
+            ["url:GET \(url.absoluteString)"],
+            "an unrecorded request is surfaced, not fabricated"
+        )
     }
 }

@@ -34,9 +34,12 @@ public final class KVOInterceptor: NSObject, @unchecked Sendable {
         observed.removeAll()
     }
 
-    override public func observeValue(forKeyPath keyPath: String?, of object: Any?,
-                                      change: [NSKeyValueChangeKey: Any]?,
-                                      context _: UnsafeMutableRawPointer?) {
+    override public func observeValue(
+        forKeyPath keyPath: String?,
+        of object: Any?,
+        change: [NSKeyValueChangeKey: Any]?,
+        context _: UnsafeMutableRawPointer?
+    ) {
         guard let keyPath, let newValue = change?[.newKey] else { return }
         recorder.stateChange(keyPath, subject: object as AnyObject?, value: RuntimeValue.canonical(newValue))
     }

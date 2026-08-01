@@ -2,12 +2,20 @@
 import XCTest
 
 final class HTMLReportTests: XCTestCase {
-    private let valueMismatch = Divergence(kind: .valueMismatch, label: "cart.total",
-                                           baselineSeq: 3, candidateSeq: 3,
-                                           detail: "cart.total: baseline=1200 candidate=1500")
-    private let missing = Divergence(kind: .missingEvent, label: "LoyaltyAwarded",
-                                     baselineSeq: 5, candidateSeq: nil,
-                                     detail: "notification present in baseline, absent in candidate")
+    private let valueMismatch = Divergence(
+        kind: .valueMismatch,
+        label: "cart.total",
+        baselineSeq: 3,
+        candidateSeq: 3,
+        detail: "cart.total: baseline=1200 candidate=1500"
+    )
+    private let missing = Divergence(
+        kind: .missingEvent,
+        label: "LoyaltyAwarded",
+        baselineSeq: 5,
+        candidateSeq: nil,
+        detail: "notification present in baseline, absent in candidate"
+    )
 
     private func diff(_ verdict: TraceDiff.Verdict, _ divergences: [Divergence] = []) -> TraceDiff {
         TraceDiff(verdict: verdict, baselineName: "ObjCCart", candidateName: "SwiftCart", divergences: divergences)
@@ -18,8 +26,12 @@ final class HTMLReportTests: XCTestCase {
     /// No page produced anywhere may reference a remote asset — that's what makes it openable offline.
     private func assertSelfContained(_ html: String, file: StaticString = #filePath, line: UInt = #line) {
         for needle in ["http://", "https://", "src=", "//cdn", "url("] {
-            XCTAssertFalse(html.contains(needle),
-                           "HTML report must be self-contained; found \(needle)", file: file, line: line)
+            XCTAssertFalse(
+                html.contains(needle),
+                "HTML report must be self-contained; found \(needle)",
+                file: file,
+                line: line
+            )
         }
         XCTAssertTrue(html.contains("<!doctype html>"), "expected a full document", file: file, line: line)
         XCTAssertTrue(html.contains("<style>"), "CSS must be inlined", file: file, line: line)
@@ -52,8 +64,11 @@ final class HTMLReportTests: XCTestCase {
         XCTAssertFalse(diff(.equivalent).htmlReport().isEmpty)
         XCTAssertFalse(diff(.diverged, [missing]).htmlReport().isEmpty)
 
-        let miss = Coverage(declared: ["clock", "rng"], exercised: ["clock"],
-                            gaps: [Coverage.Gap(boundary: "rng", ordinal: 0, reason: .unrecorded)])
+        let miss = Coverage(
+            declared: ["clock", "rng"],
+            exercised: ["clock"],
+            gaps: [Coverage.Gap(boundary: "rng", ordinal: 0, reason: .unrecorded)]
+        )
         let cannotVerify = VerificationResult(diff: diff(.equivalent), coverage: miss)
         XCTAssertEqual(cannotVerify.verdict, .cannotVerify)
         let html = cannotVerify.htmlReport()
@@ -72,8 +87,13 @@ final class HTMLReportTests: XCTestCase {
 
     /// HTML metacharacters in labels/values must not break out of the markup.
     func testEscapingOfHostileContent() {
-        let hostile = Divergence(kind: .valueMismatch, label: "<script>& \"x\"",
-                                 baselineSeq: 1, candidateSeq: 1, detail: "a<b: baseline=1 candidate=2")
+        let hostile = Divergence(
+            kind: .valueMismatch,
+            label: "<script>& \"x\"",
+            baselineSeq: 1,
+            candidateSeq: 1,
+            detail: "a<b: baseline=1 candidate=2"
+        )
         let html = diff(.diverged, [hostile]).htmlReport()
         XCTAssertFalse(html.contains("<script>"))
         XCTAssertTrue(html.contains("&lt;script&gt;"))

@@ -54,8 +54,14 @@ public final class TraceRecorder: @unchecked Sendable {
     /// lands in the durable **semantic** tier (its value contract survives code-symbol renames).
     public func notification(_ name: String, subject: AnyObject? = nil, payload: CanonicalValue? = nil) {
         lock.lock(); defer { lock.unlock() }
-        appendLocked(kind: .notification, label: name, subject: subject, payload: payload,
-                     duration: nil, tier: .semantic)
+        appendLocked(
+            kind: .notification,
+            label: name,
+            subject: subject,
+            payload: payload,
+            duration: nil,
+            tier: .semantic
+        )
     }
 
     /// Record an observable state / property mutation (KVO) — a durable **semantic**-tier side effect.
@@ -128,12 +134,24 @@ public final class TraceRecorder: @unchecked Sendable {
 
     // MARK: - Locked helpers (callers already hold `lock`)
 
-    private func appendLocked(kind: EventKind, label: String, subject: AnyObject?,
-                              payload: CanonicalValue?, duration: Int64?, tier: EventTier = .structural) {
+    private func appendLocked(
+        kind: EventKind,
+        label: String,
+        subject: AnyObject?,
+        payload: CanonicalValue?,
+        duration: Int64?,
+        tier: EventTier = .structural
+    ) {
         let event = TraceEvent(
-            seq: seqCounter, kind: kind, label: label, thread: currentThreadLocked(),
-            subject: symbolicIDLocked(subject), payload: payload, durationTicks: duration,
-            depth: depth, tier: tier
+            seq: seqCounter,
+            kind: kind,
+            label: label,
+            thread: currentThreadLocked(),
+            subject: symbolicIDLocked(subject),
+            payload: payload,
+            durationTicks: duration,
+            depth: depth,
+            tier: tier
         )
         events.append(event)
         seqCounter += 1

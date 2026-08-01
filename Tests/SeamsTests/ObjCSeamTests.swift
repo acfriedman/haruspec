@@ -41,7 +41,10 @@ final class ObjCSeamTests: XCTestCase {
     }
 
     func testRealObjCSingletonPassesThroughWhenUnbound() {
-        XCTAssertNotEqual(LegacyObjCManager.shared.deviceToken(), LegacyObjCManager.shared.deviceToken(),
-                          "unbound, the swizzled ObjC method is live — production behavior unchanged")
+        XCTAssertNotEqual(
+            LegacyObjCManager.shared.deviceToken(),
+            LegacyObjCManager.shared.deviceToken(),
+            "unbound, the swizzled ObjC method is live — production behavior unchanged"
+        )
     }
 }

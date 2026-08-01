@@ -7,9 +7,11 @@ import XCTest
 /// still catching the undeclared one. Migration parity is the special case where nothing is declared.
 final class ExtensionModeTests: XCTestCase {
     private func featureDiff() -> TraceDiff {
-        BehavioralDiff.compare(baseline: CheckoutScenario.baseline(),
-                               candidate: CheckoutScenario.feature(),
-                               tolerances: CheckoutScenario.tolerances)
+        BehavioralDiff.compare(
+            baseline: CheckoutScenario.baseline(),
+            candidate: CheckoutScenario.feature(),
+            tolerances: CheckoutScenario.tolerances
+        )
     }
 
     /// Without an intent spec (parity mode), the feature's intended additions look just like the
@@ -17,14 +19,22 @@ final class ExtensionModeTests: XCTestCase {
     func testParityModeFlagsEveryChange() {
         let diff = featureDiff()
         XCTAssertFalse(diff.isEquivalent)
-        XCTAssertTrue(diff.divergences.contains { $0.kind == .unexpectedEvent && $0.label == "LoyaltyPointsEarned" },
-                      "the new product notification should surface\n\(diff.report())")
-        XCTAssertTrue(diff.divergences.contains { $0.kind == .valueMismatch && $0.label == "CheckoutDidComplete" },
-                      "the new userInfo field should surface\n\(diff.report())")
-        XCTAssertTrue(diff.divergences.contains { $0.kind == .missingEvent && $0.label == "CartDidChange" },
-                      "the dropped notification should surface\n\(diff.report())")
-        XCTAssertTrue(diff.divergences.allSatisfy { $0.classification == .collateral },
-                      "with no intent declared, nothing is intended")
+        XCTAssertTrue(
+            diff.divergences.contains { $0.kind == .unexpectedEvent && $0.label == "LoyaltyPointsEarned" },
+            "the new product notification should surface\n\(diff.report())"
+        )
+        XCTAssertTrue(
+            diff.divergences.contains { $0.kind == .valueMismatch && $0.label == "CheckoutDidComplete" },
+            "the new userInfo field should surface\n\(diff.report())"
+        )
+        XCTAssertTrue(
+            diff.divergences.contains { $0.kind == .missingEvent && $0.label == "CartDidChange" },
+            "the dropped notification should surface\n\(diff.report())"
+        )
+        XCTAssertTrue(
+            diff.divergences.allSatisfy { $0.classification == .collateral },
+            "with no intent declared, nothing is intended"
+        )
     }
 
     /// With the feature's intent declared, the two loyalty additions become `.intended` (non-gating)
@@ -32,8 +42,11 @@ final class ExtensionModeTests: XCTestCase {
     func testExtensionModeAbsorbsIntendedAndCatchesCollateral() {
         let diff = featureDiff().classified(against: CheckoutScenario.intent)
 
-        XCTAssertEqual(diff.intendedCount, 2,
-                       "the new loyalty event + the new payload field are declared\n\(diff.report())")
+        XCTAssertEqual(
+            diff.intendedCount,
+            2,
+            "the new loyalty event + the new payload field are declared\n\(diff.report())"
+        )
         XCTAssertEqual(diff.collateralCount, 1, "only the dropped CartDidChange is undeclared\n\(diff.report())")
         XCTAssertFalse(diff.isEquivalent, "a collateral regression still fails the gate")
 

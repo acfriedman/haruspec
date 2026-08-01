@@ -72,8 +72,12 @@ public final class CassetteURLProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.cannotParseResponse)); return
         }
 
-        let response = HTTPURLResponse(url: url, statusCode: Int(status),
-                                       httpVersion: "HTTP/1.1", headerFields: nil)!
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: Int(status),
+            httpVersion: "HTTP/1.1",
+            headerFields: nil
+        )!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)

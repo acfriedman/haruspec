@@ -36,8 +36,11 @@ final class SeamReplayTests: XCTestCase {
     /// Without a cassette (record mode passes through to live), the seams are genuinely
     /// nondeterministic — so the determinism proven below is meaningful, not vacuous.
     func testLiveRunsAreNondeterministic() {
-        XCTAssertNotEqual(fingerprint(Cassette()), fingerprint(Cassette()),
-                          "wall clock + system RNG differ run to run")
+        XCTAssertNotEqual(
+            fingerprint(Cassette()),
+            fingerprint(Cassette()),
+            "wall clock + system RNG differ run to run"
+        )
     }
 
     /// Record once; replay reproduces the golden run exactly, and any number of replays agree.
@@ -47,8 +50,11 @@ final class SeamReplayTests: XCTestCase {
         let data = recording.snapshot()
 
         XCTAssertEqual(fingerprint(Cassette(replaying: data)), golden, "replay reproduces the golden run")
-        XCTAssertEqual(fingerprint(Cassette(replaying: data)), fingerprint(Cassette(replaying: data)),
-                       "the same cassette yields identical output across independent runs")
+        XCTAssertEqual(
+            fingerprint(Cassette(replaying: data)),
+            fingerprint(Cassette(replaying: data)),
+            "the same cassette yields identical output across independent runs"
+        )
     }
 
     /// The payoff: under the *same* recorded inputs, a logic change diverges — attributable to the
@@ -58,9 +64,11 @@ final class SeamReplayTests: XCTestCase {
         _ = fingerprint(recording)
         let data = recording.snapshot()
 
-        XCTAssertNotEqual(fingerprint(Cassette(replaying: data)),
-                          fingerprintChanged(Cassette(replaying: data)),
-                          "identical inputs, changed logic → divergence attributable to the code")
+        XCTAssertNotEqual(
+            fingerprint(Cassette(replaying: data)),
+            fingerprintChanged(Cassette(replaying: data)),
+            "identical inputs, changed logic → divergence attributable to the code"
+        )
     }
 
     /// The recorded transcript survives a serialize → reload round-trip, so a cassette captured on the

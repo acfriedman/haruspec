@@ -141,8 +141,11 @@ final class UmbrellaImportTests: XCTestCase {
     func testCaptureSurfaceIsReExported() {
         let recorder = TraceRecorder(name: "umbrella", clock: ManualClock()) // ← TraceRecorder + ManualClock
         let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center, // ← NotificationInterceptor
-                                                  names: ["CartChanged", "CheckoutCompleted"])
+        let interceptor = NotificationInterceptor(
+            recorder: recorder,
+            center: center, // ← NotificationInterceptor
+            names: ["CartChanged", "CheckoutCompleted"]
+        )
         interceptor.start(); defer { interceptor.stop() }
 
         let cart = GoodCart(center: center)
@@ -164,8 +167,11 @@ final class UmbrellaImportTests: XCTestCase {
         // A value seam: record once, replay returns the recorded reading (not the live one).
         let recording = Cassette() // ← Cassette
         let recorded = SeamClock(cassette: recording, seam: "clock", live: { 1234.5 }).now() // ← SeamClock
-        let replayed = SeamClock(cassette: Cassette(replaying: recording.snapshot()),
-                                 seam: "clock", live: { -1 }).now()
+        let replayed = SeamClock(
+            cassette: Cassette(replaying: recording.snapshot()),
+            seam: "clock",
+            live: { -1 }
+        ).now()
         XCTAssertEqual(replayed, recorded, "replay yields the recorded value, not the live one")
 
         // `@Seamed`: the rewritten bare `Date()` reads from the ambient cassette when one is bound.

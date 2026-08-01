@@ -14,8 +14,12 @@ public enum Canonicalizer {
     /// Recursively redact volatile fields anywhere in a payload tree. `label` is the owning event's
     /// label and `path` the dotted route from the payload root to `value` (arrays contribute no
     /// component) — the coordinates scoped `VolatileField` rules match against.
-    public static func redact(_ value: CanonicalValue, spec: ToleranceSpec,
-                              label: String, path: [String] = []) -> CanonicalValue {
+    public static func redact(
+        _ value: CanonicalValue,
+        spec: ToleranceSpec,
+        label: String,
+        path: [String] = []
+    ) -> CanonicalValue {
         switch value {
         case let .array(elements):
             return .array(elements.map { redact($0, spec: spec, label: label, path: path) })

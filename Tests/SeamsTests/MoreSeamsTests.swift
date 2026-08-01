@@ -23,8 +23,11 @@ final class MoreSeamsTests: XCTestCase {
 
         // Replay with a live source that would return nil (e.g. no keychain in CI) — still gets the token.
         let play = SeamKeychain(cassette: Cassette(replaying: rec.snapshot()))
-        XCTAssertEqual(play.value(forKey: "authToken", live: { nil }), "secret-abc",
-                       "the recorded token replays, so an auth gate never blocks a headless run")
+        XCTAssertEqual(
+            play.value(forKey: "authToken", live: { nil }),
+            "secret-abc",
+            "the recorded token replays, so an auth gate never blocks a headless run"
+        )
     }
 
     func testKeychainReadYourWrites() {

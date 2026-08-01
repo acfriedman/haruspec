@@ -126,9 +126,11 @@ public struct DifferentialProperty {
     /// Tolerances for the branch-vs-branch diff (default: strict parity).
     public let tolerances: ToleranceSpec
 
-    public init(golden: CassetteData,
-                tolerances: ToleranceSpec = .strict,
-                run: @escaping (Cassette, Branch) -> Trace) {
+    public init(
+        golden: CassetteData,
+        tolerances: ToleranceSpec = .strict,
+        run: @escaping (Cassette, Branch) -> Trace
+    ) {
         self.golden = golden
         self.tolerances = tolerances
         self.run = run
@@ -180,18 +182,22 @@ public struct DifferentialProperty {
         let swept = gen.variedSeams.intersection(golden.tracks.keys)
         // Every golden seam is boundary-exercised (every variant replays it with no miss); the swept
         // seams are additionally domain-exercised, but only when the property held over the surface.
-        let coverage = Coverage(declared: allSeams,
-                                exercised: allSeams,
-                                gaps: [],
-                                domainExercised: held ? Array(swept) : [])
+        let coverage = Coverage(
+            declared: allSeams,
+            exercised: allSeams,
+            gaps: [],
+            domainExercised: held ? Array(swept) : []
+        )
         return Result(checked: variants.count, counterexamples: counterexamples, coverage: coverage)
     }
 
     /// Convenience: check with the built-in domain generator (dependency-free). `varying` names the
     /// seams to generate; the rest replay their golden values.
-    public func check(count: Int,
-                      varying domains: [String: SeamDomain],
-                      seed: UInt64 = 0x9E37_79B9_7F4A_7C15) -> Result {
+    public func check(
+        count: Int,
+        varying domains: [String: SeamDomain],
+        seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+    ) -> Result {
         check(count: count, using: DomainSeamGenerator(domains: domains, seed: seed))
     }
 
@@ -207,9 +213,11 @@ public struct DifferentialProperty {
     }
 
     /// Convenience: verify with the built-in domain generator (dependency-free).
-    public func verify(count: Int,
-                       varying domains: [String: SeamDomain],
-                       seed: UInt64 = 0x9E37_79B9_7F4A_7C15) -> VerificationResult {
+    public func verify(
+        count: Int,
+        varying domains: [String: SeamDomain],
+        seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+    ) -> VerificationResult {
         verify(count: count, using: DomainSeamGenerator(domains: domains, seed: seed))
     }
 

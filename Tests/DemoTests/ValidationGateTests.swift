@@ -17,26 +17,35 @@ final class ValidationGateTests: XCTestCase {
         XCTAssertFalse(strict.isEquivalent, "raw traces should differ on the volatile UUID/timestamp")
         XCTAssertTrue(strict.divergences.allSatisfy { $0.kind == .valueMismatch })
 
-        let tolerant = BehavioralDiff.compare(baseline: first, candidate: second,
-                                              tolerances: CheckoutScenario.tolerances)
+        let tolerant = BehavioralDiff.compare(
+            baseline: first,
+            candidate: second,
+            tolerances: CheckoutScenario.tolerances
+        )
         XCTAssertTrue(tolerant.isEquivalent, "canonicalization + tolerances must make repeat runs equivalent")
     }
 
     /// A genuine behavior-preserving refactor is *verified*, not merely asserted.
     func testRefactorVerifiesAsEquivalent() {
-        let diff = BehavioralDiff.compare(baseline: CheckoutScenario.baseline(),
-                                          candidate: CheckoutScenario.refactor(),
-                                          tolerances: CheckoutScenario.tolerances)
-        XCTAssertTrue(diff.isEquivalent,
-                      "refactor changed internals only; observable behavior is identical\n\(diff.report())")
+        let diff = BehavioralDiff.compare(
+            baseline: CheckoutScenario.baseline(),
+            candidate: CheckoutScenario.refactor(),
+            tolerances: CheckoutScenario.tolerances
+        )
+        XCTAssertTrue(
+            diff.isEquivalent,
+            "refactor changed internals only; observable behavior is identical\n\(diff.report())"
+        )
     }
 
     /// The payoff: a change that compiles and "looks right" but silently breaks behavior is caught,
     /// and each regression is localized to the right kind of divergence.
     func testRegressionIsCaught() {
-        let diff = BehavioralDiff.compare(baseline: CheckoutScenario.baseline(),
-                                          candidate: CheckoutScenario.regression(),
-                                          tolerances: CheckoutScenario.tolerances)
+        let diff = BehavioralDiff.compare(
+            baseline: CheckoutScenario.baseline(),
+            candidate: CheckoutScenario.regression(),
+            tolerances: CheckoutScenario.tolerances
+        )
         XCTAssertFalse(diff.isEquivalent)
         let kinds = Set(diff.divergences.map(\.kind))
 
@@ -47,12 +56,16 @@ final class ValidationGateTests: XCTestCase {
         XCTAssertTrue(valueLabels.contains("totalCents"), "expected total mismatch:\n\(valueLabels)")
 
         // Bug #2: dropped CartDidChange notification in removeItem.
-        XCTAssertTrue(diff.divergences.contains { $0.kind == .missingEvent && $0.label == "CartDidChange" },
-                      "expected a dropped CartDidChange:\n\(diff.report())")
+        XCTAssertTrue(
+            diff.divergences.contains { $0.kind == .missingEvent && $0.label == "CartDidChange" },
+            "expected a dropped CartDidChange:\n\(diff.report())"
+        )
 
         // Bug #3: checkout over its timing budget (@Timed measures the whole method).
-        XCTAssertTrue(diff.divergences.contains { $0.kind == .timingRegression && $0.label == "CartService.checkout" },
-                      "expected a timing regression:\n\(diff.report())")
+        XCTAssertTrue(
+            diff.divergences.contains { $0.kind == .timingRegression && $0.label == "CartService.checkout" },
+            "expected a timing regression:\n\(diff.report())"
+        )
     }
 
     /// The semantic (observable-behavior) tier is the durable contract: even if every fragile
@@ -62,18 +75,26 @@ final class ValidationGateTests: XCTestCase {
     func testDurableTierCatchesRegressionWhenStructuralIgnored() {
         var spec = CheckoutScenario.tolerances
         spec.structuralComparison = .ignored
-        let diff = BehavioralDiff.compare(baseline: CheckoutScenario.baseline(),
-                                          candidate: CheckoutScenario.regression(),
-                                          tolerances: spec)
+        let diff = BehavioralDiff.compare(
+            baseline: CheckoutScenario.baseline(),
+            candidate: CheckoutScenario.regression(),
+            tolerances: spec
+        )
         XCTAssertFalse(diff.isEquivalent)
-        XCTAssertFalse(diff.divergences.contains { $0.label.hasPrefix("CartService.") },
-                       "structural call mechanics should be dropped:\n\(diff.report())")
-        XCTAssertTrue(diff.divergences.contains { $0.kind == .missingEvent && $0.label == "CartDidChange" },
-                      "the dropped notification is caught:\n\(diff.report())")
-        XCTAssertTrue(diff.divergences.contains { $0.kind == .valueMismatch && $0.label == "CheckoutDidComplete"
-                          && $0.detail.contains("totalCents")
-        },
-        "the wrong total is caught via the production notification:\n\(diff.report())")
+        XCTAssertFalse(
+            diff.divergences.contains { $0.label.hasPrefix("CartService.") },
+            "structural call mechanics should be dropped:\n\(diff.report())"
+        )
+        XCTAssertTrue(
+            diff.divergences.contains { $0.kind == .missingEvent && $0.label == "CartDidChange" },
+            "the dropped notification is caught:\n\(diff.report())"
+        )
+        XCTAssertTrue(
+            diff.divergences.contains { $0.kind == .valueMismatch && $0.label == "CheckoutDidComplete"
+                && $0.detail.contains("totalCents")
+            },
+            "the wrong total is caught via the production notification:\n\(diff.report())"
+        )
     }
 
     /// Traces survive a serialize → reload round-trip unchanged (capture→store→reload).

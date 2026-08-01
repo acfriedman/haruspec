@@ -67,7 +67,10 @@ public struct TracedMethodMacro: BodyMacro {
         let original = function.body?.statements.description ?? ""
 
         let body = tracedBody(
-            function: function, label: "\(typeLabel).\(function.name.text)", innerBody: original, timed: timed
+            function: function,
+            label: "\(typeLabel).\(function.name.text)",
+            innerBody: original,
+            timed: timed
         )
         return Array(CodeBlockItemListSyntax("\(raw: body)"))
     }
@@ -87,7 +90,10 @@ public struct TracedMethodMacro: BodyMacro {
 /// (`@TracedForwarder`, `innerBody` = a `__wrapped.<method>(…)` forwarding call) run this one emitter,
 /// so their instrumentation stays byte-for-byte aligned and their traces diff cleanly.
 private func tracedBody(
-    function: FunctionDeclSyntax, label rawLabel: String, innerBody: String, timed: Bool
+    function: FunctionDeclSyntax,
+    label rawLabel: String,
+    innerBody: String,
+    timed: Bool
 ) -> String {
     let label = literalString(rawLabel)
 
@@ -253,7 +259,10 @@ public struct TracedForwarderMacro: PeerMacro {
         let innerBody = isVoid ? call : "return \(call)"
 
         let body = tracedBody(
-            function: function, label: "\(label).\(function.name.text)", innerBody: innerBody, timed: false
+            function: function,
+            label: "\(label).\(function.name.text)",
+            innerBody: innerBody,
+            timed: false
         )
         let generics = function.genericParameterClause?.trimmedDescription ?? ""
         let whereClause = function.genericWhereClause.map { " \($0.trimmedDescription)" } ?? ""
@@ -304,13 +313,19 @@ private enum SeamRewrite {
 /// `SyntaxVisitor` subclass, whose visitation symbols the prebuilt SwiftSyntax binary doesn't export.
 private func collectSeamEdits(_ node: Syntax, into edits: inout [SeamEdit]) {
     if let call = node.as(FunctionCallExprSyntax.self), let repl = SeamRewrite.replacement(forCall: call) {
-        edits.append((call.positionAfterSkippingLeadingTrivia.utf8Offset,
-                      call.endPositionBeforeTrailingTrivia.utf8Offset, repl))
+        edits.append((
+            call.positionAfterSkippingLeadingTrivia.utf8Offset,
+            call.endPositionBeforeTrailingTrivia.utf8Offset,
+            repl
+        ))
         return
     }
     if let member = node.as(MemberAccessExprSyntax.self), let repl = SeamRewrite.replacement(forMember: member) {
-        edits.append((member.positionAfterSkippingLeadingTrivia.utf8Offset,
-                      member.endPositionBeforeTrailingTrivia.utf8Offset, repl))
+        edits.append((
+            member.positionAfterSkippingLeadingTrivia.utf8Offset,
+            member.endPositionBeforeTrailingTrivia.utf8Offset,
+            repl
+        ))
         return
     }
     for child in node.children(viewMode: .sourceAccurate) {
@@ -464,8 +479,11 @@ private func literalString(_ value: String) -> String {
 @main
 struct Plugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
-        TracedMacro.self, TracedMethodMacro.self, TimedMarkerMacro.self,
+        TracedMacro.self,
+        TracedMethodMacro.self,
+        TimedMarkerMacro.self,
         TracedForwarderMacro.self,
-        SeamedMacro.self, SeamedMethodMacro.self
+        SeamedMacro.self,
+        SeamedMethodMacro.self
     ]
 }

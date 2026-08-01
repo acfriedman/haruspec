@@ -13,11 +13,17 @@ final class VerificationTests: XCTestCase {
     // Complete: both declared seams exercised cleanly, no gaps.
     private let complete = Coverage(declared: ["clock", "rng"], exercised: ["clock", "rng"], gaps: [])
     /// A live fallback (miss) on `rng` — isolation broke.
-    private let missGap = Coverage(declared: ["clock", "rng"], exercised: ["clock"],
-                                   gaps: [Coverage.Gap(boundary: "rng", ordinal: 2, reason: .unrecorded)])
+    private let missGap = Coverage(
+        declared: ["clock", "rng"],
+        exercised: ["clock"],
+        gaps: [Coverage.Gap(boundary: "rng", ordinal: 2, reason: .unrecorded)]
+    )
     /// A declared seam the replay never reached — lowers the fraction, but no live fallback.
-    private let unexercised = Coverage(declared: ["clock", "rng"], exercised: ["clock"],
-                                       gaps: [Coverage.Gap(boundary: "rng", reason: .unexercised)])
+    private let unexercised = Coverage(
+        declared: ["clock", "rng"],
+        exercised: ["clock"],
+        gaps: [Coverage.Gap(boundary: "rng", reason: .unexercised)]
+    )
 
     // MARK: - The resolve rule
 
@@ -69,8 +75,13 @@ final class VerificationTests: XCTestCase {
     // MARK: - Intent composes with coverage
 
     func testClassifiedReResolvesAgainstCoverage() {
-        let loyalty = Divergence(kind: .unexpectedEvent, label: "Loyalty",
-                                 baselineSeq: nil, candidateSeq: 0, detail: "new event")
+        let loyalty = Divergence(
+            kind: .unexpectedEvent,
+            label: "Loyalty",
+            baselineSeq: nil,
+            candidateSeq: 0,
+            detail: "new event"
+        )
         let raw = VerificationResult(diff: diff(.diverged, [loyalty]), coverage: complete)
         XCTAssertEqual(raw.verdict, .diverged, "undeclared, so it gates")
 

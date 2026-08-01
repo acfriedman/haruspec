@@ -14,8 +14,15 @@ public struct Receipt: Sendable, Equatable, Codable {
     public var orderID: String // volatile: a fresh UUID each run
     public var issuedAt: String // volatile: wall-clock timestamp
 
-    public init(subtotalCents: Int, discountCents: Int, taxCents: Int, totalCents: Int,
-                lineCount: Int, orderID: String, issuedAt: String) {
+    public init(
+        subtotalCents: Int,
+        discountCents: Int,
+        taxCents: Int,
+        totalCents: Int,
+        lineCount: Int,
+        orderID: String,
+        issuedAt: String
+    ) {
         self.subtotalCents = subtotalCents
         self.discountCents = discountCents
         self.taxCents = taxCents

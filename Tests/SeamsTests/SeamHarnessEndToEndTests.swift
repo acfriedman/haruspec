@@ -19,8 +19,10 @@ final class SeamHarnessEndToEndTests: XCTestCase {
     private static let names: Set<String> = ["SessionStarted", "CheckoutCompleted"]
 
     /// Stand-in for production code. `pricing` is the only thing that differs between branches.
-    private func runSession(cassette: Cassette,
-                            pricing: (_ subtotal: Int, _ bucket: Int) -> Int) -> Trace {
+    private func runSession(
+        cassette: Cassette,
+        pricing: (_ subtotal: Int, _ bucket: Int) -> Int
+    ) -> Trace {
         let recorder = TraceRecorder(name: "session", clock: ManualClock())
         let center = NotificationCenter()
         let interceptor = NotificationInterceptor(recorder: recorder, center: center, names: Self.names)
@@ -35,8 +37,11 @@ final class SeamHarnessEndToEndTests: XCTestCase {
             let region = defaults.string(forKey: "region", live: { "US" }) ?? "?" // seam: config
             let bucket = Int.random(in: 0 ..< 100, using: &rng) // seam: randomness (A/B)
 
-            center.post(name: Self.sessionStarted, object: nil,
-                        userInfo: ["region": region, "startedAt": startedAtMicros])
+            center.post(
+                name: Self.sessionStarted,
+                object: nil,
+                userInfo: ["region": region, "startedAt": startedAtMicros]
+            )
             Haruspec.marker("session.started")
 
             let total = pricing(1000, bucket)
@@ -66,23 +71,31 @@ final class SeamHarnessEndToEndTests: XCTestCase {
         // 2. A fresh LIVE run reads a different timestamp/bucket, and those flow into behavior — so the
         //    trace diverges and no tolerance can absorb it (the values are real outputs, not noise).
         let liveAgain = runSession(cassette: Cassette(), pricing: baselinePricing)
-        XCTAssertFalse(BehavioralDiff.compare(baseline: golden, candidate: liveAgain).isEquivalent,
-                       "an un-replayed run reads different time/RNG that flows into observable behavior")
+        XCTAssertFalse(
+            BehavioralDiff.compare(baseline: golden, candidate: liveAgain).isEquivalent,
+            "an un-replayed run reads different time/RNG that flows into observable behavior"
+        )
 
         // 3. REPLAY the same cassette into the baseline again → EQUIVALENT: replay restored determinism.
         let baselineReplay = runSession(cassette: Cassette(replaying: cassette), pricing: baselinePricing)
         let equivalence = BehavioralDiff.compare(baseline: golden, candidate: baselineReplay)
-        XCTAssertTrue(equivalence.isEquivalent,
-                      "replaying the recorded seams reproduces the golden behavior exactly\n\(equivalence.report())")
+        XCTAssertTrue(
+            equivalence.isEquivalent,
+            "replaying the recorded seams reproduces the golden behavior exactly\n\(equivalence.report())"
+        )
 
         // 4. REPLAY the same cassette into the CHANGED branch → DIVERGED, localized to the changed
         //    output, and attributable to the code because the environment was held identical.
         let changedReplay = runSession(cassette: Cassette(replaying: cassette), pricing: changedPricing)
         let diff = BehavioralDiff.compare(baseline: golden, candidate: changedReplay)
         XCTAssertFalse(diff.isEquivalent, "the pricing change diverges under identical replayed inputs")
-        XCTAssertTrue(diff.divergences.allSatisfy { $0.label == "CheckoutCompleted" },
-                      "the divergence is isolated to the changed output:\n\(diff.report())")
-        XCTAssertTrue(diff.divergences.contains { $0.detail.contains("totalCents") },
-                      "and it points at the wrong total:\n\(diff.report())")
+        XCTAssertTrue(
+            diff.divergences.allSatisfy { $0.label == "CheckoutCompleted" },
+            "the divergence is isolated to the changed output:\n\(diff.report())"
+        )
+        XCTAssertTrue(
+            diff.divergences.contains { $0.detail.contains("totalCents") },
+            "and it points at the wrong total:\n\(diff.report())"
+        )
     }
 }

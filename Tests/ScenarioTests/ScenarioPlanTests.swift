@@ -127,8 +127,11 @@ final class ScenarioPlanTests: XCTestCase {
 
         XCTAssertEqual(plan.scenarioName, "promo-cart.plan")
         XCTAssertGreaterThan(plan.probes.count, 1, "orderings × variants explored, not just the declared run")
-        XCTAssertEqual(plan.probes.first?.ordering, ["addCoffee", "promo", "checkout"],
-                       "the representative probe is the declared order under the golden cassette")
+        XCTAssertEqual(
+            plan.probes.first?.ordering,
+            ["addCoffee", "promo", "checkout"],
+            "the representative probe is the declared order under the golden cassette"
+        )
         XCTAssertEqual(plan.variedSeams, ["coffeeQty"])
         XCTAssertFalse(plan.probes.contains { $0.golden.events.isEmpty }, "every probe pins a real trace")
 
@@ -152,11 +155,17 @@ final class ScenarioPlanTests: XCTestCase {
         let plan = cart(system: makeGood).record()
         let verdict = cart(system: makeRefactor).verify(replaying: plan)
 
-        XCTAssertEqual(verdict.verdict, .equivalent,
-                       "a behavior-preserving change replays EQUIVALENT against the stored goldens")
+        XCTAssertEqual(
+            verdict.verdict,
+            .equivalent,
+            "a behavior-preserving change replays EQUIVALENT against the stored goldens"
+        )
         XCTAssertTrue(verdict.coverage.trustsEquivalent, "no gaps: every op and seam replayed cleanly")
-        XCTAssertEqual(verdict.coverage.domainExercised, ["coffeeQty"],
-                       "the recorded sweep earns domain-coverage credit on a held verify")
+        XCTAssertEqual(
+            verdict.coverage.domainExercised,
+            ["coffeeQty"],
+            "the recorded sweep earns domain-coverage credit on a held verify"
+        )
         XCTAssertGreaterThan(verdict.orderingsExplored, 1)
     }
 
@@ -170,8 +179,10 @@ final class ScenarioPlanTests: XCTestCase {
 
         XCTAssertEqual(verdict.verdict, .diverged, "the truncation bug is caught across the build boundary")
         XCTAssertNotNil(verdict.counterexample, "the varied seam value that exposed it is pinned")
-        XCTAssertTrue(verdict.diff.divergences.contains { $0.kind == .valueMismatch },
-                      "localized to the value that changed, not just 'something differs'")
+        XCTAssertTrue(
+            verdict.diff.divergences.contains { $0.kind == .valueMismatch },
+            "localized to the value that changed, not just 'something differs'"
+        )
 
         // The verdict is itself a serializable artifact (result.json)…
         let resultURL = planURL("result")
@@ -226,8 +237,11 @@ final class ScenarioPlanTests: XCTestCase {
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
 
         let verdict = drifted.verify(replaying: plan)
-        XCTAssertEqual(verdict.verdict, .cannotVerify,
-                       "an op the current build can't replay downgrades the verdict — never a silent pass")
+        XCTAssertEqual(
+            verdict.verdict,
+            .cannotVerify,
+            "an op the current build can't replay downgrades the verdict — never a silent pass"
+        )
         XCTAssertTrue(verdict.coverage.gaps.contains { $0.boundary == "op:addCoffee" && $0.reason == .unrecorded })
     }
 
@@ -237,8 +251,11 @@ final class ScenarioPlanTests: XCTestCase {
         // Behaviorally identical (the live fallback default changes nothing observable) — the trace
         // alone would pass. Reaching past the recording is what downgrades it.
         let verdict = cart(system: makeGreedy).verify(replaying: plan)
-        XCTAssertEqual(verdict.verdict, .cannotVerify,
-                       "an unrecorded seam read means isolation broke; EQUIVALENT can't be trusted")
+        XCTAssertEqual(
+            verdict.verdict,
+            .cannotVerify,
+            "an unrecorded seam read means isolation broke; EQUIVALENT can't be trusted"
+        )
         XCTAssertTrue(verdict.coverage.unrecordedReach.contains { $0.boundary == "surgeFactor" })
     }
 
@@ -247,11 +264,15 @@ final class ScenarioPlanTests: XCTestCase {
     func testCoverageIndexScopesPlansToChangedClasses() {
         let plan = cart(system: makeGood).record()
 
-        XCTAssertTrue(plan.coveredClasses.contains("PromoCart"),
-                      "the structural tier names the classes the scenario exercises")
+        XCTAssertTrue(
+            plan.coveredClasses.contains("PromoCart"),
+            "the structural tier names the classes the scenario exercises"
+        )
         XCTAssertTrue(plan.covers(anyOf: ["PromoCart", "Unrelated"]))
-        XCTAssertFalse(plan.covers(anyOf: ["PaymentService"]),
-                       "a PR touching only unrelated classes deselects this plan")
+        XCTAssertFalse(
+            plan.covers(anyOf: ["PaymentService"]),
+            "a PR touching only unrelated classes deselects this plan"
+        )
 
         // The --scope filter is exactly this predicate over a plan catalog.
         let catalog = [plan]

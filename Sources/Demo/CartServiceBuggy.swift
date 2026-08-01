@@ -45,9 +45,15 @@ public final class CartServiceBuggy: CartService {
         let discount = promoActive ? subtotal / 10 : 0
         let taxable = subtotal - discount
         let tax = Pricing.tax(taxable: taxable)
-        let receipt = Receipt(subtotalCents: subtotal, discountCents: discount, taxCents: tax,
-                              totalCents: taxable + tax, lineCount: items.count,
-                              orderID: Pricing.freshOrderID(), issuedAt: Pricing.issuedNow())
+        let receipt = Receipt(
+            subtotalCents: subtotal,
+            discountCents: discount,
+            taxCents: tax,
+            totalCents: taxable + tax,
+            lineCount: items.count,
+            orderID: Pricing.freshOrderID(),
+            issuedAt: Pricing.issuedNow()
+        )
         center.post(name: .checkoutDidComplete, object: self, userInfo: ["totalCents": receipt.totalCents])
         // Payload-free milestone marker. The off-by-one total is caught via the CheckoutDidComplete
         // notification (production seam), not the marker — which is exactly the point.

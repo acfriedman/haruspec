@@ -54,9 +54,15 @@ public final class CartServiceV2: CartService {
         let discount = Pricing.discount(subtotal: subtotal, promoActive: promoActive)
         let taxable = subtotal - discount
         let tax = Pricing.tax(taxable: taxable)
-        let receipt = Receipt(subtotalCents: subtotal, discountCents: discount, taxCents: tax,
-                              totalCents: taxable + tax, lineCount: lineCount,
-                              orderID: Pricing.freshOrderID(), issuedAt: Pricing.issuedNow())
+        let receipt = Receipt(
+            subtotalCents: subtotal,
+            discountCents: discount,
+            taxCents: tax,
+            totalCents: taxable + tax,
+            lineCount: lineCount,
+            orderID: Pricing.freshOrderID(),
+            issuedAt: Pricing.issuedNow()
+        )
         center.post(name: .checkoutDidComplete, object: self, userInfo: ["totalCents": receipt.totalCents])
         // The same payload-free milestone marker as the baseline — pins temporal coupling even though
         // this variant's internals (and type name) are fully restructured.

@@ -42,9 +42,15 @@ public final class CartServiceV1: CartService {
         let discount = Pricing.discount(subtotal: subtotal, promoActive: promoActive)
         let taxable = subtotal - discount
         let tax = Pricing.tax(taxable: taxable)
-        let receipt = Receipt(subtotalCents: subtotal, discountCents: discount, taxCents: tax,
-                              totalCents: taxable + tax, lineCount: items.count,
-                              orderID: Pricing.freshOrderID(), issuedAt: Pricing.issuedNow())
+        let receipt = Receipt(
+            subtotalCents: subtotal,
+            discountCents: discount,
+            taxCents: tax,
+            totalCents: taxable + tax,
+            lineCount: items.count,
+            orderID: Pricing.freshOrderID(),
+            issuedAt: Pricing.issuedNow()
+        )
         center.post(name: .checkoutDidComplete, object: self, userInfo: ["totalCents": receipt.totalCents])
         // A payload-free temporal marker: the durable product milestone. Its *values* ride the
         // CheckoutDidComplete notification above (production-observable), not the marker.

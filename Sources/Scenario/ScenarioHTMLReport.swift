@@ -21,19 +21,30 @@ public extension ScenarioVerdict {
         var tiles = [
             HTML.tile(label: "Verdict", value: HTML.shortVerdict(verdict), accent: HTML.accent(verdict)),
             HTML.tile(label: "Orderings explored", value: "\(orderingsExplored)"),
-            HTML.tile(label: "Divergences", value: "\(diff.divergences.count)",
-                      accent: diff.divergences.isEmpty ? "ok" : "bad")
+            HTML.tile(
+                label: "Divergences",
+                value: "\(diff.divergences.count)",
+                accent: diff.divergences.isEmpty ? "ok" : "bad"
+            )
         ]
         if let fraction = coverage.fraction {
-            tiles.append(HTML.tile(label: "Coverage",
-                                   value: "\(Int((fraction * 100).rounded()))% of \(coverage.declared.count)",
-                                   accent: coverage.unrecordedReach.isEmpty ? "ok" : "bad"))
+            tiles.append(
+                HTML.tile(
+                    label: "Coverage",
+                    value: "\(Int((fraction * 100).rounded()))% of \(coverage.declared.count)",
+                    accent: coverage.unrecordedReach.isEmpty ? "ok" : "bad"
+                )
+            )
         }
         let seams = counterexampleSeamPairs
         if !seams.isEmpty {
-            tiles.append(HTML.tile(label: "Counterexample",
-                                   value: seams.map { "\($0.key)=\($0.value)" }.joined(separator: " · "),
-                                   mono: true))
+            tiles.append(
+                HTML.tile(
+                    label: "Counterexample",
+                    value: seams.map { "\($0.key)=\($0.value)" }.joined(separator: " · "),
+                    mono: true
+                )
+            )
         }
 
         let body: String = diff.divergences.isEmpty

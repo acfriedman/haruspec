@@ -62,8 +62,10 @@ final class ToleranceSpecTests: XCTestCase {
             #"{"volatileFields": [{"path": ""}]}"#, // empty path
             #"{"volatileFields": [{"path": "receipt..issuedAt"}]}"# // empty component
         ] {
-            XCTAssertThrowsError(try JSONDecoder().decode(ToleranceSpec.self, from: Data(bad.utf8)),
-                                 bad)
+            XCTAssertThrowsError(
+                try JSONDecoder().decode(ToleranceSpec.self, from: Data(bad.utf8)),
+                bad
+            )
         }
     }
 

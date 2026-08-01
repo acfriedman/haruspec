@@ -38,16 +38,22 @@ final class TwoTierTests: XCTestCase {
     }
 
     func testAdvisoryReportsStructuralButDoesNotFail() {
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: renamed,
-                                          tolerances: ToleranceSpec(structuralComparison: .advisory))
+        let diff = BehavioralDiff.compare(
+            baseline: baseline,
+            candidate: renamed,
+            tolerances: ToleranceSpec(structuralComparison: .advisory)
+        )
         XCTAssertTrue(diff.isEquivalent, "the semantic tier matches, so the verdict passes")
         XCTAssertFalse(diff.divergences.isEmpty, "the structural rename is still reported")
         XCTAssertTrue(diff.divergences.allSatisfy(\.isAdvisory))
     }
 
     func testIgnoredComparesOnlySemanticTier() {
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: renamed,
-                                          tolerances: ToleranceSpec(structuralComparison: .ignored))
+        let diff = BehavioralDiff.compare(
+            baseline: baseline,
+            candidate: renamed,
+            tolerances: ToleranceSpec(structuralComparison: .ignored)
+        )
         XCTAssertTrue(diff.isEquivalent)
         XCTAssertTrue(diff.divergences.isEmpty, "structural events are dropped entirely")
     }
@@ -57,8 +63,11 @@ final class TwoTierTests: XCTestCase {
             structural(0, "CheckoutService.submit", ["items": 2]),
             semantic(1, "order_placed", ["totalCents": 9999]) // product-level regression
         ])
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: semanticRegression,
-                                          tolerances: ToleranceSpec(structuralComparison: .ignored))
+        let diff = BehavioralDiff.compare(
+            baseline: baseline,
+            candidate: semanticRegression,
+            tolerances: ToleranceSpec(structuralComparison: .ignored)
+        )
         XCTAssertFalse(diff.isEquivalent)
         XCTAssertEqual(diff.divergences.map(\.kind), [.valueMismatch])
         XCTAssertEqual(diff.divergences[0].label, "order_placed")

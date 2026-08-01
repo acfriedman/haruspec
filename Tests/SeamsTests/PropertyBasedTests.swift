@@ -13,12 +13,18 @@ final class PropertyBasedTests: XCTestCase {
 
     /// "Production" checkout. Reads a `discount` value seam (the same `cassette.int` primitive `SeamClock`
     /// / `SeamRNG` wrap) and a `noise` seam it does *not* act on, then posts the total computed by `total`.
-    private func runCheckout(cassette: Cassette, subtotal: Int64,
-                             total: (_ subtotal: Int64, _ discount: Int64) -> Int64) -> Trace {
+    private func runCheckout(
+        cassette: Cassette,
+        subtotal: Int64,
+        total: (_ subtotal: Int64, _ discount: Int64) -> Int64
+    ) -> Trace {
         let recorder = TraceRecorder(name: "checkout", clock: ManualClock())
         let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center,
-                                                  names: ["CheckoutCompleted"])
+        let interceptor = NotificationInterceptor(
+            recorder: recorder,
+            center: center,
+            names: ["CheckoutCompleted"]
+        )
         interceptor.start(); defer { interceptor.stop() }
 
         TraceContext.$current.withValue(recorder) {
@@ -57,21 +63,28 @@ final class PropertyBasedTests: XCTestCase {
         // trace diff is EQUIVALENT. The bug exists but this single input can't see it.
         let base = runCheckout(cassette: Cassette(replaying: tape), subtotal: 1000, total: baseline)
         let cand = runCheckout(cassette: Cassette(replaying: tape), subtotal: 1000, total: clamped)
-        XCTAssertTrue(BehavioralDiff.compare(baseline: base, candidate: cand).isEquivalent,
-                      "the recorded discount doesn't trigger the clamp — a false pass at the depth level")
+        XCTAssertTrue(
+            BehavioralDiff.compare(baseline: base, candidate: cand).isEquivalent,
+            "the recorded discount doesn't trigger the clamp — a false pass at the depth level"
+        )
     }
 
     /// Generating over the discount's domain finds the triggering value; shrinking localizes it.
     func testPropertyGenerationCatchesAndLocalizesTheRegression() throws {
         let tape = record(1000)
         let property = DifferentialProperty(golden: tape) { cassette, branch in
-            self.runCheckout(cassette: cassette, subtotal: 1000,
-                             total: branch == .candidate ? self.clamped : self.baseline)
+            self.runCheckout(
+                cassette: cassette,
+                subtotal: 1000,
+                total: branch == .candidate ? self.clamped : self.baseline
+            )
         }
 
-        let result = property.check(count: 64,
-                                    varying: ["discount": .int(0 ... 2000), "noise": .int(0 ... 1000)],
-                                    seed: 42)
+        let result = property.check(
+            count: 64,
+            varying: ["discount": .int(0 ... 2000), "noise": .int(0 ... 1000)],
+            seed: 42
+        )
 
         XCTAssertFalse(result.heldOverSurface, "some generated discount must trigger the clamp divergence")
         let counter = try XCTUnwrap(result.firstFailure)
@@ -79,8 +92,10 @@ final class PropertyBasedTests: XCTestCase {
         // Reproducible: replaying the counterexample cassette reproduces the divergence deterministically.
         let base = runCheckout(cassette: Cassette(replaying: counter.cassette), subtotal: 1000, total: baseline)
         let cand = runCheckout(cassette: Cassette(replaying: counter.cassette), subtotal: 1000, total: clamped)
-        XCTAssertFalse(BehavioralDiff.compare(baseline: base, candidate: cand).isEquivalent,
-                       "the shrunk counterexample reproduces the bug on replay")
+        XCTAssertFalse(
+            BehavioralDiff.compare(baseline: base, candidate: cand).isEquivalent,
+            "the shrunk counterexample reproduces the bug on replay"
+        )
 
         // Localized: discount is a value > 1000 (where max(0,·) changes output)…
         XCTAssertEqual(intTrack(counter.cassette, "discount")?.count, 1)
@@ -98,8 +113,11 @@ final class PropertyBasedTests: XCTestCase {
     func testHeldPropertyRunCreditsDomainCoverage() {
         let tape = record(1000)
         let property = DifferentialProperty(golden: tape) { cassette, branch in
-            self.runCheckout(cassette: cassette, subtotal: 1000,
-                             total: branch == .candidate ? self.refactored : self.baseline)
+            self.runCheckout(
+                cassette: cassette,
+                subtotal: 1000,
+                total: branch == .candidate ? self.refactored : self.baseline
+            )
         }
 
         let verified = property.verify(count: 64, varying: ["discount": .int(0 ... 2000)], seed: 1)

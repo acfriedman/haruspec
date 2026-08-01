@@ -5,13 +5,21 @@ import XCTest
 /// each tolerance lever is exercised in isolation.
 final class DiffTests: XCTestCase {
     /// Small builders for readability.
-    private func call(_ seq: Int, _ label: String, _ payload: CanonicalValue? = nil,
-                      subject: Int? = 1) -> TraceEvent {
+    private func call(
+        _ seq: Int,
+        _ label: String,
+        _ payload: CanonicalValue? = nil,
+        subject: Int? = 1
+    ) -> TraceEvent {
         TraceEvent(seq: seq, kind: .call, label: label, subject: subject, payload: payload)
     }
 
-    private func note(_ seq: Int, _ label: String, _ payload: CanonicalValue? = nil,
-                      subject: Int? = 1) -> TraceEvent {
+    private func note(
+        _ seq: Int,
+        _ label: String,
+        _ payload: CanonicalValue? = nil,
+        subject: Int? = 1
+    ) -> TraceEvent {
         TraceEvent(seq: seq, kind: .notification, label: label, subject: subject, payload: payload)
     }
 
@@ -60,8 +68,11 @@ final class DiffTests: XCTestCase {
         XCTAssertFalse(strict.isEquivalent)
         XCTAssertTrue(strict.divergences.contains { $0.kind == .reordered })
 
-        let tolerant = BehavioralDiff.compare(baseline: base, candidate: cand,
-                                              tolerances: ToleranceSpec(unorderedGroups: [["A", "B"]]))
+        let tolerant = BehavioralDiff.compare(
+            baseline: base,
+            candidate: cand,
+            tolerances: ToleranceSpec(unorderedGroups: [["A", "B"]])
+        )
         XCTAssertTrue(tolerant.isEquivalent)
     }
 
@@ -70,13 +81,19 @@ final class DiffTests: XCTestCase {
         let slow = trace("slow", [TraceEvent(seq: 0, kind: .signpost, label: "work", durationTicks: 200)])
 
         // Within budget → equivalent.
-        let withinBudget = BehavioralDiff.compare(baseline: base, candidate: slow,
-                                                  tolerances: ToleranceSpec(timingBudgets: ["work": 150]))
+        let withinBudget = BehavioralDiff.compare(
+            baseline: base,
+            candidate: slow,
+            tolerances: ToleranceSpec(timingBudgets: ["work": 150])
+        )
         XCTAssertTrue(withinBudget.isEquivalent)
 
         // Over budget → timing regression.
-        let bad = BehavioralDiff.compare(baseline: base, candidate: slow,
-                                         tolerances: ToleranceSpec(timingBudgets: ["work": 50]))
+        let bad = BehavioralDiff.compare(
+            baseline: base,
+            candidate: slow,
+            tolerances: ToleranceSpec(timingBudgets: ["work": 50])
+        )
         XCTAssertEqual(bad.divergences.map(\.kind), [.timingRegression])
     }
 
@@ -85,8 +102,11 @@ final class DiffTests: XCTestCase {
         let cand = trace("cand", [call(0, "a", ["ratio": 1.0000001])])
         let exact = BehavioralDiff.compare(baseline: base, candidate: cand)
         XCTAssertFalse(exact.isEquivalent)
-        let tolerant = BehavioralDiff.compare(baseline: base, candidate: cand,
-                                              tolerances: ToleranceSpec(numericEpsilon: 0.001))
+        let tolerant = BehavioralDiff.compare(
+            baseline: base,
+            candidate: cand,
+            tolerances: ToleranceSpec(numericEpsilon: 0.001)
+        )
         XCTAssertTrue(tolerant.isEquivalent)
     }
 
@@ -107,8 +127,11 @@ final class DiffTests: XCTestCase {
         let cand = trace("cand", [call(0, "a", ["id": "UUID-2", "amount": 10])])
         let strict = BehavioralDiff.compare(baseline: base, candidate: cand)
         XCTAssertFalse(strict.isEquivalent) // ids differ
-        let tolerant = BehavioralDiff.compare(baseline: base, candidate: cand,
-                                              tolerances: ToleranceSpec(volatileFields: [.key("id")]))
+        let tolerant = BehavioralDiff.compare(
+            baseline: base,
+            candidate: cand,
+            tolerances: ToleranceSpec(volatileFields: [.key("id")])
+        )
         XCTAssertTrue(tolerant.isEquivalent) // id redacted, amount matches
     }
 
@@ -126,8 +149,11 @@ final class DiffTests: XCTestCase {
         XCTAssertEqual(diff.divergences[0].label, "addItem")
 
         // An unscoped rule would have swallowed both.
-        let unscoped = BehavioralDiff.compare(baseline: base, candidate: cand,
-                                              tolerances: ToleranceSpec(volatileFields: [.key("id")]))
+        let unscoped = BehavioralDiff.compare(
+            baseline: base,
+            candidate: cand,
+            tolerances: ToleranceSpec(volatileFields: [.key("id")])
+        )
         XCTAssertTrue(unscoped.isEquivalent)
     }
 
@@ -143,8 +169,11 @@ final class DiffTests: XCTestCase {
         XCTAssertEqual(diff.divergences.map(\.kind), [.valueMismatch]) // promotion.issuedAt still compared
 
         // Widening the rule to the bare key redacts both and the traces become equivalent.
-        let unscoped = BehavioralDiff.compare(baseline: base, candidate: cand,
-                                              tolerances: ToleranceSpec(volatileFields: [.key("issuedAt")]))
+        let unscoped = BehavioralDiff.compare(
+            baseline: base,
+            candidate: cand,
+            tolerances: ToleranceSpec(volatileFields: [.key("issuedAt")])
+        )
         XCTAssertTrue(unscoped.isEquivalent)
     }
 
@@ -153,8 +182,11 @@ final class DiffTests: XCTestCase {
         let cand = trace("cand", [call(0, "a"), TraceEvent(seq: 1, kind: .custom, label: "telemetry")])
         let strict = BehavioralDiff.compare(baseline: base, candidate: cand)
         XCTAssertFalse(strict.isEquivalent)
-        let tolerant = BehavioralDiff.compare(baseline: base, candidate: cand,
-                                              tolerances: ToleranceSpec(ignoredKinds: [.custom]))
+        let tolerant = BehavioralDiff.compare(
+            baseline: base,
+            candidate: cand,
+            tolerances: ToleranceSpec(ignoredKinds: [.custom])
+        )
         XCTAssertTrue(tolerant.isEquivalent)
     }
 }

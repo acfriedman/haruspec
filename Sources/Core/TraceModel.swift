@@ -55,8 +55,10 @@ extension LogicalThread: Codable {
         if raw.hasPrefix("worker-"), let number = Int(raw.dropFirst("worker-".count)) {
             self = .worker(number); return
         }
-        throw DecodingError.dataCorruptedError(in: container,
-                                               debugDescription: "Unrecognized LogicalThread \"\(raw)\"")
+        throw DecodingError.dataCorruptedError(
+            in: container,
+            debugDescription: "Unrecognized LogicalThread \"\(raw)\""
+        )
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -88,9 +90,17 @@ public struct TraceEvent: Sendable, Equatable {
     /// (notifications, state changes) and markers are `.semantic`.
     public var tier: EventTier
 
-    public init(seq: Int, kind: EventKind, label: String, thread: LogicalThread = .main,
-                subject: Int? = nil, payload: CanonicalValue? = nil,
-                durationTicks: Int64? = nil, depth: Int = 0, tier: EventTier = .structural) {
+    public init(
+        seq: Int,
+        kind: EventKind,
+        label: String,
+        thread: LogicalThread = .main,
+        subject: Int? = nil,
+        payload: CanonicalValue? = nil,
+        durationTicks: Int64? = nil,
+        depth: Int = 0,
+        tier: EventTier = .structural
+    ) {
         self.seq = seq
         self.kind = kind
         self.label = label

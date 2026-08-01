@@ -6,8 +6,12 @@ import XCTest
 /// ones. These tests pin the classification logic against hand-built divergences — no capture needed.
 final class IntentSpecTests: XCTestCase {
     private func diff(_ divergences: [Divergence]) -> TraceDiff {
-        TraceDiff(verdict: divergences.contains(where: \.isGating) ? .diverged : .equivalent,
-                  baselineName: "b", candidateName: "c", divergences: divergences)
+        TraceDiff(
+            verdict: divergences.contains(where: \.isGating) ? .diverged : .equivalent,
+            baselineName: "b",
+            candidateName: "c",
+            divergences: divergences
+        )
     }
 
     private func d(_ kind: Divergence.Kind, _ label: String, _ detail: String = "") -> Divergence {
@@ -64,8 +68,10 @@ final class IntentSpecTests: XCTestCase {
         let classified = diff([
             d(.reordered, "CartDidChange"),
             d(.timingRegression, "CartService.checkout")
-        ]).classified(against: IntentSpec(expectedNewEvents: ["CartDidChange"],
-                                          expectedValueChanges: ["CartService.checkout": []]))
+        ]).classified(against: IntentSpec(
+            expectedNewEvents: ["CartDidChange"],
+            expectedValueChanges: ["CartService.checkout": []]
+        ))
         XCTAssertEqual(classified.collateralCount, 2, "reorder/timing intent is not expressible yet")
     }
 
