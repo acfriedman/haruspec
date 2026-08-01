@@ -117,7 +117,7 @@ final class ForwarderReproTests: XCTestCase {
             }
             .observe(notifications: ["CartDidChange", "CheckoutDidComplete"])
             .observing(on: .default)
-            .tolerate(ToleranceSpec(volatileFields: ["orderID"], numericEpsilon: 0,
+            .tolerate(ToleranceSpec(volatileFields: [.key("orderID")], numericEpsilon: 0,
                                     timingBudgets: [:], unorderedGroups: [], ignoredKinds: []))
             .vary {
                 Seam("coffeeQty", .int(1...20))

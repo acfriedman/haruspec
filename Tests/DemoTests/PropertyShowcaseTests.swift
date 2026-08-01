@@ -36,7 +36,7 @@ final class PropertyShowcaseTests: XCTestCase {
     /// Fresh order id / timestamp are volatile; the recompute interval gets a generous budget so the
     /// isolated signal is the value-dependent discount, not timing.
     private var tolerances: ToleranceSpec {
-        ToleranceSpec(volatileFields: ["orderID", "issuedAt"], numericEpsilon: 0,
+        ToleranceSpec(volatileFields: [.key("orderID"), .key("issuedAt")], numericEpsilon: 0,
                       timingBudgets: ["CartService.checkout": 500],
                       unorderedGroups: [["CartDidChange", "AnalyticsDidTrack"]], ignoredKinds: [])
     }

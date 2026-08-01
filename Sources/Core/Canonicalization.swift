@@ -11,15 +11,20 @@ public enum Canonicalizer {
     /// Placeholder substituted for any volatile field's value. Chosen to be visually obvious in dumps.
     public static let volatilePlaceholder = CanonicalValue.string("⟨volatile⟩")
 
-    /// Recursively redact volatile fields anywhere in a payload tree.
-    public static func redact(_ value: CanonicalValue, spec: ToleranceSpec) -> CanonicalValue {
+    /// Recursively redact volatile fields anywhere in a payload tree. `label` is the owning event's
+    /// label and `path` the dotted route from the payload root to `value` (arrays contribute no
+    /// component) — the coordinates scoped `VolatileField` rules match against.
+    public static func redact(_ value: CanonicalValue, spec: ToleranceSpec,
+                              label: String, path: [String] = []) -> CanonicalValue {
         switch value {
         case .array(let elements):
-            return .array(elements.map { redact($0, spec: spec) })
+            return .array(elements.map { redact($0, spec: spec, label: label, path: path) })
         case .object(let members):
             var out: [String: CanonicalValue] = [:]
             for (key, val) in members {
-                out[key] = spec.isVolatile(key: key) ? volatilePlaceholder : redact(val, spec: spec)
+                out[key] = spec.isVolatile(key: key, label: label, path: path + [key])
+                    ? volatilePlaceholder
+                    : redact(val, spec: spec, label: label, path: path + [key])
             }
             return .object(out)
         default:
@@ -38,7 +43,7 @@ public enum Canonicalizer {
         }
         for i in events.indices {
             if let payload = events[i].payload {
-                events[i].payload = redact(payload, spec: spec)
+                events[i].payload = redact(payload, spec: spec, label: events[i].label)
             }
             events[i].seq = i // re-densify the logical clock after any filtering
         }

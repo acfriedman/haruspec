@@ -72,7 +72,7 @@ public enum CheckoutScenario {
     /// notifications may be emitted in either order.
     public static var tolerances: ToleranceSpec {
         ToleranceSpec(
-            volatileFields: ["orderID", "issuedAt"],
+            volatileFields: [.key("orderID"), .key("issuedAt")],
             numericEpsilon: 0,
             timingBudgets: ["CartService.checkout": 50],
             unorderedGroups: [["CartDidChange", "AnalyticsDidTrack"]],

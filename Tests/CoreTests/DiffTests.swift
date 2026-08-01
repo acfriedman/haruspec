@@ -106,8 +106,44 @@ final class DiffTests: XCTestCase {
         let strict = BehavioralDiff.compare(baseline: base, candidate: cand)
         XCTAssertFalse(strict.isEquivalent) // ids differ
         let tolerant = BehavioralDiff.compare(baseline: base, candidate: cand,
-                                              tolerances: ToleranceSpec(volatileFields: ["id"]))
+                                              tolerances: ToleranceSpec(volatileFields: [.key("id")]))
         XCTAssertTrue(tolerant.isEquivalent) // id redacted, amount matches
+    }
+
+    func testLabelScopedVolatileFieldDoesNotRedactOtherEvents() {
+        // "id" is a fresh UUID in checkout but a stable product identifier in addItem. A rule scoped
+        // to checkout must tolerate the former while still catching a regression in the latter.
+        let base = trace("base", [call(0, "addItem", ["id": "SKU-7"]),
+                                  call(1, "checkout", ["id": "UUID-1"])])
+        let cand = trace("cand", [call(0, "addItem", ["id": "SKU-9"]),
+                                  call(1, "checkout", ["id": "UUID-2"])])
+
+        let scoped = ToleranceSpec(volatileFields: [.key("id", inEvent: "checkout")])
+        let diff = BehavioralDiff.compare(baseline: base, candidate: cand, tolerances: scoped)
+        XCTAssertEqual(diff.divergences.map(\.kind), [.valueMismatch]) // addItem's id still compared
+        XCTAssertEqual(diff.divergences[0].label, "addItem")
+
+        // An unscoped rule would have swallowed both.
+        let unscoped = BehavioralDiff.compare(baseline: base, candidate: cand,
+                                              tolerances: ToleranceSpec(volatileFields: [.key("id")]))
+        XCTAssertTrue(unscoped.isEquivalent)
+    }
+
+    func testPathScopedVolatileFieldOnlyRedactsAtThatPath() {
+        // "issuedAt" under receipt is clock noise; "issuedAt" under promotion is fixed campaign data.
+        let base = trace("base", [call(0, "checkout", ["receipt": ["issuedAt": "t1"],
+                                                       "promotion": ["issuedAt": "June"]])])
+        let cand = trace("cand", [call(0, "checkout", ["receipt": ["issuedAt": "t2"],
+                                                       "promotion": ["issuedAt": "July"]])])
+
+        let scoped = ToleranceSpec(volatileFields: [.path("receipt.issuedAt")])
+        let diff = BehavioralDiff.compare(baseline: base, candidate: cand, tolerances: scoped)
+        XCTAssertEqual(diff.divergences.map(\.kind), [.valueMismatch]) // promotion.issuedAt still compared
+
+        // Widening the rule to the bare key redacts both and the traces become equivalent.
+        let unscoped = BehavioralDiff.compare(baseline: base, candidate: cand,
+                                              tolerances: ToleranceSpec(volatileFields: [.key("issuedAt")]))
+        XCTAssertTrue(unscoped.isEquivalent)
     }
 
     func testIgnoredKindsAreDropped() {
