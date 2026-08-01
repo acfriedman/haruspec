@@ -1,6 +1,6 @@
-import XCTest
 @testable import HaruspecCore
 @testable import HaruspecSeams
+import XCTest
 
 // The two un-injected mechanisms for singletons that a macro can't reach.
 
@@ -11,7 +11,9 @@ import XCTest
 /// swizzling does, because the method is ObjC-dispatched.
 final class LegacyDeviceManager: NSObject {
     nonisolated(unsafe) static let shared = LegacyDeviceManager()
-    @objc dynamic func deviceToken() -> String { UUID().uuidString } // un-injected nondeterminism
+    @objc dynamic func deviceToken() -> String {
+        UUID().uuidString
+    } // un-injected nondeterminism
 }
 
 extension LegacyDeviceManager {
@@ -30,25 +32,31 @@ extension LegacyDeviceManager {
 /// A common legacy shape: a settable `static var shared` and a non-`final` (overridable) method.
 class LegacySessionManager {
     nonisolated(unsafe) static var shared = LegacySessionManager()
-    func token() -> String { UUID().uuidString }
+    func token() -> String {
+        UUID().uuidString
+    }
 }
 
 /// A recording/replaying decorator swapped into `.shared`. The call-site
 /// `LegacySessionManager.shared.token()` is untouched; only the global is redirected (harness setup).
 final class RecordingSessionManager: LegacySessionManager {
     private let cassette: Cassette
-    init(_ cassette: Cassette) { self.cassette = cassette; super.init() }
+    init(_ cassette: Cassette) {
+        self.cassette = cassette; super.init()
+    }
+
     override func token() -> String {
         cassette.string(seam: "session.token", live: { super.token() }) ?? ""
     }
 }
 
 final class SingletonSeamTests: XCTestCase {
-    // Swizzle once for the whole process; unbound it passes through, so leaving it installed is inert.
+    /// Swizzle once for the whole process; unbound it passes through, so leaving it installed is inert.
     private static let swizzled: Bool = SeamSwizzle.exchange(
         LegacyDeviceManager.self,
         #selector(LegacyDeviceManager.deviceToken),
-        with: #selector(LegacyDeviceManager.seam_deviceToken))
+        with: #selector(LegacyDeviceManager.seam_deviceToken)
+    )
 
     override func setUp() {
         super.setUp()
@@ -82,6 +90,7 @@ final class SingletonSeamTests: XCTestCase {
         let data = recording.snapshot()
 
         LegacySessionManager.shared = RecordingSessionManager(Cassette(replaying: data))
-        XCTAssertEqual(LegacySessionManager.shared.token(), golden, "the .shared decorator replays through the cassette")
+        XCTAssertEqual(LegacySessionManager.shared.token(), golden,
+                       "the .shared decorator replays through the cassette")
     }
 }

@@ -81,7 +81,7 @@ public macro Timed() =
 /// The generated name is `Traced<ProtocolName>` (or `as:`, which must equal that when the protocol is at
 /// file scope — `names: prefixed(Traced)` covers only the prefixed protocol name, not an arbitrary one).
 @attached(peer, names: prefixed(Traced))
-public macro TracedForwarder(wrapping: Any.Type, label: String, as: String? = nil,
+public macro TracedForwarder(wrapping: Any.Type, label: String, as generatedName: String? = nil,
                              shared: String? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedForwarderMacro")
 

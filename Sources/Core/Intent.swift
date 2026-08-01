@@ -44,7 +44,7 @@ public struct IntentSpec: Sendable, Equatable {
             guard let fields = expectedValueChanges[divergence.label] else { return false }
             return fields.isEmpty || fields.contains { fieldMatches($0, divergence.detail) }
         case .reordered, .timingRegression:
-            return false  // not yet expressible as declared intent — always collateral for now
+            return false // not yet expressible as declared intent — always collateral for now
         }
     }
 
@@ -61,18 +61,22 @@ public extension TraceDiff {
     /// (parity mode) — every divergence stays collateral and the verdict is unchanged.
     func classified(against intent: IntentSpec) -> TraceDiff {
         var result = self
-        for i in result.divergences.indices where intent.declares(result.divergences[i]) {
-            result.divergences[i].classification = .intended
+        for index in result.divergences.indices where intent.declares(result.divergences[index]) {
+            result.divergences[index].classification = .intended
         }
         result.verdict = result.divergences.contains(where: \.isGating) ? .diverged : .equivalent
         return result
     }
 
     /// Divergences the intent spec declared — expected feature behavior.
-    var intendedCount: Int { divergences.filter { $0.classification == .intended }.count }
+    var intendedCount: Int {
+        divergences.filter { $0.classification == .intended }.count
+    }
 
     /// Undeclared divergences that gate the verdict — suspected regressions.
-    var collateralCount: Int { divergences.filter(\.isGating).count }
+    var collateralCount: Int {
+        divergences.filter(\.isGating).count
+    }
 }
 
 extension IntentSpec: Codable {
@@ -80,12 +84,13 @@ extension IntentSpec: Codable {
         case expectedNewEvents, expectedRemovedEvents, expectedValueChanges
     }
 
-    // Every field is optional in JSON so a partial spec is ergonomic.
+    /// Every field is optional in JSON so a partial spec is ergonomic.
     public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        expectedNewEvents = try c.decodeIfPresent([String].self, forKey: .expectedNewEvents) ?? []
-        expectedRemovedEvents = try c.decodeIfPresent([String].self, forKey: .expectedRemovedEvents) ?? []
-        expectedValueChanges = try c.decodeIfPresent([String: [String]].self, forKey: .expectedValueChanges) ?? [:]
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        expectedNewEvents = try container.decodeIfPresent([String].self, forKey: .expectedNewEvents) ?? []
+        expectedRemovedEvents = try container.decodeIfPresent([String].self, forKey: .expectedRemovedEvents) ?? []
+        expectedValueChanges = try container
+            .decodeIfPresent([String: [String]].self, forKey: .expectedValueChanges) ?? [:]
     }
 }
 

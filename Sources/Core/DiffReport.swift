@@ -15,9 +15,9 @@ public extension TraceDiff {
     /// The three-tier banner glyph + label.
     static func banner(_ verdict: Verdict) -> String {
         switch verdict {
-        case .equivalent:   return "✅ EQUIVALENT"
-        case .diverged:     return "❌ DIVERGED"
-        case .cannotVerify: return "⚠️ CANNOT-VERIFY"
+        case .equivalent: "✅ EQUIVALENT"
+        case .diverged: "❌ DIVERGED"
+        case .cannotVerify: "⚠️ CANNOT-VERIFY"
         }
     }
 
@@ -36,24 +36,30 @@ public extension TraceDiff {
         // parity-mode output stays identical to before.
         if intended > 0 {
             var parts: [String] = []
-            if collateralCount > 0 { parts.append("\(collateralCount) collateral") }
+            if collateralCount > 0 {
+                parts.append("\(collateralCount) collateral")
+            }
             parts.append("\(intended) intended")
-            if advisory > 0 { parts.append("\(advisory) advisory") }
+            if advisory > 0 {
+                parts.append("\(advisory) advisory")
+            }
             lines.append("  \(divergences.count) divergence(s) — \(parts.joined(separator: ", ")):")
         } else {
             let suffix = advisory > 0 ? " (\(advisory) advisory)" : ""
             lines.append("  \(divergences.count) divergence(s)\(suffix):")
         }
 
-        for d in divergences {
-            let location = "[b:\(d.baselineSeq.map(String.init) ?? "–") c:\(d.candidateSeq.map(String.init) ?? "–")]"
-            let tag: String
-            switch d.classification {
-            case .intended:   tag = " (intended)"
-            case .collateral: tag = d.isAdvisory ? " (advisory)" : (intended > 0 ? " (collateral)" : "")
+        for divergence in divergences {
+            let location = "[b:\(divergence.baselineSeq.map(String.init) ?? "–") "
+                + "c:\(divergence.candidateSeq.map(String.init) ?? "–")]"
+            let tag: String = switch divergence.classification {
+            case .intended: " (intended)"
+            case .collateral: divergence.isAdvisory ? " (advisory)" : (intended > 0 ? " (collateral)" : "")
             }
-            lines.append("    \(glyph(d.kind)) \(d.kind.rawValue) \(location) \(d.label)\(tag)")
-            lines.append("        \(d.detail)")
+            lines.append(
+                "    \(glyph(divergence.kind)) \(divergence.kind.rawValue) \(location) \(divergence.label)\(tag)"
+            )
+            lines.append("        \(divergence.detail)")
         }
         return lines
     }
@@ -89,11 +95,11 @@ public extension TraceDiff {
 
     private func glyph(_ kind: Divergence.Kind) -> String {
         switch kind {
-        case .missingEvent: return "−"
-        case .unexpectedEvent: return "+"
-        case .reordered: return "↔"
-        case .valueMismatch: return "≠"
-        case .timingRegression: return "⏱"
+        case .missingEvent: "−"
+        case .unexpectedEvent: "+"
+        case .reordered: "↔"
+        case .valueMismatch: "≠"
+        case .timingRegression: "⏱"
         }
     }
 }

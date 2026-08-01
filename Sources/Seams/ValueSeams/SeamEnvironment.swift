@@ -28,6 +28,11 @@ public struct SeamEnvironment {
     }
 
     /// Reconstructed Foundation values, for code that wants the types rather than the identifiers.
-    public func locale() -> Locale { Locale(identifier: localeIdentifier()) }
-    public func timeZone() -> TimeZone { TimeZone(identifier: timeZoneIdentifier()) ?? .current }
+    public func locale() -> Locale {
+        Locale(identifier: localeIdentifier())
+    }
+
+    public func timeZone() -> TimeZone {
+        TimeZone(identifier: timeZoneIdentifier()) ?? .current
+    }
 }

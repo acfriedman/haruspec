@@ -1,11 +1,10 @@
-import XCTest
 @testable import HaruspecCore
 @testable import HaruspecSeams
+import XCTest
 
 /// The remaining value seams (environment, keychain, files): record once, replay identically even when
 /// the live source has moved on — proving the boundary is genuinely pinned.
 final class MoreSeamsTests: XCTestCase {
-
     func testEnvironmentReplaysRecordedLocaleAndTimeZone() {
         let rec = Cassette()
         let env = SeamEnvironment(cassette: rec)
@@ -36,9 +35,9 @@ final class MoreSeamsTests: XCTestCase {
 
     func testFileReadsReplayAndWritesAreSandboxed() {
         let rec = Cassette()
-        let fs = SeamFileSystem(cassette: rec)
+        let fileSystem = SeamFileSystem(cassette: rec)
         let golden = Data("config=on".utf8)
-        XCTAssertEqual(fs.readData(atPath: "/etc/app.conf", live: { golden }), golden)
+        XCTAssertEqual(fileSystem.readData(atPath: "/etc/app.conf", live: { golden }), golden)
 
         let play = SeamFileSystem(cassette: Cassette(replaying: rec.snapshot()))
         XCTAssertEqual(play.readData(atPath: "/etc/app.conf", live: { Data() }), golden, "recorded read replays")

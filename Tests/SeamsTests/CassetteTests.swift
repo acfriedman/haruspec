@@ -1,6 +1,6 @@
-import XCTest
 @testable import HaruspecCore
 @testable import HaruspecSeams
+import XCTest
 
 final class CassetteTests: XCTestCase {
     func testTypedAccessorsRoundTrip() {

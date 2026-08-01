@@ -1,7 +1,7 @@
+import SwiftCompilerPlugin
 import SwiftSyntax
 import SwiftSyntaxBuilder
 import SwiftSyntaxMacros
-import SwiftCompilerPlugin
 
 // MARK: - @Traced (member-attribute)
 
@@ -13,15 +13,19 @@ public struct TracedMacro: MemberAttributeMacro {
         of node: AttributeSyntax,
         attachedTo declaration: some DeclGroupSyntax,
         providingAttributesFor member: some DeclSyntaxProtocol,
-        in context: some MacroExpansionContext
+        in _: some MacroExpansionContext
     ) throws -> [AttributeSyntax] {
         guard let function = member.as(FunctionDeclSyntax.self), function.body != nil else { return [] }
         // Skip type methods — there is no instance `self` to attribute the events to.
         if function.modifiers.contains(where: {
             $0.name.tokenKind == .keyword(.static) || $0.name.tokenKind == .keyword(.class)
-        }) { return [] }
+        }) {
+            return []
+        }
         // Respect an explicit @TracedMethod the author wrote themselves (power-user override).
-        if hasAttribute(function, named: "TracedMethod") { return [] }
+        if hasAttribute(function, named: "TracedMethod") {
+            return []
+        }
 
         let typeLabel = stringArgument(of: node) ?? typeName(of: declaration) ?? "Unknown"
         let timed = (boolArgument(of: node, name: "timing") ?? false) || hasAttribute(function, named: "Timed")
@@ -35,10 +39,12 @@ public struct TracedMacro: MemberAttributeMacro {
 /// to enable that method's timing.
 public struct TimedMarkerMacro: PeerMacro {
     public static func expansion(
-        of node: AttributeSyntax,
-        providingPeersOf declaration: some DeclSyntaxProtocol,
-        in context: some MacroExpansionContext
-    ) throws -> [DeclSyntax] { [] }
+        of _: AttributeSyntax,
+        providingPeersOf _: some DeclSyntaxProtocol,
+        in _: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
+        []
+    }
 }
 
 // MARK: - @TracedMethod (body)
@@ -51,7 +57,7 @@ public struct TracedMethodMacro: BodyMacro {
     public static func expansion(
         of node: AttributeSyntax,
         providingBodyFor declaration: some DeclSyntaxProtocol & WithOptionalCodeBlockSyntax,
-        in context: some MacroExpansionContext
+        in _: some MacroExpansionContext
     ) throws -> [CodeBlockItemSyntax] {
         guard let function = declaration.as(FunctionDeclSyntax.self) else { return [] }
 
@@ -61,7 +67,8 @@ public struct TracedMethodMacro: BodyMacro {
         let original = function.body?.statements.description ?? ""
 
         let body = tracedBody(
-            function: function, label: "\(typeLabel).\(function.name.text)", innerBody: original, timed: timed)
+            function: function, label: "\(typeLabel).\(function.name.text)", innerBody: original, timed: timed
+        )
         return Array(CodeBlockItemListSyntax("\(raw: body)"))
     }
 }
@@ -104,31 +111,41 @@ private func tracedBody(
 
     let retVoid = "__oracle?.ret(\(label), subject: self)"
     let retValue = "__oracle?.ret(\(label), subject: self, value: RuntimeValue.canonical(__oracleResult as Any))"
-    let retThrew = "__oracle?.ret(\(label), subject: self, value: [\"__threw\": RuntimeValue.canonical(String(describing: error))])"
-    let timedStop = "if let __oracle, let __oracleStart { __oracle.signpost(\(label), subject: self, durationTicks: __oracle.now() - __oracleStart) }"
+    let retThrew = "__oracle?.ret(\(label), subject: self, "
+        + "value: [\"__threw\": RuntimeValue.canonical(String(describing: error))])"
+    let timedStop = "if let __oracle, let __oracleStart "
+        + "{ __oracle.signpost(\(label), subject: self, durationTicks: __oracle.now() - __oracleStart) }"
 
     var lines: [String] = [
         "let __oracle = TraceContext.current",
         "__oracle?.call(\(label), subject: self\(callArgs))",
         "\(nestedSignature) { \(innerBody)",
-        "}",
+        "}"
     ]
-    if timed { lines.append("let __oracleStart = __oracle?.now()") }
+    if timed {
+        lines.append("let __oracleStart = __oracle?.now()")
+    }
 
     switch (isThrows, isVoid) {
     case (false, true):
         lines.append(invoke)
-        if timed { lines.append(timedStop) }
+        if timed {
+            lines.append(timedStop)
+        }
         lines.append(retVoid)
     case (false, false):
         lines.append("let __oracleResult = \(invoke)")
-        if timed { lines.append(timedStop) }
+        if timed {
+            lines.append(timedStop)
+        }
         lines.append(retValue)
         lines.append("return __oracleResult")
     case (true, true):
         lines.append("do {")
         lines.append("    \(invoke)")
-        if timed { lines.append("    \(timedStop)") }
+        if timed {
+            lines.append("    \(timedStop)")
+        }
         lines.append("    \(retVoid)")
         lines.append("} catch {")
         lines.append("    \(retThrew)")
@@ -137,7 +154,9 @@ private func tracedBody(
     case (true, false):
         lines.append("do {")
         lines.append("    let __oracleResult = \(invoke)")
-        if timed { lines.append("    \(timedStop)") }
+        if timed {
+            lines.append("    \(timedStop)")
+        }
         lines.append("    \(retValue)")
         lines.append("    return __oracleResult")
         lines.append("} catch {")
@@ -163,7 +182,7 @@ public struct TracedForwarderMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
-        in context: some MacroExpansionContext
+        in _: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
         guard let proto = declaration.as(ProtocolDeclSyntax.self) else {
             throw MacroError("@TracedForwarder can only be attached to a protocol")
@@ -185,11 +204,17 @@ public struct TracedForwarderMacro: PeerMacro {
         for member in proto.memberBlock.members {
             let decl = member.decl
             if let function = decl.as(FunctionDeclSyntax.self), function.body == nil {
-                if isStaticOrClass(function.modifiers) { continue }
+                if isStaticOrClass(function.modifiers) {
+                    continue
+                }
                 members.append(forwardingMethod(function, label: label))
             } else if let variable = decl.as(VariableDeclSyntax.self) {
-                if isStaticOrClass(variable.modifiers) { continue }
-                if let property = forwardingProperty(variable) { members.append(property) }
+                if isStaticOrClass(variable.modifiers) {
+                    continue
+                }
+                if let property = forwardingProperty(variable) {
+                    members.append(property)
+                }
             }
         }
 
@@ -228,10 +253,12 @@ public struct TracedForwarderMacro: PeerMacro {
         let innerBody = isVoid ? call : "return \(call)"
 
         let body = tracedBody(
-            function: function, label: "\(label).\(function.name.text)", innerBody: innerBody, timed: false)
+            function: function, label: "\(label).\(function.name.text)", innerBody: innerBody, timed: false
+        )
         let generics = function.genericParameterClause?.trimmedDescription ?? ""
         let whereClause = function.genericWhereClause.map { " \($0.trimmedDescription)" } ?? ""
-        return "    func \(function.name.text)\(generics)\(function.signature.trimmedDescription)\(whereClause) {\n\(indent(body))\n    }"
+        return "    func \(function.name.text)\(generics)\(function.signature.trimmedDescription)"
+            + "\(whereClause) {\n\(indent(body))\n    }"
     }
 
     /// A read-only `var x: T { get }` requirement forwards as a plain computed property (untraced).
@@ -256,7 +283,7 @@ private enum SeamRewrite {
     static let calls: [String: String] = ["Date": "Seam.now()", "UUID": "Seam.uuid()"]
     /// A `Type.member` access routed to a replacement (e.g. `Date.now`).
     static let members: [(type: String, member: String, replacement: String)] = [
-        ("Date", "now", "Seam.now()"),
+        ("Date", "now", "Seam.now()")
     ]
 
     static func replacement(forCall node: FunctionCallExprSyntax) -> String? {
@@ -286,19 +313,23 @@ private func collectSeamEdits(_ node: Syntax, into edits: inout [SeamEdit]) {
                       member.endPositionBeforeTrailingTrivia.utf8Offset, repl))
         return
     }
-    for child in node.children(viewMode: .sourceAccurate) { collectSeamEdits(child, into: &edits) }
+    for child in node.children(viewMode: .sourceAccurate) {
+        collectSeamEdits(child, into: &edits)
+    }
 }
 
 /// Stamps `@SeamedMethod` onto each method of the attached type whose body reads an un-injected seam.
 public struct SeamedMacro: MemberAttributeMacro {
     public static func expansion(
-        of node: AttributeSyntax,
-        attachedTo declaration: some DeclGroupSyntax,
+        of _: AttributeSyntax,
+        attachedTo _: some DeclGroupSyntax,
         providingAttributesFor member: some DeclSyntaxProtocol,
-        in context: some MacroExpansionContext
+        in _: some MacroExpansionContext
     ) throws -> [AttributeSyntax] {
         guard let function = member.as(FunctionDeclSyntax.self), let body = function.body else { return [] }
-        if hasAttribute(function, named: "SeamedMethod") { return [] }
+        if hasAttribute(function, named: "SeamedMethod") {
+            return []
+        }
         var edits: [SeamEdit] = []
         collectSeamEdits(Syntax(body), into: &edits)
         return edits.isEmpty ? [] : ["@SeamedMethod"]
@@ -309,16 +340,18 @@ public struct SeamedMacro: MemberAttributeMacro {
 /// carry the rewrite — release keeps the original bare calls, so production is byte-for-byte untouched.
 public struct SeamedMethodMacro: BodyMacro {
     public static func expansion(
-        of node: AttributeSyntax,
+        of _: AttributeSyntax,
         providingBodyFor declaration: some DeclSyntaxProtocol & WithOptionalCodeBlockSyntax,
-        in context: some MacroExpansionContext
+        in _: some MacroExpansionContext
     ) throws -> [CodeBlockItemSyntax] {
         guard let function = declaration.as(FunctionDeclSyntax.self), let body = function.body else { return [] }
         let statements = body.statements
 
         var edits: [SeamEdit] = []
         collectSeamEdits(Syntax(statements), into: &edits)
-        if edits.isEmpty { return Array(statements) }
+        if edits.isEmpty {
+            return Array(statements)
+        }
 
         // Apply edits to the statements' own source text by descending offset (so earlier edits don't
         // shift later ones). `.description` starts at `statements.position`, so subtract that base.
@@ -327,7 +360,7 @@ public struct SeamedMethodMacro: BodyMacro {
         for edit in edits.sorted(by: { $0.start > $1.start }) {
             let start = edit.start - base, end = edit.end - base
             guard start >= 0, end <= utf8.count, start <= end else { continue }
-            utf8.replaceSubrange(start..<end, with: Array(edit.text.utf8))
+            utf8.replaceSubrange(start ..< end, with: Array(edit.text.utf8))
         }
         let rewritten = String(decoding: utf8, as: UTF8.self)
 
@@ -384,7 +417,9 @@ private func indent(_ body: String) -> String {
 /// A macro-expansion failure surfaced to the compiler as a diagnostic (never a plugin crash).
 private struct MacroError: Error, CustomStringConvertible {
     let description: String
-    init(_ description: String) { self.description = description }
+    init(_ description: String) {
+        self.description = description
+    }
 }
 
 /// Extract a labeled boolean-literal argument of a macro attribute, if present.
@@ -407,14 +442,22 @@ private func hasAttribute(_ function: FunctionDeclSyntax, named: String) -> Bool
 
 /// The declared name of a class/struct/actor.
 private func typeName(of declaration: some DeclGroupSyntax) -> String? {
-    if let decl = declaration.as(ClassDeclSyntax.self) { return decl.name.text }
-    if let decl = declaration.as(ActorDeclSyntax.self) { return decl.name.text }
-    if let decl = declaration.as(StructDeclSyntax.self) { return decl.name.text }
+    if let decl = declaration.as(ClassDeclSyntax.self) {
+        return decl.name.text
+    }
+    if let decl = declaration.as(ActorDeclSyntax.self) {
+        return decl.name.text
+    }
+    if let decl = declaration.as(StructDeclSyntax.self) {
+        return decl.name.text
+    }
     return nil
 }
 
 /// Render a Swift double-quoted string literal for a known-safe label.
-private func literalString(_ value: String) -> String { "\"\(value)\"" }
+private func literalString(_ value: String) -> String {
+    "\"\(value)\""
+}
 
 // MARK: - Plugin
 
@@ -423,6 +466,6 @@ struct Plugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
         TracedMacro.self, TracedMethodMacro.self, TimedMarkerMacro.self,
         TracedForwarderMacro.self,
-        SeamedMacro.self, SeamedMethodMacro.self,
+        SeamedMacro.self, SeamedMethodMacro.self
     ]
 }

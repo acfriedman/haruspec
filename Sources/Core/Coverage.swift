@@ -13,7 +13,6 @@ import Foundation
 /// `VerificationResult.resolve`) rather than letting it pass. Coverage is *reported*, never assumed —
 /// `EQUIVALENT` over 20% of the surface is nearly worthless; over 95% is the product.
 public struct Coverage: Codable, Sendable, Equatable {
-
     /// Why a declared boundary isn't covered.
     public enum GapReason: String, Codable, Sendable {
         /// Replay reached the boundary but the recording was exhausted / had no entry, so it fell back
@@ -81,19 +80,23 @@ public struct Coverage: Codable, Sendable, Equatable {
     }
 
     /// Gaps where replay fell back to live input — the hard signal that isolation broke.
-    public var unrecordedReach: [Gap] { gaps.filter { $0.reason == .unrecorded } }
+    public var unrecordedReach: [Gap] {
+        gaps.filter { $0.reason == .unrecorded }
+    }
 
     /// Can an `EQUIVALENT` diff be *trusted* over this coverage? Only when the surface is known and no
     /// boundary fell back to live. v1 hard rule: unrecorded reach downgrades to `CANNOT-VERIFY`; a low
     /// but gap-free fraction is reported, not gated (a declared `CoveragePolicy` threshold is future
     /// work). An unknown surface (no registry) is never trusted.
-    public var trustsEquivalent: Bool { !declared.isEmpty && unrecordedReach.isEmpty }
+    public var trustsEquivalent: Bool {
+        !declared.isEmpty && unrecordedReach.isEmpty
+    }
 
     public init() {
-        self.declared = []
-        self.exercised = []
-        self.gaps = []
-        self.domainExercised = []
+        declared = []
+        exercised = []
+        gaps = []
+        domainExercised = []
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -103,10 +106,10 @@ public struct Coverage: Codable, Sendable, Equatable {
     /// `domainExercised` decodes forward-compatibly (absent in older payloads → empty), matching the
     /// codebase's `decodeIfPresent` convention.
     public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        declared = try c.decode([String].self, forKey: .declared)
-        exercised = try c.decode([String].self, forKey: .exercised)
-        gaps = try c.decode([Gap].self, forKey: .gaps)
-        domainExercised = try c.decodeIfPresent([String].self, forKey: .domainExercised) ?? []
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        declared = try container.decode([String].self, forKey: .declared)
+        exercised = try container.decode([String].self, forKey: .exercised)
+        gaps = try container.decode([Gap].self, forKey: .gaps)
+        domainExercised = try container.decodeIfPresent([String].self, forKey: .domainExercised) ?? []
     }
 }

@@ -3,14 +3,14 @@ import Foundation
 /// The category of a recorded behavioral event. These are the "observable behavior" primitives:
 /// method-entry/exit, notifications, state changes, and timed intervals.
 public enum EventKind: String, Codable, Sendable, CaseIterable {
-    case call          // function / method entry (payload = arguments)
-    case ret           // function / method return (payload = return value)
-    case notification  // a posted notification / broadcast side effect
-    case stateChange   // an observable property / state mutation
-    case signpost      // a timed interval (durationTicks is set)
-    case marker        // a payload-free temporal signpost at a product milestone (semantic tier)
-    case effect        // an outbound call to a spied collaborator — an observable side effect (semantic tier)
-    case custom        // app-defined telemetry an application wants to pin (droppable via ignoredKinds)
+    case call // function / method entry (payload = arguments)
+    case ret // function / method return (payload = return value)
+    case notification // a posted notification / broadcast side effect
+    case stateChange // an observable property / state mutation
+    case signpost // a timed interval (durationTicks is set)
+    case marker // a payload-free temporal signpost at a product milestone (semantic tier)
+    case effect // an outbound call to a spied collaborator — an observable side effect (semantic tier)
+    case custom // app-defined telemetry an application wants to pin (droppable via ignoredKinds)
 }
 
 /// Which durability tier an event belongs to.
@@ -25,8 +25,8 @@ public enum EventKind: String, Codable, Sendable, CaseIterable {
 /// can gate on one
 /// tier and treat the other as advisory or ignored (see `StructuralComparison`).
 public enum EventTier: String, Codable, Sendable {
-    case structural  // internal call mechanics (calls / returns / timing) — code-symbol-named, fragile
-    case semantic    // observable product behavior (notifications, state, markers) — the durable contract
+    case structural // internal call mechanics (calls / returns / timing) — code-symbol-named, fragile
+    case semantic // observable product behavior (notifications, state, markers) — the durable contract
 }
 
 /// A logical, run-stable thread identity.
@@ -39,8 +39,8 @@ public enum LogicalThread: Sendable, Equatable, Hashable, CustomStringConvertibl
 
     public var description: String {
         switch self {
-        case .main: return "main"
-        case .worker(let n): return "worker-\(n)"
+        case .main: "main"
+        case let .worker(number): "worker-\(number)"
         }
     }
 }
@@ -49,17 +49,19 @@ extension LogicalThread: Codable {
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let raw = try container.decode(String.self)
-        if raw == "main" { self = .main; return }
-        if raw.hasPrefix("worker-"), let n = Int(raw.dropFirst("worker-".count)) {
-            self = .worker(n); return
+        if raw == "main" {
+            self = .main; return
+        }
+        if raw.hasPrefix("worker-"), let number = Int(raw.dropFirst("worker-".count)) {
+            self = .worker(number); return
         }
         throw DecodingError.dataCorruptedError(in: container,
-            debugDescription: "Unrecognized LogicalThread \"\(raw)\"")
+                                               debugDescription: "Unrecognized LogicalThread \"\(raw)\"")
     }
 
     public func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
-        try c.encode(description)
+        var container = encoder.singleValueContainer()
+        try container.encode(description)
     }
 }
 
@@ -107,29 +109,31 @@ extension TraceEvent: Codable {
     }
 
     public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        seq = try c.decode(Int.self, forKey: .seq)
-        kind = try c.decode(EventKind.self, forKey: .kind)
-        label = try c.decode(String.self, forKey: .label)
-        thread = try c.decode(LogicalThread.self, forKey: .thread)
-        subject = try c.decodeIfPresent(Int.self, forKey: .subject)
-        payload = try c.decodeIfPresent(CanonicalValue.self, forKey: .payload)
-        durationTicks = try c.decodeIfPresent(Int64.self, forKey: .durationTicks)
-        depth = try c.decodeIfPresent(Int.self, forKey: .depth) ?? 0
-        tier = try c.decodeIfPresent(EventTier.self, forKey: .tier) ?? .structural
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        seq = try container.decode(Int.self, forKey: .seq)
+        kind = try container.decode(EventKind.self, forKey: .kind)
+        label = try container.decode(String.self, forKey: .label)
+        thread = try container.decode(LogicalThread.self, forKey: .thread)
+        subject = try container.decodeIfPresent(Int.self, forKey: .subject)
+        payload = try container.decodeIfPresent(CanonicalValue.self, forKey: .payload)
+        durationTicks = try container.decodeIfPresent(Int64.self, forKey: .durationTicks)
+        depth = try container.decodeIfPresent(Int.self, forKey: .depth) ?? 0
+        tier = try container.decodeIfPresent(EventTier.self, forKey: .tier) ?? .structural
     }
 
     public func encode(to encoder: Encoder) throws {
-        var c = encoder.container(keyedBy: CodingKeys.self)
-        try c.encode(seq, forKey: .seq)
-        try c.encode(kind, forKey: .kind)
-        try c.encode(label, forKey: .label)
-        try c.encode(thread, forKey: .thread)
-        try c.encodeIfPresent(subject, forKey: .subject)
-        try c.encodeIfPresent(payload, forKey: .payload)
-        try c.encodeIfPresent(durationTicks, forKey: .durationTicks)
-        try c.encode(depth, forKey: .depth)
-        if tier != .structural { try c.encode(tier, forKey: .tier) } // omit the default for clean JSON
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(seq, forKey: .seq)
+        try container.encode(kind, forKey: .kind)
+        try container.encode(label, forKey: .label)
+        try container.encode(thread, forKey: .thread)
+        try container.encodeIfPresent(subject, forKey: .subject)
+        try container.encodeIfPresent(payload, forKey: .payload)
+        try container.encodeIfPresent(durationTicks, forKey: .durationTicks)
+        try container.encode(depth, forKey: .depth)
+        if tier != .structural {
+            try container.encode(tier, forKey: .tier)
+        } // omit the default for clean JSON
     }
 }
 
@@ -154,9 +158,19 @@ public extension Trace {
         return encoder
     }
 
-    func jsonData() throws -> Data { try Self.canonicalEncoder().encode(self) }
-    func write(to url: URL) throws { try jsonData().write(to: url) }
+    func jsonData() throws -> Data {
+        try Self.canonicalEncoder().encode(self)
+    }
 
-    init(jsonData: Data) throws { self = try JSONDecoder().decode(Trace.self, from: jsonData) }
-    init(contentsOf url: URL) throws { try self.init(jsonData: Data(contentsOf: url)) }
+    func write(to url: URL) throws {
+        try jsonData().write(to: url)
+    }
+
+    init(jsonData: Data) throws {
+        self = try JSONDecoder().decode(Trace.self, from: jsonData)
+    }
+
+    init(contentsOf url: URL) throws {
+        try self.init(jsonData: Data(contentsOf: url))
+    }
 }

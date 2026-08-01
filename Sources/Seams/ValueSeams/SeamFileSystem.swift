@@ -19,7 +19,9 @@ public final class SeamFileSystem: @unchecked Sendable {
 
     public func readData(atPath path: String, live: () -> Data) -> Data {
         lock.lock(); let staged = written[path]; lock.unlock()
-        if let staged { return staged }
+        if let staged {
+            return staged
+        }
         return cassette.data(seam: "\(seam).read:\(path)", live: live)
     }
 

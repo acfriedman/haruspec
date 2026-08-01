@@ -7,7 +7,9 @@ public extension VerificationResult {
     func report() -> String {
         var lines = ["\(TraceDiff.banner(verdict))  \(diff.baselineName) → \(diff.candidateName)"]
         lines += coverageLines()
-        if verdict == .cannotVerify { lines += abstentionLines() }
+        if verdict == .cannotVerify {
+            lines += abstentionLines()
+        }
         lines += diff.bodyLines()
         return lines.joined(separator: "\n")
     }
@@ -16,11 +18,10 @@ public extension VerificationResult {
     /// to relay `CANNOT-VERIFY` as an *abstention* — never a pass — which is the whole point of the
     /// third tier: the oracle refuses to confirm parity it couldn't isolate.
     func agentBrief() -> String {
-        let gate: String
-        switch verdict {
-        case .equivalent:   gate = "PASS"
-        case .diverged:     gate = "FAIL"
-        case .cannotVerify: gate = "ABSTAIN"
+        let gate = switch verdict {
+        case .equivalent: "PASS"
+        case .diverged: "FAIL"
+        case .cannotVerify: "ABSTAIN"
         }
 
         var lines = [
@@ -28,7 +29,7 @@ public extension VerificationResult {
             "This is a deterministic behavioral-diff verdict from the oracle: ground truth from re-running",
             "the code against a recorded baseline, not a plausibility guess. Relay it to the user like this:",
             "• Gate: \(gate).  (process exit code: 0 = PASS, 3 = FAIL, 4 = ABSTAIN.)",
-            "• Coverage: \(coverageSummary). EQUIVALENT is only as strong as this number — say it out loud.",
+            "• Coverage: \(coverageSummary). EQUIVALENT is only as strong as this number — say it out loud."
         ]
 
         if verdict == .cannotVerify {
@@ -36,7 +37,7 @@ public extension VerificationResult {
                 "• ABSTAIN means the oracle could NOT faithfully isolate this change. Do NOT report it as a",
                 "  pass or a behavioral-parity confirmation. State plainly that verification was inconclusive",
                 "  \(abstentionReason), and that re-recording the cassette (or declaring the seam) is required",
-                "  before a real verdict is possible.",
+                "  before a real verdict is possible."
             ])
         } else {
             lines.append(contentsOf: [
@@ -45,7 +46,7 @@ public extension VerificationResult {
                 "• Collateral changes: \(diff.collateralCount). NOT declared. Treat each as a suspected regression:",
                 "  state WHAT changed and WHERE (label + detail), and ask the user whether it was intended.",
                 "• Claim only that observable behavior did or did not change vs. the baseline within declared",
-                "  tolerances and over the covered surface — never that the code is \"correct.\"",
+                "  tolerances and over the covered surface — never that the code is \"correct.\""
             ])
             if diff.collateralCount > 0 {
                 lines.append("• Do not merge until the user confirms each collateral change is acceptable.")
@@ -67,9 +68,11 @@ public extension VerificationResult {
         guard let fraction = coverage.fraction else {
             return ["  coverage: unknown — no declared seam surface to measure against"]
         }
-        var lines = ["  coverage: \(coverage.exercised.count)/\(coverage.declared.count) declared seams exercised (\(percent(fraction)))"]
+        var lines = ["  coverage: \(coverage.exercised.count)/\(coverage.declared.count) "
+            + "declared seams exercised (\(percent(fraction)))"]
         if let domain = coverage.domainFraction, !coverage.domainExercised.isEmpty {
-            lines.append("  domain: \(coverage.domainExercised.count)/\(coverage.declared.count) seam(s) swept over a value domain via property gen (\(percent(domain)))")
+            lines.append("  domain: \(coverage.domainExercised.count)/\(coverage.declared.count) seam(s) "
+                + "swept over a value domain via property gen (\(percent(domain)))")
         }
 
         let missed = coverage.unrecordedReach
@@ -94,7 +97,8 @@ public extension VerificationResult {
     private var abstentionReason: String {
         coverage.unrecordedReach.isEmpty
             ? "because there is no declared seam surface to certify equivalence over"
-            : "because the change crossed a boundary the recording didn't cover, so the environment wasn't held identical"
+            : "because the change crossed a boundary the recording didn't cover, "
+            + "so the environment wasn't held identical"
     }
 
     private var coverageSummary: String {

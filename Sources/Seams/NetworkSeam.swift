@@ -15,13 +15,15 @@ public final class CassetteURLProtocol: URLProtocol {
     private static let configLock = NSLock()
     // Guarded by `configLock`; `URLProtocol` instances are created by the URL loading system, so
     // configuration must ride on class-level state.
-    nonisolated(unsafe) private static var cassette: Cassette?
-    nonisolated(unsafe) private static var liveHandler: (@Sendable (URLRequest) -> (status: Int, body: Data))?
+    private nonisolated(unsafe) static var cassette: Cassette?
+    private nonisolated(unsafe) static var liveHandler: (@Sendable (URLRequest) -> (status: Int, body: Data))?
 
     /// Point a session's config at this protocol. `liveHandler` supplies responses in record mode
     /// (inject a local one in tests, or omit to let real network run); replay ignores it.
-    public static func install(cassette: Cassette,
-                               liveHandler: (@Sendable (URLRequest) -> (status: Int, body: Data))? = nil) -> URLSessionConfiguration {
+    public static func install(
+        cassette: Cassette,
+        liveHandler: (@Sendable (URLRequest) -> (status: Int, body: Data))? = nil
+    ) -> URLSessionConfiguration {
         configLock.lock()
         self.cassette = cassette
         self.liveHandler = liveHandler
@@ -44,10 +46,15 @@ public final class CassetteURLProtocol: URLProtocol {
 
     // MARK: URLProtocol
 
-    public override class func canInit(with request: URLRequest) -> Bool { true }
-    public override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override public class func canInit(with _: URLRequest) -> Bool {
+        true
+    }
 
-    public override func startLoading() {
+    override public class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override public func startLoading() {
         guard let cassette = Self.currentCassette(), let url = request.url else {
             client?.urlProtocol(self, didFailWithError: URLError(.badURL)); return
         }
@@ -60,7 +67,8 @@ public final class CassetteURLProtocol: URLProtocol {
 
         guard case let .object(fields) = recorded,
               case let .int(status)? = fields["status"],
-              case let .string(base64)? = fields["body"], let body = Data(base64Encoded: base64) else {
+              case let .string(base64)? = fields["body"], let body = Data(base64Encoded: base64)
+        else {
             client?.urlProtocol(self, didFailWithError: URLError(.cannotParseResponse)); return
         }
 
@@ -71,5 +79,5 @@ public final class CassetteURLProtocol: URLProtocol {
         client?.urlProtocolDidFinishLoading(self)
     }
 
-    public override func stopLoading() {}
+    override public func stopLoading() {}
 }

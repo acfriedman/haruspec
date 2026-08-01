@@ -1,12 +1,11 @@
-import XCTest
 @testable import HaruspecCore
 @testable import HaruspecDemo
+import XCTest
 
 /// Extension mode end-to-end on a real captured module: an *intended* feature change (loyalty points)
 /// that also carries a **collateral** regression. The oracle must absorb the declared additions while
 /// still catching the undeclared one. Migration parity is the special case where nothing is declared.
 final class ExtensionModeTests: XCTestCase {
-
     private func featureDiff() -> TraceDiff {
         BehavioralDiff.compare(baseline: CheckoutScenario.baseline(),
                                candidate: CheckoutScenario.feature(),
@@ -33,7 +32,8 @@ final class ExtensionModeTests: XCTestCase {
     func testExtensionModeAbsorbsIntendedAndCatchesCollateral() {
         let diff = featureDiff().classified(against: CheckoutScenario.intent)
 
-        XCTAssertEqual(diff.intendedCount, 2, "the new loyalty event + the new payload field are declared\n\(diff.report())")
+        XCTAssertEqual(diff.intendedCount, 2,
+                       "the new loyalty event + the new payload field are declared\n\(diff.report())")
         XCTAssertEqual(diff.collateralCount, 1, "only the dropped CartDidChange is undeclared\n\(diff.report())")
         XCTAssertFalse(diff.isEquivalent, "a collateral regression still fails the gate")
 

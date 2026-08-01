@@ -19,7 +19,9 @@ public final class SeamKeychain: @unchecked Sendable {
 
     public func value(forKey key: String, live: () -> String?) -> String? {
         lock.lock(); let staged = written[key]; lock.unlock()
-        if let staged { return staged } // read-your-writes within a run
+        if let staged {
+            return staged
+        } // read-your-writes within a run
         return cassette.string(seam: "\(seam).\(key)", live: live)
     }
 

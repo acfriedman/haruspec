@@ -1,14 +1,13 @@
-import XCTest
 @testable import HaruspecCore
-@testable import HaruspecTrace
 @testable import HaruspecSeams
+@testable import HaruspecTrace
+import XCTest
 
 /// Coverage is where the seam harness stops being a capability and becomes a *trustworthy gate*. The
 /// `Cassette` already surfaces `SeamMiss`es (unrecorded interactions during replay); this suite proves
 /// those flow into an `HaruspecCore.Coverage` and, via `VerificationResult`, downgrade an EQUIVALENT the
 /// oracle can't stand behind to CANNOT-VERIFY — the soundness the whole three-tier verdict exists for.
 final class SeamCoverageTests: XCTestCase {
-
     // MARK: - The adapter (Cassette → Coverage)
 
     func testAdapterMapsHitsMissesAndUnexercised() {
@@ -20,9 +19,9 @@ final class SeamCoverageTests: XCTestCase {
         let tape = recording.snapshot()
 
         let replay = Cassette(replaying: tape)
-        _ = replay.int(seam: "a", live: { 0 })    // hit
-        _ = replay.int(seam: "b", live: { 0 })    // hit
-        _ = replay.int(seam: "b", live: { 99 })   // recording exhausted → miss on b#1 (live fallback)
+        _ = replay.int(seam: "a", live: { 0 }) // hit
+        _ = replay.int(seam: "b", live: { 0 }) // hit
+        _ = replay.int(seam: "b", live: { 99 }) // recording exhausted → miss on b#1 (live fallback)
 
         let cov = replay.coverage(declaring: ["a", "b", "c"])
         XCTAssertEqual(cov.declared, ["a", "b", "c"])
@@ -41,7 +40,7 @@ final class SeamCoverageTests: XCTestCase {
         _ = replay.int(seam: "a", live: { 0 })
         _ = replay.int(seam: "b", live: { 0 })
 
-        let cov = replay.coverage()  // no explicit registry → the golden's recorded seams
+        let cov = replay.coverage() // no explicit registry → the golden's recorded seams
         XCTAssertEqual(cov.declared, ["a", "b"])
         XCTAssertEqual(cov.exercised, ["a", "b"])
         XCTAssertEqual(cov.fraction, 1.0)
@@ -63,9 +62,9 @@ final class SeamCoverageTests: XCTestCase {
         interceptor.start(); defer { interceptor.stop() }
 
         TraceContext.$current.withValue(recorder) {
-            let base = cassette.int(seam: "clock", live: { 1000 })       // recorded seam
+            let base = cassette.int(seam: "clock", live: { 1000 }) // recorded seam
             let discount = cassette.int(seam: "discount", live: { 100 }) // recorded seam
-            var total = Int(base - discount)                             // 900
+            var total = Int(base - discount) // 900
             if extraSeam {
                 // A new boundary the golden run never recorded. Live fallback here is 0, so behavior is
                 // observably identical — but the input was NOT held identical, so it's uncertifiable.

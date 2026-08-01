@@ -1,5 +1,6 @@
+// ← the ONE import. No HaruspecCore / HaruspecTrace / HaruspecMacros / HaruspecSeams / HaruspecScenario.
+import Haruspec
 import XCTest
-import Haruspec   // ← the ONE import. No HaruspecCore / HaruspecTrace / HaruspecMacros / HaruspecSeams / HaruspecScenario.
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 // The consumer's-eye view. This target links only the `Haruspec` umbrella, so everything below is
@@ -29,15 +30,18 @@ protocol Cart: AnyObject {
 final class GoodCart: Cart {
     private let center: NotificationCenter
     private var subtotal = 0
-    init(center: NotificationCenter) { self.center = center }
+    init(center: NotificationCenter) {
+        self.center = center
+    }
 
     func add(cents: Int, qty: Int) {
         subtotal += cents * qty
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
     }
+
     @Timed func checkout() -> Int {
         center.post(name: .init("CheckoutCompleted"), object: nil, userInfo: ["total": subtotal])
-        Haruspec.marker("checkout_completed")   // ← `Haruspec.marker` under `import Haruspec`: the collision proof
+        Haruspec.marker("checkout_completed") // ← `Haruspec.marker` under `import Haruspec`: the collision proof
         return subtotal
     }
 }
@@ -48,13 +52,19 @@ final class GoodCart: Cart {
 final class RefactorCart: Cart {
     private let center: NotificationCenter
     private var lines: [(price: Int, qty: Int)] = []
-    init(center: NotificationCenter) { self.center = center }
-    private var subtotal: Int { lines.reduce(0) { $0 + $1.price * $1.qty } }
+    init(center: NotificationCenter) {
+        self.center = center
+    }
+
+    private var subtotal: Int {
+        lines.reduce(0) { $0 + $1.price * $1.qty }
+    }
 
     func add(cents: Int, qty: Int) {
         lines.append((cents, qty))
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
     }
+
     @Timed func checkout() -> Int {
         center.post(name: .init("CheckoutCompleted"), object: nil, userInfo: ["total": subtotal])
         Haruspec.marker("checkout_completed")
@@ -67,14 +77,20 @@ final class RefactorCart: Cart {
 /// so it only resolves because `import Haruspec` re-exports them.
 @Seamed
 final class LegacyClock {
-    func stampMillis() -> Int { Int(Date().timeIntervalSince1970 * 1000) }
+    func stampMillis() -> Int {
+        Int(Date().timeIntervalSince1970 * 1000)
+    }
 }
 
-private func makeGood(_ ctx: SeamContext) -> Cart { GoodCart(center: ctx.notifications) }
-private func makeRefactor(_ ctx: SeamContext) -> Cart { RefactorCart(center: ctx.notifications) }
+private func makeGood(_ ctx: SeamContext) -> Cart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> Cart {
+    RefactorCart(center: ctx.notifications)
+}
 
 final class UmbrellaImportTests: XCTestCase {
-
     /// The headline: the entire Scenario DSL + macros + verdict types are reachable through one import,
     /// end-to-end. Also exercises the seam-value and ordering variation builders.
     func testSingleImportSurfacesScenarioDSL() {
@@ -85,13 +101,13 @@ final class UmbrellaImportTests: XCTestCase {
                 Op("checkout") { _ = $0.checkout() }.last()
             }
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
-            .tolerate(.strict)                                    // ← ToleranceSpec (HaruspecCore)
-            .vary { Ordering(max: 10); Seam("qty", .int(1...5)) } // ← Ordering / Seam / SeamDomain
+            .tolerate(.strict) // ← ToleranceSpec (HaruspecCore)
+            .vary { Ordering(max: 10); Seam("qty", .int(1 ... 5)) } // ← Ordering / Seam / SeamDomain
 
         let verdict: ScenarioVerdict = scenario.verify(against: makeRefactor)
-        let outcome: TraceDiff.Verdict = verdict.verdict          // ← TraceDiff.Verdict (HaruspecCore)
+        let outcome: TraceDiff.Verdict = verdict.verdict // ← TraceDiff.Verdict (HaruspecCore)
         XCTAssertEqual(outcome, .equivalent, "a behavior-preserving refactor is EQUIVALENT")
-        XCTAssertTrue(verdict.diff.divergences.isEmpty)           // ← TraceDiff (HaruspecCore)
+        XCTAssertTrue(verdict.diff.divergences.isEmpty) // ← TraceDiff (HaruspecCore)
     }
 
     /// `htmlReport()` on all three verdict carriers is reachable through the single umbrella import —
@@ -103,8 +119,8 @@ final class UmbrellaImportTests: XCTestCase {
             .observe(notifications: ["CheckoutCompleted"])
             .verify(against: makeRefactor)
 
-        let scenarioHTML: String = verdict.htmlReport()           // ← ScenarioVerdict.htmlReport (HaruspecScenario)
-        let diffHTML: String = verdict.diff.htmlReport()          // ← TraceDiff.htmlReport (HaruspecCore)
+        let scenarioHTML: String = verdict.htmlReport() // ← ScenarioVerdict.htmlReport (HaruspecScenario)
+        let diffHTML: String = verdict.diff.htmlReport() // ← TraceDiff.htmlReport (HaruspecCore)
         let coverageHTML: String = VerificationResult(diff: verdict.diff, coverage: Coverage()).htmlReport()
 
         for html in [scenarioHTML, diffHTML, coverageHTML] {
@@ -114,7 +130,7 @@ final class UmbrellaImportTests: XCTestCase {
 
         // The write-to-disk convenience (HTMLReporting.writeHTMLReport) is re-exported too — this is the
         // exact call the dogfood app makes in place of its old hand-rolled FileManager helper.
-        let reportURL = verdict.writeHTMLReport(named: "umbrella-html")   // ← HTMLReporting (HaruspecCore)
+        let reportURL = verdict.writeHTMLReport(named: "umbrella-html") // ← HTMLReporting (HaruspecCore)
         let url = try XCTUnwrap(reportURL)
         defer { try? FileManager.default.removeItem(at: url) }
         XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), scenarioHTML)
@@ -123,31 +139,31 @@ final class UmbrellaImportTests: XCTestCase {
     /// The HaruspecTrace capture surface: recorder + interceptor + `@Traced`/`@Timed` bodies +
     /// `Haruspec.interval` / `Haruspec.marker`, all named through the umbrella.
     func testCaptureSurfaceIsReExported() {
-        let recorder = TraceRecorder(name: "umbrella", clock: ManualClock())   // ← TraceRecorder + ManualClock
+        let recorder = TraceRecorder(name: "umbrella", clock: ManualClock()) // ← TraceRecorder + ManualClock
         let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center,
-                                                  names: ["CartChanged", "CheckoutCompleted"]) // ← NotificationInterceptor
+        let interceptor = NotificationInterceptor(recorder: recorder, center: center, // ← NotificationInterceptor
+                                                  names: ["CartChanged", "CheckoutCompleted"])
         interceptor.start(); defer { interceptor.stop() }
 
         let cart = GoodCart(center: center)
-        TraceContext.$current.withValue(recorder) {              // ← TraceContext (HaruspecTrace)
-            Haruspec.interval("session") {                         // ← `Haruspec.interval` under `import Haruspec`
+        TraceContext.$current.withValue(recorder) { // ← TraceContext (HaruspecTrace)
+            Haruspec.interval("session") { // ← `Haruspec.interval` under `import Haruspec`
                 cart.add(cents: 500, qty: 3)
                 _ = cart.checkout()
             }
         }
         let labels = recorder.trace().events.map(\.label)
-        XCTAssertTrue(labels.contains("Cart.add"),             "@Traced recorded the structural tier")
-        XCTAssertTrue(labels.contains("checkout_completed"),   "Haruspec.marker recorded the semantic tier")
-        XCTAssertTrue(labels.contains("CheckoutCompleted"),    "the interceptor captured the notification")
+        XCTAssertTrue(labels.contains("Cart.add"), "@Traced recorded the structural tier")
+        XCTAssertTrue(labels.contains("checkout_completed"), "Haruspec.marker recorded the semantic tier")
+        XCTAssertTrue(labels.contains("CheckoutCompleted"), "the interceptor captured the notification")
     }
 
     /// The HaruspecSeams surface: `Cassette` record→replay of a value seam, and `@Seamed` + `Seam`
     /// binding of un-injected `Date()`.
     func testSeamHarnessIsReExported() {
         // A value seam: record once, replay returns the recorded reading (not the live one).
-        let recording = Cassette()                                            // ← Cassette
-        let recorded = SeamClock(cassette: recording, seam: "clock", live: { 1234.5 }).now()  // ← SeamClock
+        let recording = Cassette() // ← Cassette
+        let recorded = SeamClock(cassette: recording, seam: "clock", live: { 1234.5 }).now() // ← SeamClock
         let replayed = SeamClock(cassette: Cassette(replaying: recording.snapshot()),
                                  seam: "clock", live: { -1 }).now()
         XCTAssertEqual(replayed, recorded, "replay yields the recorded value, not the live one")
@@ -155,7 +171,7 @@ final class UmbrellaImportTests: XCTestCase {
         // `@Seamed`: the rewritten bare `Date()` reads from the ambient cassette when one is bound.
         let clock = LegacyClock()
         let session = Cassette()
-        let golden = Seam.bind(session) { clock.stampMillis() }         // ← Seam.bind
+        let golden = Seam.bind(session) { clock.stampMillis() } // ← Seam.bind
         let onReplay = Seam.bind(Cassette(replaying: session.snapshot())) { clock.stampMillis() }
         XCTAssertEqual(onReplay, golden, "@Seamed-routed Date() replays identically through the cassette")
     }

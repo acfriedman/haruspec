@@ -27,12 +27,14 @@ public final class Cassette: @unchecked Sendable {
     private var recordedMisses: [SeamMiss] = []
 
     /// A fresh recording cassette.
-    public init() { self.mode = .record }
+    public init() {
+        mode = .record
+    }
 
     /// A replay cassette primed with a prior recording.
     public init(replaying data: CassetteData) {
-        self.mode = .replay
-        self.tracks = data.tracks
+        mode = .replay
+        tracks = data.tracks
     }
 
     /// Replay positions that found no recorded value (only meaningful in `.replay` mode).
@@ -58,13 +60,13 @@ public final class Cassette: @unchecked Sendable {
             tracks[seam, default: []].append(value)
             return value
         case .replay:
-            let i = cursors[seam, default: 0]
-            guard let track = tracks[seam], i < track.count else {
-                recordedMisses.append(SeamMiss(seam: seam, ordinal: i))
+            let cursor = cursors[seam, default: 0]
+            guard let track = tracks[seam], cursor < track.count else {
+                recordedMisses.append(SeamMiss(seam: seam, ordinal: cursor))
                 return live()
             }
-            cursors[seam] = i + 1
-            return track[i]
+            cursors[seam] = cursor + 1
+            return track[cursor]
         }
     }
 
@@ -79,31 +81,41 @@ public final class Cassette: @unchecked Sendable {
 
 public extension Cassette {
     func int(seam: String, live: () -> Int64) -> Int64 {
-        if case let .int(v) = step(seam: seam, live: { .int(live()) }) { return v }
+        if case let .int(value) = step(seam: seam, live: { .int(live()) }) {
+            return value
+        }
         return live()
     }
 
     func double(seam: String, live: () -> Double) -> Double {
-        if case let .double(v) = step(seam: seam, live: { .double(live()) }) { return v }
+        if case let .double(value) = step(seam: seam, live: { .double(live()) }) {
+            return value
+        }
         return live()
     }
 
     func bool(seam: String, live: () -> Bool) -> Bool {
-        if case let .bool(v) = step(seam: seam, live: { .bool(live()) }) { return v }
+        if case let .bool(value) = step(seam: seam, live: { .bool(live()) }) {
+            return value
+        }
         return live()
     }
 
     /// Records `nil` as `.null`; a recorded `.null` replays back to `nil`.
     func string(seam: String, live: () -> String?) -> String? {
         let recorded = step(seam: seam, live: { live().map(CanonicalValue.string) ?? .null })
-        if case let .string(v) = recorded { return v }
+        if case let .string(value) = recorded {
+            return value
+        }
         return nil
     }
 
     /// Binary payloads (e.g. a recorded HTTP body) ride as base64 strings.
     func data(seam: String, live: () -> Data) -> Data {
         let recorded = step(seam: seam, live: { .string(live().base64EncodedString()) })
-        if case let .string(b64) = recorded, let d = Data(base64Encoded: b64) { return d }
+        if case let .string(b64) = recorded, let decoded = Data(base64Encoded: b64) {
+            return decoded
+        }
         return live()
     }
 }
@@ -128,9 +140,19 @@ public extension CassetteData {
         return encoder
     }
 
-    func jsonData() throws -> Data { try Self.canonicalEncoder().encode(self) }
-    func write(to url: URL) throws { try jsonData().write(to: url) }
+    func jsonData() throws -> Data {
+        try Self.canonicalEncoder().encode(self)
+    }
 
-    init(jsonData: Data) throws { self = try JSONDecoder().decode(CassetteData.self, from: jsonData) }
-    init(contentsOf url: URL) throws { try self.init(jsonData: Data(contentsOf: url)) }
+    func write(to url: URL) throws {
+        try jsonData().write(to: url)
+    }
+
+    init(jsonData: Data) throws {
+        self = try JSONDecoder().decode(CassetteData.self, from: jsonData)
+    }
+
+    init(contentsOf url: URL) throws {
+        try self.init(jsonData: Data(contentsOf: url))
+    }
 }

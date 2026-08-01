@@ -1,20 +1,21 @@
-import XCTest
 @testable import HaruspecCore
 @testable import HaruspecSeams
+import XCTest
 
 /// The record → replay → diff loop on real nondeterminism seams (time + randomness + a config read).
 /// This is the seam-harness analogue of the engine's original validation gate: record the boundary
 /// once, replay the *same* transcript into both branches, and any divergence is the code's, not the
 /// environment's.
 final class SeamReplayTests: XCTestCase {
-
     /// A stand-in for production code that reads three seams and produces an observable output.
     private func fingerprint(_ cassette: Cassette) -> [CanonicalValue] {
         let clock = SeamClock(cassette: cassette)
         var rng = SeamRNG(cassette: cassette)
         let defaults = SeamDefaults(cassette: cassette)
         var out: [CanonicalValue] = [.double(clock.now())]
-        for _ in 0..<3 { out.append(.int(Int64(Int.random(in: 0..<1_000_000, using: &rng)))) }
+        for _ in 0 ..< 3 {
+            out.append(.int(Int64(Int.random(in: 0 ..< 1_000_000, using: &rng))))
+        }
         out.append(.string(defaults.string(forKey: "region", live: { "US" }) ?? "?"))
         return out
     }
@@ -25,7 +26,9 @@ final class SeamReplayTests: XCTestCase {
         var rng = SeamRNG(cassette: cassette)
         let defaults = SeamDefaults(cassette: cassette)
         var out: [CanonicalValue] = [.double(clock.now())]
-        for _ in 0..<3 { out.append(.int(Int64(Int.random(in: 0..<1_000_000, using: &rng) * 2))) }
+        for _ in 0 ..< 3 {
+            out.append(.int(Int64(Int.random(in: 0 ..< 1_000_000, using: &rng) * 2)))
+        }
         out.append(.string(defaults.string(forKey: "region", live: { "US" }) ?? "?"))
         return out
     }

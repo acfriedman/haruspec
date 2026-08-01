@@ -1,7 +1,7 @@
-import XCTest
 @testable import HaruspecCore
-@testable import HaruspecSeams
 import HaruspecMacros
+@testable import HaruspecSeams
+import XCTest
 
 /// Un-injected reach: the harness controls nondeterminism that legacy code reads **without any
 /// dependency injection**. `LegacySession` calls bare `Date()` / `UUID()` directly — no constructor
@@ -18,7 +18,6 @@ final class LegacySession {
 }
 
 final class UninjectedReachTests: XCTestCase {
-
     func testBareDateAndUUIDReplayThroughCassette() {
         let service = LegacySession()
 

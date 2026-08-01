@@ -1,8 +1,8 @@
-import XCTest
 @testable import HaruspecCore
-@testable import HaruspecTrace
-@testable import HaruspecSeams
 @testable import HaruspecDemo
+@testable import HaruspecSeams
+@testable import HaruspecTrace
+import XCTest
 
 /// Property-based differential generation driven against the **real, unmodified** `CartService`
 /// implementations, with the cart quantity sourced from a seam — the realistic case where an input
@@ -12,7 +12,6 @@ import XCTest
 /// whose quantity yields a clean subtotal calls it EQUIVALENT; property gen over the quantity domain
 /// finds the value that bites. Prints the reports an LLM / CLI caller would surface.
 final class PropertyShowcaseTests: XCTestCase {
-
     /// Drive a real `CartService`: unit price 999¢, quantity from the `coffeeQty` seam, promo applied.
     /// (No `removeItem`, so the isolated signal is the rounding off-by-one — not the dropped notification
     /// the existing fixed-scenario demo already catches.)
@@ -25,7 +24,7 @@ final class PropertyShowcaseTests: XCTestCase {
         interceptor.start(); defer { interceptor.stop() }
         let service = make(center)
         TraceContext.$current.withValue(recorder) {
-            let qty = Int(cassette.int(seam: "coffeeQty", live: { 10 }))   // input from a seam boundary
+            let qty = Int(cassette.int(seam: "coffeeQty", live: { 10 })) // input from a seam boundary
             service.addItem(sku: "COFFEE", unitPriceCents: 999, quantity: qty)
             _ = service.applyPromo("SAVE10")
             _ = service.checkout()
@@ -67,16 +66,22 @@ final class PropertyShowcaseTests: XCTestCase {
         XCTAssertEqual(single.verdict, .equivalent, "benign on the recorded quantity — the bug is hidden")
 
         print("\n── 2. Property gen over coffeeQty ∈ 1...20 · V1 vs Buggy ──")
-        let caught = buggy.check(count: 40, varying: ["coffeeQty": .int(1...20)], seed: 7)
+        let caught = buggy.check(count: 40, varying: ["coffeeQty": .int(1 ... 20)], seed: 7)
         let counter = try XCTUnwrap(caught.firstFailure)
         print(VerificationResult(diff: counter.diff, coverage: caught.coverage).report())
-        let qty = counter.cassette.tracks["coffeeQty"]?.first.flatMap { if case let .int(v) = $0 { return v } else { return nil } }
+        let qty = counter.cassette.tracks["coffeeQty"]?.first.flatMap {
+            if case let .int(value) = $0 {
+                value
+            } else {
+                nil
+            }
+        }
         print("  ↳ shrunk counterexample: coffeeQty = \(qty ?? -1)")
         XCTAssertFalse(caught.heldOverSurface, "property gen finds a quantity where truncation ≠ rounding")
 
         print("\n── 3. Property gen over coffeeQty ∈ 1...20 · V1 vs V2 (behavior-preserving refactor) ──")
         let refactor = property(candidateName: "cartservice.v2") { CartServiceV2(center: $0) }
-        let held = refactor.verify(count: 40, varying: ["coffeeQty": .int(1...20)], seed: 7)
+        let held = refactor.verify(count: 40, varying: ["coffeeQty": .int(1 ... 20)], seed: 7)
         print(held.report())
         XCTAssertEqual(held.verdict, .equivalent, "the refactor holds across the whole quantity domain")
         XCTAssertEqual(held.coverage.domainExercised, ["coffeeQty"])

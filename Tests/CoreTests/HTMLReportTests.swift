@@ -1,8 +1,7 @@
-import XCTest
 @testable import HaruspecCore
+import XCTest
 
 final class HTMLReportTests: XCTestCase {
-
     private let valueMismatch = Divergence(kind: .valueMismatch, label: "cart.total",
                                            baselineSeq: 3, candidateSeq: 3,
                                            detail: "cart.total: baseline=1200 candidate=1500")
@@ -84,13 +83,13 @@ final class HTMLReportTests: XCTestCase {
 
     /// `writeHTMLReport(to:)` renders and persists the exact bytes `htmlReport()` produces.
     func testWriteHTMLReportToExactURL() throws {
-        let d = diff(.diverged, [valueMismatch])
+        let divergedDiff = diff(.diverged, [valueMismatch])
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("write-exact-\(UUID().uuidString).html")
         defer { try? FileManager.default.removeItem(at: url) }
 
-        try d.writeHTMLReport(to: url)
-        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), d.htmlReport())
+        try divergedDiff.writeHTMLReport(to: url)
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), divergedDiff.htmlReport())
     }
 
     /// `writeHTMLReport(named:in:)` creates the directory, writes `<name>.html`, and returns its URL.
@@ -103,7 +102,7 @@ final class HTMLReportTests: XCTestCase {
         let url = try XCTUnwrap(diff(.equivalent).writeHTMLReport(named: "cart", in: dir))
         XCTAssertEqual(url.lastPathComponent, "cart.html")
         XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
-        assertSelfContained(try String(contentsOf: url, encoding: .utf8))
+        try assertSelfContained(String(contentsOf: url, encoding: .utf8))
     }
 
     /// The default destination is a `HaruspecReports` folder under the system temp dir.

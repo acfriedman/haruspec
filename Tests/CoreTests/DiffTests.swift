@@ -1,25 +1,27 @@
-import XCTest
 @testable import HaruspecCore
+import XCTest
 
 /// Focused unit tests for the diff primitive, using hand-built traces so each divergence kind and
 /// each tolerance lever is exercised in isolation.
 final class DiffTests: XCTestCase {
-    // Small builders for readability.
+    /// Small builders for readability.
     private func call(_ seq: Int, _ label: String, _ payload: CanonicalValue? = nil,
                       subject: Int? = 1) -> TraceEvent {
         TraceEvent(seq: seq, kind: .call, label: label, subject: subject, payload: payload)
     }
+
     private func note(_ seq: Int, _ label: String, _ payload: CanonicalValue? = nil,
                       subject: Int? = 1) -> TraceEvent {
         TraceEvent(seq: seq, kind: .notification, label: label, subject: subject, payload: payload)
     }
+
     private func trace(_ name: String, _ events: [TraceEvent]) -> Trace {
         Trace(name: name, events: events)
     }
 
     func testIdenticalTracesAreEquivalent() {
-        let t = trace("t", [call(0, "a", ["x": 1]), note(1, "N"), call(2, "b")])
-        let diff = BehavioralDiff.compare(baseline: t, candidate: t)
+        let identical = trace("t", [call(0, "a", ["x": 1]), note(1, "N"), call(2, "b")])
+        let diff = BehavioralDiff.compare(baseline: identical, candidate: identical)
         XCTAssertTrue(diff.isEquivalent)
         XCTAssertEqual(diff.divergences.count, 0)
     }
@@ -68,9 +70,9 @@ final class DiffTests: XCTestCase {
         let slow = trace("slow", [TraceEvent(seq: 0, kind: .signpost, label: "work", durationTicks: 200)])
 
         // Within budget → equivalent.
-        let ok = BehavioralDiff.compare(baseline: base, candidate: slow,
-                                        tolerances: ToleranceSpec(timingBudgets: ["work": 150]))
-        XCTAssertTrue(ok.isEquivalent)
+        let withinBudget = BehavioralDiff.compare(baseline: base, candidate: slow,
+                                                  tolerances: ToleranceSpec(timingBudgets: ["work": 150]))
+        XCTAssertTrue(withinBudget.isEquivalent)
 
         // Over budget → timing regression.
         let bad = BehavioralDiff.compare(baseline: base, candidate: slow,

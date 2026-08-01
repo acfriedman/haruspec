@@ -1,9 +1,9 @@
-import XCTest
-import HaruspecTrace
-import HaruspecMacros
 import HaruspecCore
+import HaruspecMacros
 import HaruspecScenario
 import HaruspecSeams
+import HaruspecTrace
+import XCTest
 
 // Drives a real scenario (seam-swept, so a shrunk counterexample exists) and asserts the visual report
 // leads with that counterexample. Uses the DSL rather than a hand-built verdict because ScenarioVerdict's
@@ -21,12 +21,19 @@ final class GoodTill: Till {
     private let center: NotificationCenter
     private var subtotal = 0
     private var promo = false
-    init(center: NotificationCenter) { self.center = center }
+    init(center: NotificationCenter) {
+        self.center = center
+    }
+
     func addItem(priceCents: Int, qty: Int) {
         subtotal += priceCents * qty
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
     }
-    func applyPromo() { promo = true }
+
+    func applyPromo() {
+        promo = true
+    }
+
     func checkout() -> Int {
         let discount = promo ? Int((Double(subtotal) * 0.10).rounded()) : 0
         let total = subtotal - discount
@@ -41,32 +48,45 @@ final class RoundBugTill: Till {
     private let center: NotificationCenter
     private var subtotal = 0
     private var promo = false
-    init(center: NotificationCenter) { self.center = center }
+    init(center: NotificationCenter) {
+        self.center = center
+    }
+
     func addItem(priceCents: Int, qty: Int) {
         subtotal += priceCents * qty
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
     }
-    func applyPromo() { promo = true }
+
+    func applyPromo() {
+        promo = true
+    }
+
     func checkout() -> Int {
-        let discount = promo ? subtotal / 10 : 0   // BUG: truncates
+        let discount = promo ? subtotal / 10 : 0 // BUG: truncates
         let total = subtotal - discount
         center.post(name: .init("CheckoutCompleted"), object: nil, userInfo: ["total": total])
         return total
     }
 }
 
-private func makeGood(_ ctx: SeamContext) -> Till { GoodTill(center: ctx.notifications) }
-private func makeRoundBug(_ ctx: SeamContext) -> Till { RoundBugTill(center: ctx.notifications) }
+private func makeGood(_ ctx: SeamContext) -> Till {
+    GoodTill(center: ctx.notifications)
+}
+
+private func makeRoundBug(_ ctx: SeamContext) -> Till {
+    RoundBugTill(center: ctx.notifications)
+}
 
 final class ScenarioHTMLReportTests: XCTestCase {
-
     private func till() -> Scenario<Till> {
         Scenario<Till>("promo-till")
             .system(makeGood)
             .operations {
-                Op("addCoffee") { cart, seams in cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10))) }
-                Op("promo")     { $0.applyPromo() }
-                Op("checkout")  { _ = $0.checkout() }.last()
+                Op("addCoffee") { cart, seams in
+                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
+                }
+                Op("promo") { $0.applyPromo() }
+                Op("checkout") { _ = $0.checkout() }.last()
             }
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
     }
@@ -79,7 +99,7 @@ final class ScenarioHTMLReportTests: XCTestCase {
     }
 
     func testDivergedScenarioLeadsWithCounterexample() {
-        let swept = till().vary { Seam("coffeeQty", .int(1...20)) }
+        let swept = till().vary { Seam("coffeeQty", .int(1 ... 20)) }
         let verdict = swept.verify(against: makeRoundBug)
         XCTAssertEqual(verdict.verdict, .diverged)
 

@@ -1,8 +1,8 @@
 import Foundation
 import HaruspecCore
-import HaruspecTrace
 import HaruspecDemo
 import HaruspecMCP
+import HaruspecTrace
 
 // A thin, dependency-free CLI over the engine. Subcommands:
 //   haruspec diff <baseline.json> <candidate.json> [--tolerance <spec.json>] [--intent <spec.json>] [--agent] [--json]
@@ -13,15 +13,15 @@ import HaruspecMCP
 //              4 cannot-verify (the oracle abstained — an uncovered/un-isolable surface).
 // A CI gate should treat BOTH 3 and 4 as non-pass; only 0 is green.
 
-enum ExitCode: Int32 { case ok = 0, runtime = 1, usage = 2, diverged = 3, cannotVerify = 4 }
+enum ExitCode: Int32 { case success = 0, runtime = 1, usage = 2, diverged = 3, cannotVerify = 4 }
 
 /// Map a three-tier verdict to the process exit code. The bare two-file `diff` path never produces
 /// `.cannotVerify` (it makes no coverage claim); this is shared so the replay/MCP paths stay honest.
 func exitCode(for verdict: TraceDiff.Verdict) -> ExitCode {
     switch verdict {
-    case .equivalent:   return .ok
-    case .diverged:     return .diverged
-    case .cannotVerify: return .cannotVerify
+    case .equivalent: .success
+    case .diverged: .diverged
+    case .cannotVerify: .cannotVerify
     }
 }
 
@@ -34,18 +34,18 @@ func fail(_ message: String, code: ExitCode) -> Never {
 func parse(_ args: [String]) -> (flags: [String: String], positionals: [String]) {
     var flags: [String: String] = [:]
     var positionals: [String] = []
-    var i = 0
-    while i < args.count {
-        let arg = args[i]
+    var index = 0
+    while index < args.count {
+        let arg = args[index]
         if arg.hasPrefix("--") {
             let key = String(arg.dropFirst(2))
-            if i + 1 < args.count, !args[i + 1].hasPrefix("--") {
-                flags[key] = args[i + 1]; i += 2
+            if index + 1 < args.count, !args[index + 1].hasPrefix("--") {
+                flags[key] = args[index + 1]; index += 2
             } else {
-                flags[key] = ""; i += 1 // boolean flag
+                flags[key] = ""; index += 1 // boolean flag
             }
         } else {
-            positionals.append(arg); i += 1
+            positionals.append(arg); index += 1
         }
     }
     return (flags, positionals)
@@ -53,21 +53,28 @@ func parse(_ args: [String]) -> (flags: [String: String], positionals: [String])
 
 func loadTolerance(_ flags: [String: String]) -> ToleranceSpec {
     guard let path = flags["tolerance"], !path.isEmpty else { return .strict }
-    do { return try ToleranceSpec(contentsOf: URL(fileURLWithPath: path)) }
-    catch { fail("could not read tolerance spec at \(path): \(error)", code: .runtime) }
+    do {
+        return try ToleranceSpec(contentsOf: URL(fileURLWithPath: path))
+    } catch {
+        fail("could not read tolerance spec at \(path): \(error)", code: .runtime)
+    }
 }
 
 func loadIntent(_ flags: [String: String]) -> IntentSpec? {
     guard let path = flags["intent"], !path.isEmpty else { return nil }
-    do { return try IntentSpec(contentsOf: URL(fileURLWithPath: path)) }
-    catch { fail("could not read intent spec at \(path): \(error)", code: .runtime) }
+    do {
+        return try IntentSpec(contentsOf: URL(fileURLWithPath: path))
+    } catch {
+        fail("could not read intent spec at \(path): \(error)", code: .runtime)
+    }
 }
 
 let usage = """
 haruspec — the behavioral-oracle engine
 
 USAGE:
-  haruspec diff <baseline.json> <candidate.json> [--tolerance <spec.json>] [--intent <spec.json>] [--agent] [--json] [--html <path>]
+  haruspec diff <baseline.json> <candidate.json> [--tolerance <spec.json>] [--intent <spec.json>]\
+ [--agent] [--json] [--html <path>]
       Diff two captured traces. Exits 3 if they diverge.
       --intent <spec.json>  extension mode: absorb declared changes, gate only on collateral ones.
       --agent               append a relay guide telling a consuming agent how to report the verdict.
@@ -96,16 +103,20 @@ func runDiff(_ rest: [String]) -> Never {
         let candidate = try Trace(contentsOf: URL(fileURLWithPath: positionals[1]))
         var result = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec)
         // With `--intent`, run in extension mode: intended deltas are absorbed, collateral ones gate.
-        if let intent = loadIntent(flags) { result = result.classified(against: intent) }
+        if let intent = loadIntent(flags) {
+            result = result.classified(against: intent)
+        }
         if let htmlPath = flags["html"], !htmlPath.isEmpty {
             try result.writeHTMLReport(to: URL(fileURLWithPath: htmlPath))
             FileHandle.standardError.write(Data("haruspec: wrote HTML report to \(htmlPath)\n".utf8))
         }
         if flags["json"] != nil {
-            print(String(decoding: try result.jsonData(), as: UTF8.self))
+            try print(String(decoding: result.jsonData(), as: UTF8.self))
         } else {
             print(result.report())
-            if flags["agent"] != nil { print("\n" + result.agentBrief()) }
+            if flags["agent"] != nil {
+                print("\n" + result.agentBrief())
+            }
         }
         exit(exitCode(for: result.verdict).rawValue)
     } catch {
@@ -159,7 +170,7 @@ func runDemo(_ rest: [String]) -> Never {
         let asExpected = refactorDiff.isEquivalent && !regressionDiff.isEquivalent
             && !featureDiff.isEquivalent
             && featureDiff.intendedCount == 2 && featureDiff.collateralCount == 1
-        exit((asExpected ? ExitCode.ok : ExitCode.diverged).rawValue)
+        exit((asExpected ? ExitCode.success : ExitCode.diverged).rawValue)
     } catch {
         fail("demo failed: \(error)", code: .runtime)
     }
@@ -179,14 +190,14 @@ func runCanonicalize(_ rest: [String]) -> Never {
         } else {
             print(String(decoding: data, as: UTF8.self))
         }
-        exit(ExitCode.ok.rawValue)
+        exit(ExitCode.success.rawValue)
     } catch {
         fail("canonicalize failed: \(error)", code: .runtime)
     }
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
-guard let command = arguments.first else { print(usage); exit(ExitCode.ok.rawValue) }
+guard let command = arguments.first else { print(usage); exit(ExitCode.success.rawValue) }
 let rest = Array(arguments.dropFirst())
 
 switch command {
@@ -194,6 +205,6 @@ case "diff": runDiff(rest)
 case "demo": runDemo(rest)
 case "canonicalize": runCanonicalize(rest)
 case "mcp": MCPServer().run()
-case "help", "--help", "-h": print(usage); exit(ExitCode.ok.rawValue)
+case "help", "--help", "-h": print(usage); exit(ExitCode.success.rawValue)
 default: fail("unknown command \"\(command)\"\n\n\(usage)", code: .usage)
 }

@@ -38,7 +38,8 @@ public struct MCPServer {
     /// Factored this way so tests can drive the whole protocol without a process boundary.
     public func handle(_ line: String) -> String? {
         guard let data = line.data(using: .utf8),
-              let message = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+              let message = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else {
             return encode(errorResponse(id: nil, code: -32700, message: "parse error: not a JSON object"))
         }
         let id = message["id"]
@@ -79,7 +80,7 @@ public struct MCPServer {
             two captured trace files (golden vs. current) to get a deterministic verdict — EQUIVALENT, or \
             DIVERGED with each divergence localized. Declared tolerances absorb nondeterminism; a declared \
             intent spec absorbs the deltas a feature *meant* to make, so only collateral changes gate.
-            """,
+            """
         ]
     }
 
@@ -106,13 +107,23 @@ public struct MCPServer {
                     "type": "object",
                     "properties": [
                         "baseline_trace": ["type": "string", "description": "Path to the golden (before) trace JSON"],
-                        "candidate_trace": ["type": "string", "description": "Path to the candidate (after) trace JSON"],
-                        "tolerance": ["type": "string", "description": "Optional path to a ToleranceSpec JSON (declared acceptable deltas)"],
-                        "intent": ["type": "string", "description": "Optional path to an IntentSpec JSON (declared intended changes — extension mode)"],
+                        "candidate_trace": [
+                            "type": "string",
+                            "description": "Path to the candidate (after) trace JSON"
+                        ],
+                        "tolerance": [
+                            "type": "string",
+                            "description": "Optional path to a ToleranceSpec JSON (declared acceptable deltas)"
+                        ],
+                        "intent": [
+                            "type": "string",
+                            "description":
+                                "Optional path to an IntentSpec JSON (declared intended changes — extension mode)"
+                        ]
                     ],
-                    "required": ["baseline_trace", "candidate_trace"],
+                    "required": ["baseline_trace", "candidate_trace"]
                 ],
-                "annotations": ["readOnlyHint": true, "idempotentHint": true],
+                "annotations": ["readOnlyHint": true, "idempotentHint": true]
             ],
             [
                 "name": "canonicalize_trace",
@@ -126,12 +137,12 @@ public struct MCPServer {
                     "type": "object",
                     "properties": [
                         "trace": ["type": "string", "description": "Path to the trace JSON"],
-                        "tolerance": ["type": "string", "description": "Optional path to a ToleranceSpec JSON"],
+                        "tolerance": ["type": "string", "description": "Optional path to a ToleranceSpec JSON"]
                     ],
-                    "required": ["trace"],
+                    "required": ["trace"]
                 ],
-                "annotations": ["readOnlyHint": true, "idempotentHint": true],
-            ],
+                "annotations": ["readOnlyHint": true, "idempotentHint": true]
+            ]
         ]
     }
 
@@ -151,7 +162,8 @@ public struct MCPServer {
 
     private func verifyBehavioralParity(_ args: [String: Any]) -> [String: Any] {
         guard let baselinePath = args["baseline_trace"] as? String,
-              let candidatePath = args["candidate_trace"] as? String else {
+              let candidatePath = args["candidate_trace"] as? String
+        else {
             return toolError("baseline_trace and candidate_trace are required")
         }
         do {
@@ -160,7 +172,7 @@ public struct MCPServer {
             let tolerances = try loadTolerance(args)
             var diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: tolerances)
             if let intentPath = args["intent"] as? String, !intentPath.isEmpty {
-                diff = diff.classified(against: try IntentSpec(contentsOf: URL(fileURLWithPath: intentPath)))
+                diff = try diff.classified(against: IntentSpec(contentsOf: URL(fileURLWithPath: intentPath)))
             }
 
             // The same two artifacts the CLI's `--json` / `--agent` split serves: a machine-readable
@@ -168,7 +180,7 @@ public struct MCPServer {
             var structured: [String: Any] = [
                 "verdict": diff.verdict.rawValue,
                 "intendedCount": diff.intendedCount,
-                "collateralCount": diff.collateralCount,
+                "collateralCount": diff.collateralCount
             ]
             if let diffJSON = (try? JSONSerialization.jsonObject(with: diff.jsonData())) as? [String: Any] {
                 structured["diff"] = diffJSON
@@ -176,7 +188,7 @@ public struct MCPServer {
             return [
                 "content": [textContent(diff.report() + "\n\n" + diff.agentBrief())],
                 "structuredContent": structured,
-                "isError": false,
+                "isError": false
             ]
         } catch {
             return toolError("verification failed: \(error)")
@@ -191,10 +203,10 @@ public struct MCPServer {
         }
         do {
             let trace = try Trace(contentsOf: URL(fileURLWithPath: path))
-            let canonical = Canonicalizer.canonicalize(trace, spec: try loadTolerance(args))
-            return [
-                "content": [textContent(String(decoding: try canonical.jsonData(), as: UTF8.self))],
-                "isError": false,
+            let canonical = try Canonicalizer.canonicalize(trace, spec: loadTolerance(args))
+            return try [
+                "content": [textContent(String(decoding: canonical.jsonData(), as: UTF8.self))],
+                "isError": false
             ]
         } catch {
             return toolError("canonicalize failed: \(error)")
@@ -227,8 +239,11 @@ public struct MCPServer {
     }
 
     private func encode(_ object: [String: Any]) -> String {
-        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]) else {
-            return #"{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"internal error: response encoding failed"}}"#
+        guard let data = try? JSONSerialization.data(
+            withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes]
+        ) else {
+            return #"{"jsonrpc":"2.0","id":null,"#
+                + #""error":{"code":-32603,"message":"internal error: response encoding failed"}}"#
         }
         return String(decoding: data, as: UTF8.self)
     }

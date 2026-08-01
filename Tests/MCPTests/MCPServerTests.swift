@@ -1,7 +1,7 @@
-import XCTest
 import Foundation
 import HaruspecCore
 @testable import HaruspecMCP
+import XCTest
 
 // Drives the MCP server exactly as a client does — one JSON-RPC line in, one out — through the
 // full handshake and both tools, including the divergence and failure paths. No process boundary:
@@ -36,7 +36,7 @@ final class MCPServerTests: XCTestCase {
                 TraceEvent(seq: 1, kind: .call, label: "Cart.checkout"),
                 TraceEvent(seq: 2, kind: .notification, label: "CheckoutCompleted",
                            payload: .object(["total": .int(Int64(total))]), tier: .semantic),
-                TraceEvent(seq: 3, kind: .ret, label: "Cart.checkout"),
+                TraceEvent(seq: 3, kind: .ret, label: "Cart.checkout")
             ])
         }
         let golden = dir.appendingPathComponent("golden.json")

@@ -15,7 +15,6 @@ import Foundation
 /// composes. Public so the HaruspecScenario entry point can reuse the same building blocks rather than
 /// re-declaring the banner/glyph vocabulary and CSS (the mistake the downstream prototype was forced into).
 public enum HTML {
-
     // MARK: - Page skeleton
 
     /// Wrap pre-built section strings in the full self-contained document (doctype, head, inline CSS,
@@ -48,13 +47,15 @@ public enum HTML {
     // MARK: - Hero
 
     /// The verdict banner hero: three-tier banner, colored left border, and `baseline → candidate` chips.
-    public static func hero(_ verdict: TraceDiff.Verdict, title: String, baseline: String, candidate: String) -> String {
+    public static func hero(_ verdict: TraceDiff.Verdict, title: String, baseline: String,
+                            candidate: String) -> String {
         """
         <div class="hero \(accent(verdict))">
           <div class="verdict">\(banner(verdict))</div>
           <div class="lede">
             <div class="scenario">\(esc(title))</div>
-            <div class="flow"><span class="chip base">\(esc(baseline))</span><span class="arrow">→</span><span class="chip cand">\(esc(candidate))</span></div>
+            <div class="flow"><span class="chip base">\(esc(baseline))</span><span class="arrow">→</span>\
+        <span class="chip cand">\(esc(candidate))</span></div>
           </div>
         </div>
         """
@@ -74,7 +75,8 @@ public enum HTML {
     public static func tile(label: String, value: String, accent: String? = nil, mono: Bool = false) -> String {
         let cls = ["tile", accent.map { "t-\($0)" } ?? ""].filter { !$0.isEmpty }.joined(separator: " ")
         let vcls = mono ? "tv mono" : "tv"
-        return "<div class=\"\(cls)\"><div class=\"tl\">\(esc(label))</div><div class=\"\(vcls)\">\(esc(value))</div></div>"
+        return "<div class=\"\(cls)\"><div class=\"tl\">\(esc(label))</div>"
+            + "<div class=\"\(vcls)\">\(esc(value))</div></div>"
     }
 
     // MARK: - Counterexample hero
@@ -89,19 +91,24 @@ public enum HTML {
         var rows: [String] = []
         if hasSeams {
             let chips = seams.map {
-                "<span class=\"kv\"><span class=\"k\">\(esc($0.key))</span><span class=\"eq\">=</span><span class=\"val\">\(esc($0.value))</span></span>"
+                "<span class=\"kv\"><span class=\"k\">\(esc($0.key))</span><span class=\"eq\">=</span>"
+                    + "<span class=\"val\">\(esc($0.value))</span></span>"
             }.joined()
-            rows.append("<div class=\"cx-row\"><div class=\"cx-label\">seam values</div><div class=\"cx-chips\">\(chips)</div></div>")
+            rows.append("<div class=\"cx-row\"><div class=\"cx-label\">seam values</div>"
+                + "<div class=\"cx-chips\">\(chips)</div></div>")
         }
         if let order, !order.isEmpty {
-            let chain = order.map { "<span class=\"op\">\(esc($0))</span>" }.joined(separator: "<span class=\"seq\">→</span>")
-            rows.append("<div class=\"cx-row\"><div class=\"cx-label\">failing order</div><div class=\"cx-chips chain\">\(chain)</div></div>")
+            let chain = order.map { "<span class=\"op\">\(esc($0))</span>" }
+                .joined(separator: "<span class=\"seq\">→</span>")
+            rows.append("<div class=\"cx-row\"><div class=\"cx-label\">failing order</div>"
+                + "<div class=\"cx-chips chain\">\(chain)</div></div>")
         }
 
         return """
         <section class="counterexample">
           <div class="cx-head"><span class="badge shrunk">shrunk</span> Minimal counterexample</div>
-          <div class="cx-note">The smallest input the shrinker could reduce to that still reproduces the divergence.</div>
+          <div class="cx-note">The smallest input the shrinker could reduce to that still \
+        reproduces the divergence.</div>
           \(rows.joined())
         </section>
         """
@@ -147,21 +154,21 @@ public enum HTML {
 
     // MARK: - One divergence, as a card
 
-    private static func card(_ d: Divergence, intentInPlay: Bool) -> String {
-        let payload: String
-        if d.kind == .valueMismatch, let m = parseValueMismatch(d.detail) {
-            payload = valueDiff(field: m.path, baseline: m.baseline, candidate: m.candidate)
+    private static func card(_ divergence: Divergence, intentInPlay: Bool) -> String {
+        let mismatch = divergence.kind == .valueMismatch ? parseValueMismatch(divergence.detail) : nil
+        let payload: String = if let mismatch {
+            valueDiff(field: mismatch.path, baseline: mismatch.baseline, candidate: mismatch.candidate)
         } else {
-            payload = "<div class=\"detail\">\(esc(d.detail))</div>"
+            "<div class=\"detail\">\(esc(divergence.detail))</div>"
         }
 
         return """
-        <article class="card \(kindClass(d.kind))">
+        <article class="card \(kindClass(divergence.kind))">
           <header>
-            <span class="kind"><span class="glyph">\(glyph(d.kind))</span>\(kindLabel(d.kind))</span>
-            <span class="label">\(esc(d.label))</span>
-            \(classificationBadge(d, intentInPlay: intentInPlay))
-            \(locationChips(d))
+            <span class="kind"><span class="glyph">\(glyph(divergence.kind))</span>\(kindLabel(divergence.kind))</span>
+            <span class="label">\(esc(divergence.label))</span>
+            \(classificationBadge(divergence, intentInPlay: intentInPlay))
+            \(locationChips(divergence))
           </header>
           \(payload)
         </article>
@@ -171,10 +178,10 @@ public enum HTML {
     /// A baseline-vs-candidate value panel, with a numeric delta when both sides parse as numbers.
     private static func valueDiff(field: String, baseline: String, candidate: String) -> String {
         var delta = ""
-        if let b = Double(baseline), let c = Double(candidate) {
-            let d = c - b
-            let sign = d > 0 ? "+" : ""
-            let shown = (d == d.rounded()) ? String(Int64(d)) : String(d)
+        if let baseNumber = Double(baseline), let candidateNumber = Double(candidate) {
+            let difference = candidateNumber - baseNumber
+            let sign = difference > 0 ? "+" : ""
+            let shown = (difference == difference.rounded()) ? String(Int64(difference)) : String(difference)
             delta = "<div class=\"delta\">Δ \(sign)\(shown)</div>"
         }
         return """
@@ -188,20 +195,20 @@ public enum HTML {
         """
     }
 
-    private static func locationChips(_ d: Divergence) -> String {
-        let b = d.baselineSeq.map { "<span class=\"pos base\">baseline #\($0)</span>" } ?? ""
-        let c = d.candidateSeq.map { "<span class=\"pos cand\">candidate #\($0)</span>" } ?? ""
-        guard !b.isEmpty || !c.isEmpty else { return "" }
-        return "<span class=\"loc\">\(b)\(c)</span>"
+    private static func locationChips(_ divergence: Divergence) -> String {
+        let baselineChip = divergence.baselineSeq.map { "<span class=\"pos base\">baseline #\($0)</span>" } ?? ""
+        let candidateChip = divergence.candidateSeq.map { "<span class=\"pos cand\">candidate #\($0)</span>" } ?? ""
+        guard !baselineChip.isEmpty || !candidateChip.isEmpty else { return "" }
+        return "<span class=\"loc\">\(baselineChip)\(candidateChip)</span>"
     }
 
     /// intended (declared feature behavior) / collateral (gating, suspected regression) / advisory —
     /// mirrors the `(intended)` / `(collateral)` / `(advisory)` tags in `bodyLines()`.
-    private static func classificationBadge(_ d: Divergence, intentInPlay: Bool) -> String {
-        if d.classification == .intended {
+    private static func classificationBadge(_ divergence: Divergence, intentInPlay: Bool) -> String {
+        if divergence.classification == .intended {
             return "<span class=\"badge intended\">intended</span>"
         }
-        if d.isAdvisory {
+        if divergence.isAdvisory {
             return "<span class=\"badge advisory\">advisory</span>"
         }
         // Only worth flagging "collateral" when there's declared intent to contrast against.
@@ -217,7 +224,7 @@ public enum HTML {
         let path = String(detail[..<colon.lowerBound])
         let rest = detail[colon.upperBound...]
         guard rest.hasPrefix("baseline="), let candMark = rest.range(of: " candidate=") else { return nil }
-        let baseline = String(rest[rest.index(rest.startIndex, offsetBy: "baseline=".count)..<candMark.lowerBound])
+        let baseline = String(rest[rest.index(rest.startIndex, offsetBy: "baseline=".count) ..< candMark.lowerBound])
         let candidate = String(rest[candMark.upperBound...])
         return (path, baseline, candidate)
     }
@@ -225,73 +232,75 @@ public enum HTML {
     // MARK: - Verdict vocabulary (the single HTML copy of it)
 
     /// The three-tier banner glyph + label.
-    public static func banner(_ v: TraceDiff.Verdict) -> String {
-        switch v {
-        case .equivalent:   return "✅ EQUIVALENT"
-        case .diverged:     return "❌ DIVERGED"
-        case .cannotVerify: return "⚠️ CANNOT-VERIFY"
+    public static func banner(_ verdict: TraceDiff.Verdict) -> String {
+        switch verdict {
+        case .equivalent: "✅ EQUIVALENT"
+        case .diverged: "❌ DIVERGED"
+        case .cannotVerify: "⚠️ CANNOT-VERIFY"
         }
     }
 
     /// The short human verdict for a stat tile.
-    public static func shortVerdict(_ v: TraceDiff.Verdict) -> String {
-        switch v {
-        case .equivalent:   return "Equivalent"
-        case .diverged:     return "Diverged"
-        case .cannotVerify: return "Cannot verify"
+    public static func shortVerdict(_ verdict: TraceDiff.Verdict) -> String {
+        switch verdict {
+        case .equivalent: "Equivalent"
+        case .diverged: "Diverged"
+        case .cannotVerify: "Cannot verify"
         }
     }
 
     /// The CSS accent class (`ok` / `bad` / `warn`) for a verdict.
-    public static func accent(_ v: TraceDiff.Verdict) -> String {
-        switch v {
-        case .equivalent:   return "ok"
-        case .diverged:     return "bad"
-        case .cannotVerify: return "warn"
+    public static func accent(_ verdict: TraceDiff.Verdict) -> String {
+        switch verdict {
+        case .equivalent: "ok"
+        case .diverged: "bad"
+        case .cannotVerify: "warn"
         }
     }
 
-    private static func glyph(_ k: Divergence.Kind) -> String {
-        switch k {
-        case .missingEvent:     return "−"
-        case .unexpectedEvent:  return "+"
-        case .reordered:        return "↔"
-        case .valueMismatch:    return "≠"
-        case .timingRegression: return "⏱"
+    private static func glyph(_ kind: Divergence.Kind) -> String {
+        switch kind {
+        case .missingEvent: "−"
+        case .unexpectedEvent: "+"
+        case .reordered: "↔"
+        case .valueMismatch: "≠"
+        case .timingRegression: "⏱"
         }
     }
-    private static func kindLabel(_ k: Divergence.Kind) -> String {
-        switch k {
-        case .missingEvent:     return "missing event"
-        case .unexpectedEvent:  return "unexpected event"
-        case .reordered:        return "reordered"
-        case .valueMismatch:    return "value mismatch"
-        case .timingRegression: return "timing regression"
+
+    private static func kindLabel(_ kind: Divergence.Kind) -> String {
+        switch kind {
+        case .missingEvent: "missing event"
+        case .unexpectedEvent: "unexpected event"
+        case .reordered: "reordered"
+        case .valueMismatch: "value mismatch"
+        case .timingRegression: "timing regression"
         }
     }
-    private static func kindClass(_ k: Divergence.Kind) -> String {
-        switch k {
-        case .missingEvent:     return "k-missing"
-        case .unexpectedEvent:  return "k-unexpected"
-        case .reordered:        return "k-reordered"
-        case .valueMismatch:    return "k-value"
-        case .timingRegression: return "k-timing"
+
+    private static func kindClass(_ kind: Divergence.Kind) -> String {
+        switch kind {
+        case .missingEvent: "k-missing"
+        case .unexpectedEvent: "k-unexpected"
+        case .reordered: "k-reordered"
+        case .valueMismatch: "k-value"
+        case .timingRegression: "k-timing"
         }
     }
 
     // MARK: - Small utilities
 
-    public static func esc(_ s: String) -> String {
-        s.replacingOccurrences(of: "&", with: "&amp;")
-         .replacingOccurrences(of: "<", with: "&lt;")
-         .replacingOccurrences(of: ">", with: "&gt;")
-         .replacingOccurrences(of: "\"", with: "&quot;")
+    public static func esc(_ string: String) -> String {
+        string.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
     }
 
     private static func timestamp() -> String {
-        let f = DateFormatter()
-        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return f.string(from: Date())
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: Date())
     }
 
     // MARK: - Styling (the single stylesheet all three entry points share)
@@ -318,10 +327,12 @@ public enum HTML {
 
     .hero { border:1px solid var(--line); border-radius:16px; padding:22px 24px; background:var(--panel);
       display:flex; align-items:center; gap:22px; border-left-width:6px; }
-    .hero.ok { border-left-color:var(--ok); } .hero.bad { border-left-color:var(--bad); } .hero.warn { border-left-color:var(--warn); }
+    .hero.ok { border-left-color:var(--ok); } .hero.bad { border-left-color:var(--bad); } \
+    .hero.warn { border-left-color:var(--warn); }
     .hero .verdict { font-size:26px; font-weight:700; white-space:nowrap; }
     .lede { margin-left:auto; text-align:right; }
-    .scenario { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--muted); font-size:13px; margin-bottom:8px; }
+    .scenario { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--muted); \
+    font-size:13px; margin-bottom:8px; }
     .flow { display:flex; align-items:center; gap:10px; justify-content:flex-end; }
     .flow .arrow { color:var(--muted); }
     .chip { padding:4px 10px; border-radius:999px; font-size:13px; font-weight:600; border:1px solid var(--line); }
@@ -345,10 +356,12 @@ public enum HTML {
     .badge.advisory { background:var(--warn-bg); color:var(--warn); }
     .cx-note { color:var(--muted); font-size:13px; margin-bottom:14px; }
     .cx-row { display:flex; gap:14px; align-items:baseline; padding:6px 0; }
-    .cx-label { width:100px; flex:none; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+    .cx-label { width:100px; flex:none; font-size:12px; text-transform:uppercase; letter-spacing:.05em; \
+    color:var(--muted); }
     .cx-chips { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     .kv { display:inline-flex; align-items:center; background:var(--panel); border:1px solid var(--line);
-      border-radius:8px; padding:4px 10px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; }
+      border-radius:8px; padding:4px 10px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; \
+    font-size:13px; }
     .kv .k { color:var(--muted); } .kv .eq { color:var(--muted); margin:0 3px; } .kv .val { font-weight:700; }
     .op { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:4px 10px;
       font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; }
@@ -368,10 +381,12 @@ public enum HTML {
     .pos { font-size:12px; padding:2px 8px; border-radius:6px; border:1px solid var(--line); color:var(--muted); }
     .pos.cand { color:var(--cand); border-color:color-mix(in srgb,var(--cand) 40%,transparent); }
 
-    .field { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; color:var(--muted); margin-bottom:10px; }
+    .field { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px; \
+    color:var(--muted); margin-bottom:10px; }
     .vs { display:flex; align-items:stretch; gap:12px; }
     .side { flex:1; border:1px solid var(--line); border-radius:10px; padding:10px 14px; }
-    .side .tag { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; }
+    .side .tag { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); \
+    margin-bottom:6px; }
     .side .v { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:20px; font-weight:700; }
     .side.base .v { color:var(--base); }
     .side.cand { background:var(--bad-bg); border-color:color-mix(in srgb,var(--bad) 35%,transparent); }
@@ -393,16 +408,19 @@ public enum HTML {
     .abstain h2 { color:var(--warn); }
     .abstain p { color:var(--muted); max-width:56ch; margin:8px auto 0; }
 
-    .coverage { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px 20px; margin:18px 0; }
+    .coverage { background:var(--panel); border:1px solid var(--line); border-radius:14px; \
+    padding:18px 20px; margin:18px 0; }
     .coverage h2 { margin-bottom:12px; }
     .cov-gap { color:var(--warn); font-size:13px; margin-top:8px; }
     .cov-gap::before { content:"gap · "; color:var(--muted); }
 
-    footer { margin-top:28px; color:var(--muted); font-size:12px; line-height:1.6; border-top:1px solid var(--line); padding-top:16px; }
+    footer { margin-top:28px; color:var(--muted); font-size:12px; line-height:1.6; \
+    border-top:1px solid var(--line); padding-top:16px; }
     footer .ts { margin-top:6px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
 
     @media (max-width:560px) {
-      .hero { flex-direction:column; align-items:flex-start; } .lede { margin-left:0; text-align:left; } .flow { justify-content:flex-start; }
+      .hero { flex-direction:column; align-items:flex-start; } .lede { margin-left:0; text-align:left; } \
+    .flow { justify-content:flex-start; }
       .vs { flex-direction:column; } .op-eq { transform:rotate(90deg); }
     }
     """
@@ -417,7 +435,7 @@ public extension TraceDiff {
         HTML.page(title: "Haruspec · \(candidateName)", sections: [
             HTML.hero(verdict, title: candidateName, baseline: baselineName, candidate: candidateName),
             HTML.statSection(statTiles),
-            body,
+            body
         ])
     }
 
@@ -439,7 +457,9 @@ public extension TraceDiff {
         default:
             return HTML.cleanSection(
                 summary: "Behavior matched",
-                detail: "Every compared event produced a byte-for-byte identical behavior trace (within declared tolerances). No divergences.")
+                detail: "Every compared event produced a byte-for-byte identical behavior trace "
+                    + "(within declared tolerances). No divergences."
+            )
         }
     }
 }
@@ -450,15 +470,17 @@ public extension VerificationResult {
     func htmlReport() -> String {
         var tiles = diff.statTiles
         if let fraction = coverage.fraction {
-            tiles.append(HTML.tile(label: "Coverage",
-                                         value: "\(coverage.exercised.count)/\(coverage.declared.count) (\(percent(fraction)))",
-                                         accent: coverage.trustsEquivalent ? "ok" : "warn"))
+            tiles.append(HTML.tile(
+                label: "Coverage",
+                value: "\(coverage.exercised.count)/\(coverage.declared.count) (\(percent(fraction)))",
+                accent: coverage.trustsEquivalent ? "ok" : "warn"
+            ))
         }
 
         var sections = [
             HTML.hero(verdict, title: diff.candidateName, baseline: diff.baselineName, candidate: diff.candidateName),
             HTML.statSection(tiles),
-            coverageSection,
+            coverageSection
         ]
         if verdict == .cannotVerify {
             sections.append(HTML.abstentionSection(reason: htmlAbstentionReason))
@@ -471,9 +493,11 @@ public extension VerificationResult {
     private var coverageSection: String {
         var rows: [String] = []
         if let fraction = coverage.fraction {
-            rows.append("<div>\(coverage.exercised.count)/\(coverage.declared.count) declared seams exercised (\(percent(fraction)))</div>")
+            rows.append("<div>\(coverage.exercised.count)/\(coverage.declared.count) "
+                + "declared seams exercised (\(percent(fraction)))</div>")
             if let domain = coverage.domainFraction, !coverage.domainExercised.isEmpty {
-                rows.append("<div>\(coverage.domainExercised.count)/\(coverage.declared.count) seam(s) swept over a value domain (\(percent(domain)))</div>")
+                rows.append("<div>\(coverage.domainExercised.count)/\(coverage.declared.count) seam(s) "
+                    + "swept over a value domain (\(percent(domain)))</div>")
             }
         } else {
             rows.append("<div>coverage unknown — no declared seam surface to measure against</div>")
@@ -481,12 +505,14 @@ public extension VerificationResult {
         let missed = coverage.unrecordedReach
         if !missed.isEmpty {
             let list = missed.map { HTML.esc("\($0.boundary)#\($0.ordinal ?? 0)") }.joined(separator: ", ")
-            rows.append("<div class=\"cov-gap\">reached \(missed.count) unrecorded boundary(ies), fell back to live — \(list)</div>")
+            rows.append("<div class=\"cov-gap\">reached \(missed.count) unrecorded boundary(ies), "
+                + "fell back to live — \(list)</div>")
         }
         let unexercised = coverage.gaps.filter { $0.reason == .unexercised }
         if !unexercised.isEmpty {
             let list = unexercised.map { HTML.esc($0.boundary) }.joined(separator: ", ")
-            rows.append("<div class=\"cov-gap\">\(unexercised.count) declared boundary(ies) never reached this run — \(list)</div>")
+            rows.append("<div class=\"cov-gap\">\(unexercised.count) declared boundary(ies) "
+                + "never reached this run — \(list)</div>")
         }
         return "<section class=\"coverage\"><h2>Coverage</h2>\(rows.joined())</section>"
     }
@@ -494,10 +520,13 @@ public extension VerificationResult {
     private var htmlAbstentionReason: String {
         coverage.unrecordedReach.isEmpty
             ? "Verification was inconclusive because there is no declared seam surface to certify equivalence over."
-            : "Verification was inconclusive because the change crossed a boundary the recording didn't cover, so the environment wasn't held identical."
+            : "Verification was inconclusive because the change crossed a boundary the recording "
+            + "didn't cover, so the environment wasn't held identical."
     }
 
-    private func percent(_ fraction: Double) -> String { "\(Int((fraction * 100).rounded()))%" }
+    private func percent(_ fraction: Double) -> String {
+        "\(Int((fraction * 100).rounded()))%"
+    }
 }
 
 // MARK: - Writing the report to disk

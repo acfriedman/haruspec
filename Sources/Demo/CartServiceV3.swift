@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
-import HaruspecTrace
 import HaruspecMacros
+import HaruspecTrace
 
 /// A *feature* change, not a refactor: it deliberately extends behavior (a loyalty-points program) and
 /// so is *expected* to diverge from the baseline. This is extension mode — the goal isn't parity, it's

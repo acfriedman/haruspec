@@ -17,7 +17,7 @@ public struct VerificationResult: Codable, Sendable, Equatable {
     public init(diff: TraceDiff, coverage: Coverage) {
         self.diff = diff
         self.coverage = coverage
-        self.verdict = Self.resolve(diff: diff, coverage: coverage)
+        verdict = Self.resolve(diff: diff, coverage: coverage)
     }
 
     /// The soundness core. A false `EQUIVALENT` is the one catastrophic outcome, so:
@@ -28,15 +28,17 @@ public struct VerificationResult: Codable, Sendable, Equatable {
     public static func resolve(diff: TraceDiff, coverage: Coverage) -> TraceDiff.Verdict {
         switch diff.verdict {
         case .diverged, .cannotVerify:
-            return diff.verdict
+            diff.verdict
         case .equivalent:
-            return coverage.trustsEquivalent ? .equivalent : .cannotVerify
+            coverage.trustsEquivalent ? .equivalent : .cannotVerify
         }
     }
 
     /// Only a fully-covered, non-diverging replay is equivalent. A `CANNOT-VERIFY` is *not* equivalent —
     /// callers gating on this must treat abstention as "not a pass."
-    public var isEquivalent: Bool { verdict == .equivalent }
+    public var isEquivalent: Bool {
+        verdict == .equivalent
+    }
 
     /// Extension mode over the wrapped diff: reclassify the intent-declared divergences, then re-resolve
     /// against the same coverage. Symmetric to `TraceDiff.classified(against:)`.

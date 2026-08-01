@@ -29,13 +29,16 @@ public protocol SeamValueGenerator {
 /// reproducible from a seed. Not a seam: this drives *generation*, not recorded entropy (that's `SeamRNG`).
 public struct SplitMix64: RandomNumberGenerator {
     private var state: UInt64
-    public init(seed: UInt64) { self.state = seed }
+    public init(seed: UInt64) {
+        state = seed
+    }
+
     public mutating func next() -> UInt64 {
         state &+= 0x9E37_79B9_7F4A_7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-        return z ^ (z >> 31)
+        var mixed = state
+        mixed = (mixed ^ (mixed >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        mixed = (mixed ^ (mixed >> 27)) &* 0x94D0_49BB_1331_11EB
+        return mixed ^ (mixed >> 31)
     }
 }
 
@@ -47,8 +50,8 @@ public enum SeamDomain: Sendable {
 
     func sample(using rng: inout SplitMix64) -> CanonicalValue {
         switch self {
-        case .int(let range): return .int(Int64.random(in: range, using: &rng))
-        case .double(let range): return .double(Double.random(in: range, using: &rng))
+        case let .int(range): .int(Int64.random(in: range, using: &rng))
+        case let .double(range): .double(Double.random(in: range, using: &rng))
         }
     }
 }
@@ -63,13 +66,15 @@ public struct DomainSeamGenerator: SeamValueGenerator {
 
     public init(domains: [String: SeamDomain], seed: UInt64) {
         self.domains = domains
-        self.rng = SplitMix64(seed: seed)
+        rng = SplitMix64(seed: seed)
     }
 
-    public var variedSeams: Set<String> { Set(domains.keys) }
+    public var variedSeams: Set<String> {
+        Set(domains.keys)
+    }
 
     public mutating func generate(seam: String, like recorded: CanonicalValue) -> CanonicalValue {
-        guard let domain = domains[seam] else { return recorded }   // undeclared seam → keep golden
+        guard let domain = domains[seam] else { return recorded } // undeclared seam → keep golden
         return domain.sample(using: &rng)
     }
 }
@@ -80,10 +85,10 @@ public extension CassetteData {
     /// Produce `count` variants of this golden cassette, asking `generator` for each reading. The golden
     /// cassette is the *template* — the seam skeleton (which seams, each arity, each type) is real, only
     /// the values vary — which keeps generation "derived from the real recording," not fabricated.
-    func generatedVariants<G: SeamValueGenerator>(count: Int, using generator: inout G) -> [CassetteData] {
+    func generatedVariants(count: Int, using generator: inout some SeamValueGenerator) -> [CassetteData] {
         var variants: [CassetteData] = []
         variants.reserveCapacity(max(0, count))
-        for _ in 0..<max(0, count) {
+        for _ in 0 ..< max(0, count) {
             var newTracks = tracks
             for (seam, track) in tracks {
                 var newTrack: [CanonicalValue] = []
@@ -148,21 +153,26 @@ public struct DifferentialProperty {
         /// single-cassette point coverage — reported, never a trust relaxation.
         public var coverage: Coverage
         /// True when `baseline ≡ candidate` held across the whole generated surface.
-        public var heldOverSurface: Bool { counterexamples.isEmpty }
+        public var heldOverSurface: Bool {
+            counterexamples.isEmpty
+        }
+
         /// The minimal reported counterexample, if any.
-        public var firstFailure: Counterexample? { counterexamples.first }
+        public var firstFailure: Counterexample? {
+            counterexamples.first
+        }
     }
 
     /// Diff baseline vs candidate over `count` generated variants, stopping at (and shrinking) the first
     /// divergence. `generator` supplies the values — the commodity seam.
-    public func check<G: SeamValueGenerator>(count: Int, using generator: G) -> Result {
+    public func check(count: Int, using generator: some SeamValueGenerator) -> Result {
         var gen = generator
         let variants = golden.generatedVariants(count: count, using: &gen)
         var counterexamples: [Counterexample] = []
         for variant in variants {
             if let divergence = diverges(on: variant) {
                 counterexamples.append(Counterexample(cassette: shrink(variant), diff: divergence))
-                break   // first-failure reporting; a continue-and-collect policy is a later knob.
+                break // first-failure reporting; a continue-and-collect policy is a later knob.
             }
         }
         let held = counterexamples.isEmpty
@@ -190,7 +200,7 @@ public struct DifferentialProperty {
     ///    domain-exercised (breadth beyond the single point).
     ///  - a counterexample → its `DIVERGED` diff, which stands (a caught path-dependent regression).
     /// The domain credit is additive: it never flips a `CANNOT-VERIFY` to a pass (see `Coverage`).
-    public func verify<G: SeamValueGenerator>(count: Int, using generator: G) -> VerificationResult {
+    public func verify(count: Int, using generator: some SeamValueGenerator) -> VerificationResult {
         let result = check(count: count, using: generator)
         let representative = result.firstFailure?.diff ?? diff(on: golden)
         return VerificationResult(diff: representative, coverage: result.coverage)
@@ -212,8 +222,8 @@ public struct DifferentialProperty {
 
     /// The diff iff the two branches diverge on this variant.
     private func diverges(on variant: CassetteData) -> TraceDiff? {
-        let d = diff(on: variant)
-        return d.isEquivalent ? nil : d
+        let result = diff(on: variant)
+        return result.isEquivalent ? nil : result
     }
 
     /// Delta-debugging-lite localization: reset each seam to its golden reading and keep the reset only
@@ -227,9 +237,9 @@ public struct DifferentialProperty {
         for seam in golden.tracks.keys.sorted() {
             guard let goldenTrack = golden.tracks[seam] else { continue }
             var trial = minimal
-            trial.tracks[seam] = goldenTrack          // restore the benign golden reading
+            trial.tracks[seam] = goldenTrack // restore the benign golden reading
             if diverges(on: trial) != nil {
-                minimal = trial                       // seam wasn't necessary → drop it from the counterexample
+                minimal = trial // seam wasn't necessary → drop it from the counterexample
             }
         }
         return minimal

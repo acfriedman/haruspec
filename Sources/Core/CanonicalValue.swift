@@ -25,13 +25,13 @@ public extension CanonicalValue {
     var canonicalString: String {
         switch self {
         case .null: return "null"
-        case .bool(let b): return b ? "true" : "false"
-        case .int(let i): return String(i)
-        case .double(let d): return String(d)
-        case .string(let s): return "\"\(s)\""
-        case .array(let a): return "[" + a.map(\.canonicalString).joined(separator: ",") + "]"
-        case .object(let o):
-            let inner = o.keys.sorted().map { "\"\($0)\":\(o[$0]!.canonicalString)" }
+        case let .bool(bool): return bool ? "true" : "false"
+        case let .int(int): return String(int)
+        case let .double(double): return String(double)
+        case let .string(string): return "\"\(string)\""
+        case let .array(array): return "[" + array.map(\.canonicalString).joined(separator: ",") + "]"
+        case let .object(object):
+            let inner = object.keys.sorted().map { "\"\($0)\":\(object[$0]!.canonicalString)" }
             return "{" + inner.joined(separator: ",") + "}"
         }
     }
@@ -41,27 +41,41 @@ public extension CanonicalValue {
 
 extension CanonicalValue: Codable {
     public init(from decoder: Decoder) throws {
-        let c = try decoder.singleValueContainer()
-        if c.decodeNil() { self = .null; return }
-        if let b = try? c.decode(Bool.self) { self = .bool(b); return }
-        if let i = try? c.decode(Int64.self) { self = .int(i); return }
-        if let d = try? c.decode(Double.self) { self = .double(d); return }
-        if let s = try? c.decode(String.self) { self = .string(s); return }
-        if let a = try? c.decode([CanonicalValue].self) { self = .array(a); return }
-        if let o = try? c.decode([String: CanonicalValue].self) { self = .object(o); return }
-        throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unrecognized JSON value")
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() {
+            self = .null; return
+        }
+        if let bool = try? container.decode(Bool.self) {
+            self = .bool(bool); return
+        }
+        if let int = try? container.decode(Int64.self) {
+            self = .int(int); return
+        }
+        if let double = try? container.decode(Double.self) {
+            self = .double(double); return
+        }
+        if let string = try? container.decode(String.self) {
+            self = .string(string); return
+        }
+        if let array = try? container.decode([CanonicalValue].self) {
+            self = .array(array); return
+        }
+        if let object = try? container.decode([String: CanonicalValue].self) {
+            self = .object(object); return
+        }
+        throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unrecognized JSON value")
     }
 
     public func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
+        var container = encoder.singleValueContainer()
         switch self {
-        case .null: try c.encodeNil()
-        case .bool(let b): try c.encode(b)
-        case .int(let i): try c.encode(i)
-        case .double(let d): try c.encode(d)
-        case .string(let s): try c.encode(s)
-        case .array(let a): try c.encode(a)
-        case .object(let o): try c.encode(o)
+        case .null: try container.encodeNil()
+        case let .bool(bool): try container.encode(bool)
+        case let .int(int): try container.encode(int)
+        case let .double(double): try container.encode(double)
+        case let .string(string): try container.encode(string)
+        case let .array(array): try container.encode(array)
+        case let .object(object): try container.encode(object)
         }
     }
 }
@@ -69,23 +83,41 @@ extension CanonicalValue: Codable {
 // MARK: - Ergonomic literals (so instrumentation reads naturally)
 
 extension CanonicalValue: ExpressibleByNilLiteral {
-    public init(nilLiteral: ()) { self = .null }
+    public init(nilLiteral _: ()) {
+        self = .null
+    }
 }
+
 extension CanonicalValue: ExpressibleByBooleanLiteral {
-    public init(booleanLiteral value: Bool) { self = .bool(value) }
+    public init(booleanLiteral value: Bool) {
+        self = .bool(value)
+    }
 }
+
 extension CanonicalValue: ExpressibleByIntegerLiteral {
-    public init(integerLiteral value: Int64) { self = .int(value) }
+    public init(integerLiteral value: Int64) {
+        self = .int(value)
+    }
 }
+
 extension CanonicalValue: ExpressibleByFloatLiteral {
-    public init(floatLiteral value: Double) { self = .double(value) }
+    public init(floatLiteral value: Double) {
+        self = .double(value)
+    }
 }
+
 extension CanonicalValue: ExpressibleByStringLiteral {
-    public init(stringLiteral value: String) { self = .string(value) }
+    public init(stringLiteral value: String) {
+        self = .string(value)
+    }
 }
+
 extension CanonicalValue: ExpressibleByArrayLiteral {
-    public init(arrayLiteral elements: CanonicalValue...) { self = .array(elements) }
+    public init(arrayLiteral elements: CanonicalValue...) {
+        self = .array(elements)
+    }
 }
+
 extension CanonicalValue: ExpressibleByDictionaryLiteral {
     public init(dictionaryLiteral elements: (String, CanonicalValue)...) {
         self = .object(Dictionary(uniqueKeysWithValues: elements))

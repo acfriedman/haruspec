@@ -1,12 +1,11 @@
-import XCTest
 @testable import HaruspecCore
-@testable import HaruspecTrace
 @testable import HaruspecDemo
+@testable import HaruspecTrace
+import XCTest
 
 /// The *validation gate*: capture two traces of one real module and produce a meaningful,
 /// deterministic behavioral diff. Each test here is one leg of that proof.
 final class ValidationGateTests: XCTestCase {
-
     /// Determinism, the hard research question: two independent captures of the *same* code differ
     /// only in genuinely volatile fields (a fresh UUID, a wall-clock timestamp). Strict diffing sees
     /// that noise; the tolerance model cancels it. If this fails, the whole thesis wobbles.
@@ -28,7 +27,8 @@ final class ValidationGateTests: XCTestCase {
         let diff = BehavioralDiff.compare(baseline: CheckoutScenario.baseline(),
                                           candidate: CheckoutScenario.refactor(),
                                           tolerances: CheckoutScenario.tolerances)
-        XCTAssertTrue(diff.isEquivalent, "refactor changed internals only; observable behavior is identical\n\(diff.report())")
+        XCTAssertTrue(diff.isEquivalent,
+                      "refactor changed internals only; observable behavior is identical\n\(diff.report())")
     }
 
     /// The payoff: a change that compiles and "looks right" but silently breaks behavior is caught,
@@ -71,8 +71,9 @@ final class ValidationGateTests: XCTestCase {
         XCTAssertTrue(diff.divergences.contains { $0.kind == .missingEvent && $0.label == "CartDidChange" },
                       "the dropped notification is caught:\n\(diff.report())")
         XCTAssertTrue(diff.divergences.contains { $0.kind == .valueMismatch && $0.label == "CheckoutDidComplete"
-                                                  && $0.detail.contains("totalCents") },
-                      "the wrong total is caught via the production notification:\n\(diff.report())")
+                          && $0.detail.contains("totalCents")
+        },
+        "the wrong total is caught via the production notification:\n\(diff.report())")
     }
 
     /// Traces survive a serialize → reload round-trip unchanged (capture→store→reload).

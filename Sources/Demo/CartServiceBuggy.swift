@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
-import HaruspecTrace
 import HaruspecMacros
+import HaruspecTrace
 
 /// A plausible-looking but subtly-wrong "refactor". It compiles, reads fine, and would pass a
 /// cursory human review — precisely the class of change plausibility alone can't catch.

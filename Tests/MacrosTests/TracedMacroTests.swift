@@ -1,15 +1,20 @@
-import XCTest
 @testable import HaruspecCore
-@testable import HaruspecTrace
 import HaruspecMacros
+@testable import HaruspecTrace
+import XCTest
 
-// A class instrumented purely by the attribute — no recorder property, no per-method code.
+/// A class instrumented purely by the attribute — no recorder property, no per-method code.
 @Traced("Calc")
 private final class Calc {
-    func add(_ a: Int, _ b: Int) -> Int { a + b }
+    func add(_ lhs: Int, _ rhs: Int) -> Int {
+        lhs + rhs
+    }
+
     func noop() {}
     func mayThrow(_ fail: Bool) throws -> String {
-        if fail { throw CalcError.boom }
+        if fail {
+            throw CalcError.boom
+        }
         return "ok"
     }
 
@@ -34,24 +39,24 @@ final class TracedMacroTests: XCTestCase {
 
         XCTAssertEqual(events.map(\.kind), [.call, .ret, .call, .ret])
         XCTAssertEqual(events.map(\.label), ["Calc.add", "Calc.add", "Calc.noop", "Calc.noop"])
-        XCTAssertEqual(events[0].payload, ["a": 2, "b": 3]) // args captured by internal name
-        XCTAssertEqual(events[1].payload, .int(5))          // return value captured
-        XCTAssertNil(events[2].payload)                     // no args
-        XCTAssertNil(events[3].payload)                     // void return
+        XCTAssertEqual(events[0].payload, ["lhs": 2, "rhs": 3]) // args captured by internal name
+        XCTAssertEqual(events[1].payload, .int(5)) // return value captured
+        XCTAssertNil(events[2].payload) // no args
+        XCTAssertNil(events[3].payload) // void return
     }
 
     func testTracedMethodPreservesReturnValueAndThrowing() throws {
         let recorder = TraceRecorder(name: "t")
         let calc = Calc()
         try TraceContext.$current.withValue(recorder) {
-            XCTAssertEqual(try calc.mayThrow(false), "ok")   // original behavior intact
-            XCTAssertThrowsError(try calc.mayThrow(true))    // errors still propagate
+            XCTAssertEqual(try calc.mayThrow(false), "ok") // original behavior intact
+            XCTAssertThrowsError(try calc.mayThrow(true)) // errors still propagate
         }
         let events = recorder.trace().events
         XCTAssertEqual(events.map(\.label), ["Calc.mayThrow", "Calc.mayThrow", "Calc.mayThrow", "Calc.mayThrow"])
-        XCTAssertEqual(events[1].payload, .string("ok"))     // success return recorded
+        XCTAssertEqual(events[1].payload, .string("ok")) // success return recorded
         // The throwing call still records a ret, tagged with the error.
-        if case .object(let members)? = events[3].payload {
+        if case let .object(members)? = events[3].payload {
             XCTAssertNotNil(members["__threw"])
         } else {
             XCTFail("expected a __threw payload on the throwing return")

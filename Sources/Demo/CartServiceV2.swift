@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
-import HaruspecTrace
 import HaruspecMacros
+import HaruspecTrace
 
 /// A behavior-preserving refactor of the baseline — this stands in for an agent's transform.
 ///
@@ -20,10 +20,14 @@ public final class CartServiceV2: CartService {
         self.center = center
     }
 
-    private var lineCount: Int { order.count }
+    private var lineCount: Int {
+        order.count
+    }
 
     public func addItem(sku: String, unitPriceCents: Int, quantity: Int) {
-        if lines[sku] == nil { order.append(sku) }
+        if lines[sku] == nil {
+            order.append(sku)
+        }
         lines[sku] = (unitPriceCents, quantity)
         center.post(name: .cartDidChange, object: self, userInfo: ["itemCount": lineCount])
         center.post(name: .analyticsDidTrack, object: self, userInfo: ["event": "add_to_cart", "sku": sku])

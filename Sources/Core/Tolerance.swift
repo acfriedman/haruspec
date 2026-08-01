@@ -11,9 +11,9 @@ import Foundation
 /// rename-heavy refactor gates on the semantic tier instead, treating structural divergences as
 /// `advisory` (reported, non-failing) or `ignored` (dropped entirely).
 public enum StructuralComparison: String, Codable, Sendable {
-    case strict    // structural divergences fail the verdict
-    case advisory  // structural divergences are reported but do not fail the verdict
-    case ignored   // structural events are dropped; only semantic events are compared
+    case strict // structural divergences fail the verdict
+    case advisory // structural divergences are reported but do not fail the verdict
+    case ignored // structural events are dropped; only semantic events are compared
 }
 
 /// One payload field whose value is non-deterministic and must be redacted before comparison.
@@ -71,10 +71,12 @@ public struct VolatileField: Sendable, Equatable, Hashable {
     /// Whether this rule redacts the field named `key` at `path` (root-to-field, inclusive) inside
     /// an event labeled `label`.
     public func matches(key candidateKey: String, label candidateLabel: String, path candidatePath: [String]) -> Bool {
-        if let label, label != candidateLabel { return false }
+        if let label, label != candidateLabel {
+            return false
+        }
         switch position {
-        case .key(let key): return key == candidateKey
-        case .path(let path): return path == candidatePath
+        case let .key(key): return key == candidateKey
+        case let .path(path): return path == candidatePath
         }
     }
 }
@@ -132,47 +134,49 @@ public struct ToleranceSpec: Sendable, Equatable {
 extension VolatileField: Codable {
     enum CodingKeys: String, CodingKey { case key, label, path }
 
-    // A bare string is an unscoped key (unambiguous in JSON, kept for hand-written specs); an
-    // object carries exactly one of `key` / `path` (dotted) plus optional `label`.
+    /// A bare string is an unscoped key (unambiguous in JSON, kept for hand-written specs); an
+    /// object carries exactly one of `key` / `path` (dotted) plus optional `label`.
     public init(from decoder: Decoder) throws {
         if let bare = try? decoder.singleValueContainer().decode(String.self) {
             self.init(position: .key(bare), label: nil)
             return
         }
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        let label = try c.decodeIfPresent(String.self, forKey: .label)
-        let key = try c.decodeIfPresent(String.self, forKey: .key)
-        let path = try c.decodeIfPresent(String.self, forKey: .path)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let label = try container.decodeIfPresent(String.self, forKey: .label)
+        let key = try container.decodeIfPresent(String.self, forKey: .key)
+        let path = try container.decodeIfPresent(String.self, forKey: .path)
         switch (key, path) {
         case (let key?, nil):
             self.init(position: .key(key), label: label)
         case (nil, let path?):
             guard let components = VolatileField.parsePath(path) else {
-                throw DecodingError.dataCorruptedError(forKey: .path, in: c,
-                    debugDescription: "path \"\(path)\" must be dot-separated non-empty components")
+                throw DecodingError.dataCorruptedError(
+                    forKey: .path, in: container,
+                    debugDescription: "path \"\(path)\" must be dot-separated non-empty components"
+                )
             }
             self.init(position: .path(components), label: label)
         case (.some, .some):
-            throw DecodingError.dataCorruptedError(forKey: .key, in: c,
-                debugDescription: "a volatile field takes key or path, not both")
+            throw DecodingError.dataCorruptedError(forKey: .key, in: container,
+                                                   debugDescription: "a volatile field takes key or path, not both")
         case (nil, nil):
-            throw DecodingError.dataCorruptedError(forKey: .key, in: c,
-                debugDescription: "a volatile field needs a key or a path")
+            throw DecodingError.dataCorruptedError(forKey: .key, in: container,
+                                                   debugDescription: "a volatile field needs a key or a path")
         }
     }
 
     public func encode(to encoder: Encoder) throws {
-        if case .key(let key) = position, label == nil {
+        if case let .key(key) = position, label == nil {
             var single = encoder.singleValueContainer()
             try single.encode(key)
             return
         }
-        var c = encoder.container(keyedBy: CodingKeys.self)
+        var container = encoder.container(keyedBy: CodingKeys.self)
         switch position {
-        case .key(let key): try c.encode(key, forKey: .key)
-        case .path(let path): try c.encode(path.joined(separator: "."), forKey: .path)
+        case let .key(key): try container.encode(key, forKey: .key)
+        case let .path(path): try container.encode(path.joined(separator: "."), forKey: .path)
         }
-        try c.encodeIfPresent(label, forKey: .label)
+        try container.encodeIfPresent(label, forKey: .label)
     }
 }
 
@@ -182,16 +186,17 @@ extension ToleranceSpec: Codable {
         case ignoredNotificationNames, structuralComparison
     }
 
-    // Every field is optional in JSON so a partial spec is ergonomic.
+    /// Every field is optional in JSON so a partial spec is ergonomic.
     public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        volatileFields = try c.decodeIfPresent([VolatileField].self, forKey: .volatileFields) ?? []
-        numericEpsilon = try c.decodeIfPresent(Double.self, forKey: .numericEpsilon) ?? 0
-        timingBudgets = try c.decodeIfPresent([String: Int64].self, forKey: .timingBudgets) ?? [:]
-        unorderedGroups = try c.decodeIfPresent([[String]].self, forKey: .unorderedGroups) ?? []
-        ignoredKinds = try c.decodeIfPresent([EventKind].self, forKey: .ignoredKinds) ?? []
-        ignoredNotificationNames = try c.decodeIfPresent([String].self, forKey: .ignoredNotificationNames) ?? []
-        structuralComparison = try c.decodeIfPresent(StructuralComparison.self, forKey: .structuralComparison) ?? .strict
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        volatileFields = try container.decodeIfPresent([VolatileField].self, forKey: .volatileFields) ?? []
+        numericEpsilon = try container.decodeIfPresent(Double.self, forKey: .numericEpsilon) ?? 0
+        timingBudgets = try container.decodeIfPresent([String: Int64].self, forKey: .timingBudgets) ?? [:]
+        unorderedGroups = try container.decodeIfPresent([[String]].self, forKey: .unorderedGroups) ?? []
+        ignoredKinds = try container.decodeIfPresent([EventKind].self, forKey: .ignoredKinds) ?? []
+        ignoredNotificationNames = try container.decodeIfPresent([String].self, forKey: .ignoredNotificationNames) ?? []
+        structuralComparison = try container
+            .decodeIfPresent(StructuralComparison.self, forKey: .structuralComparison) ?? .strict
     }
 }
 
@@ -203,6 +208,12 @@ public extension ToleranceSpec {
     func isVolatile(key: String, label: String, path: [String]) -> Bool {
         volatileFields.contains { $0.matches(key: key, label: label, path: path) }
     }
-    func isUnordered(label: String) -> Bool { unorderedGroups.contains { $0.contains(label) } }
-    func timingBudget(for label: String) -> Int64? { timingBudgets[label] }
+
+    func isUnordered(label: String) -> Bool {
+        unorderedGroups.contains { $0.contains(label) }
+    }
+
+    func timingBudget(for label: String) -> Int64? {
+        timingBudgets[label]
+    }
 }

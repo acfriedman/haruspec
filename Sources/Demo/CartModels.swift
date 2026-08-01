@@ -11,8 +11,8 @@ public struct Receipt: Sendable, Equatable, Codable {
     public var taxCents: Int
     public var totalCents: Int
     public var lineCount: Int
-    public var orderID: String   // volatile: a fresh UUID each run
-    public var issuedAt: String  // volatile: wall-clock timestamp
+    public var orderID: String // volatile: a fresh UUID each run
+    public var issuedAt: String // volatile: wall-clock timestamp
 
     public init(subtotalCents: Int, discountCents: Int, taxCents: Int, totalCents: Int,
                 lineCount: Int, orderID: String, issuedAt: String) {
@@ -49,6 +49,11 @@ enum Pricing {
         Int((Double(taxable) * taxRate).rounded())
     }
 
-    static func freshOrderID() -> String { UUID().uuidString }
-    static func issuedNow() -> String { ISO8601DateFormatter().string(from: Date()) }
+    static func freshOrderID() -> String {
+        UUID().uuidString
+    }
+
+    static func issuedNow() -> String {
+        ISO8601DateFormatter().string(from: Date())
+    }
 }

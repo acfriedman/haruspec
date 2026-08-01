@@ -1,10 +1,10 @@
-import XCTest
 import Foundation
-import HaruspecTrace
-import HaruspecMacros
 import HaruspecCore
+import HaruspecMacros
 import HaruspecScenario
 import HaruspecSeams
+import HaruspecTrace
+import XCTest
 
 // The Continuous (PR) shape, end to end: record a golden plan from the "base build" (the good cart),
 // serialize it, replay it into a "changed build" (the same scenario source over a different factory —
@@ -20,13 +20,19 @@ private final class LoyaltyCart: PromoCart {
     private let center: NotificationCenter
     private var subtotal = 0
     private var promo = false
-    init(center: NotificationCenter) { self.center = center }
+    init(center: NotificationCenter) {
+        self.center = center
+    }
 
     func addItem(priceCents: Int, qty: Int) {
         subtotal += priceCents * qty
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
     }
-    func applyPromo() { promo = true }
+
+    func applyPromo() {
+        promo = true
+    }
+
     func checkout() -> Int {
         let discount = promo ? Int((Double(subtotal) * 0.10).rounded()) : 0
         let total = subtotal - discount
@@ -56,7 +62,11 @@ private final class GreedySeamCart: PromoCart {
         subtotal += priceCents * qty
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
     }
-    func applyPromo() { promo = true }
+
+    func applyPromo() {
+        promo = true
+    }
+
     func checkout() -> Int {
         let discount = promo ? Int((Double(subtotal) * 0.10).rounded()) : 0
         let total = subtotal - discount
@@ -66,27 +76,42 @@ private final class GreedySeamCart: PromoCart {
     }
 }
 
-private func makeGood(_ ctx: SeamContext) -> PromoCart { GoodCart(center: ctx.notifications) }
-private func makeRefactor(_ ctx: SeamContext) -> PromoCart { RefactorCart(center: ctx.notifications) }
-private func makeRoundBug(_ ctx: SeamContext) -> PromoCart { RoundBugCart(center: ctx.notifications) }
-private func makeLoyalty(_ ctx: SeamContext) -> PromoCart { LoyaltyCart(center: ctx.notifications) }
-private func makeGreedy(_ ctx: SeamContext) -> PromoCart { GreedySeamCart(center: ctx.notifications, context: ctx) }
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
+    RefactorCart(center: ctx.notifications)
+}
+
+private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
+    RoundBugCart(center: ctx.notifications)
+}
+
+private func makeLoyalty(_ ctx: SeamContext) -> PromoCart {
+    LoyaltyCart(center: ctx.notifications)
+}
+
+private func makeGreedy(_ ctx: SeamContext) -> PromoCart {
+    GreedySeamCart(center: ctx.notifications, context: ctx)
+}
 
 final class ScenarioPlanTests: XCTestCase {
-
     /// The authored scenario — identical source on the "base" and "branch" side, as it would be in git.
     /// Only the factory differs per test, standing in for what a checkout does to the code under it.
     private func cart(system: @escaping (SeamContext) -> PromoCart) -> Scenario<PromoCart> {
         Scenario<PromoCart>("promo-cart.plan")
             .system(system)
             .operations {
-                Op("addCoffee") { cart, seams in cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10))) }
-                Op("promo")     { $0.applyPromo() }
-                Op("checkout")  { _ = $0.checkout() }.last()
+                Op("addCoffee") { cart, seams in
+                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
+                }
+                Op("promo") { $0.applyPromo() }
+                Op("checkout") { _ = $0.checkout() }.last()
             }
             .observe(notifications: ["CartChanged", "CheckoutCompleted", "LoyaltyPointsEarned"])
             .vary {
-                Seam("coffeeQty", .int(1...20))
+                Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 10)
             }
     }
@@ -192,9 +217,11 @@ final class ScenarioPlanTests: XCTestCase {
         let drifted = Scenario<PromoCart>("promo-cart.plan")
             .system(makeRefactor)
             .operations {
-                Op("addEspresso") { cart, seams in cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10))) }
-                Op("promo")       { $0.applyPromo() }
-                Op("checkout")    { _ = $0.checkout() }.last()
+                Op("addEspresso") { cart, seams in
+                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
+                }
+                Op("promo") { $0.applyPromo() }
+                Op("checkout") { _ = $0.checkout() }.last()
             }
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
 

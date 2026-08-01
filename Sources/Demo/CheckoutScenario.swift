@@ -64,7 +64,8 @@ public enum CheckoutScenario {
     public static var intent: IntentSpec {
         IntentSpec(
             expectedNewEvents: ["LoyaltyPointsEarned"],
-            expectedValueChanges: ["CheckoutDidComplete": ["pointsEarned"]])
+            expectedValueChanges: ["CheckoutDidComplete": ["pointsEarned"]]
+        )
     }
 
     /// The declared tolerance contract for this application: fresh UUIDs/timestamps are volatile,
@@ -76,6 +77,7 @@ public enum CheckoutScenario {
             numericEpsilon: 0,
             timingBudgets: ["CartService.checkout": 50],
             unorderedGroups: [["CartDidChange", "AnalyticsDidTrack"]],
-            ignoredKinds: [])
+            ignoredKinds: []
+        )
     }
 }

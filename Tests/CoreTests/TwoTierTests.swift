@@ -1,30 +1,32 @@
-import XCTest
 @testable import HaruspecCore
+import XCTest
 
 /// The two-tier durability model: structural (internal call mechanics, code-symbol-named) vs semantic
 /// (observable product behavior — notifications, state, markers — domain-named and rename-stable), and
 /// how `structuralComparison` chooses which tier gates the verdict.
 final class TwoTierTests: XCTestCase {
-    // Internal call mechanics — the fragile, code-symbol-named tier.
+    /// Internal call mechanics — the fragile, code-symbol-named tier.
     private func structural(_ seq: Int, _ label: String, _ payload: CanonicalValue? = nil) -> TraceEvent {
         TraceEvent(seq: seq, kind: .call, label: label, subject: 1, payload: payload, tier: .structural)
     }
-    // A durable, observable product side effect (a notification) — semantic tier, carries a real value.
+
+    /// A durable, observable product side effect (a notification) — semantic tier, carries a real value.
     private func semantic(_ seq: Int, _ label: String, _ payload: CanonicalValue) -> TraceEvent {
         TraceEvent(seq: seq, kind: .notification, label: label, subject: 1, payload: payload, tier: .semantic)
     }
 
-    // Same behavior, but the method was renamed (structural label changes; the side effect does not).
+    /// Same behavior, but the method was renamed (structural label changes; the side effect does not).
     private var baseline: Trace {
         Trace(name: "before", events: [
             structural(0, "OrderService.placeOrder", ["items": 2]),
-            semantic(1, "order_placed", ["totalCents": 2525]),
+            semantic(1, "order_placed", ["totalCents": 2525])
         ])
     }
+
     private var renamed: Trace {
         Trace(name: "after", events: [
             structural(0, "CheckoutService.submit", ["items": 2]), // renamed method + type
-            semantic(1, "order_placed", ["totalCents": 2525]),
+            semantic(1, "order_placed", ["totalCents": 2525])
         ])
     }
 
@@ -53,7 +55,7 @@ final class TwoTierTests: XCTestCase {
     func testSemanticRegressionIsCaughtEvenWhenStructuralIgnored() {
         let semanticRegression = Trace(name: "bad", events: [
             structural(0, "CheckoutService.submit", ["items": 2]),
-            semantic(1, "order_placed", ["totalCents": 9999]), // product-level regression
+            semantic(1, "order_placed", ["totalCents": 9999]) // product-level regression
         ])
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: semanticRegression,
                                           tolerances: ToleranceSpec(structuralComparison: .ignored))

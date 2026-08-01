@@ -1,6 +1,6 @@
 import Foundation
-import os
 import HaruspecCore
+import os
 
 /// The runtime capture surface that instrumented code calls into.
 ///
@@ -26,7 +26,7 @@ public final class TraceRecorder: @unchecked Sendable {
     private var workerMap: [ObjectIdentifier: Int] = [:]
     private var nextWorker = 1
 
-    // Mirror intervals to Instruments too, so the same run is inspectable with Apple tooling.
+    /// Mirror intervals to Instruments too, so the same run is inspectable with Apple tooling.
     private let signposter = OSSignposter(subsystem: "com.haruspec.trace", category: "interval")
 
     public init(name: String, clock: TraceClock = WallClock()) {
@@ -54,7 +54,8 @@ public final class TraceRecorder: @unchecked Sendable {
     /// lands in the durable **semantic** tier (its value contract survives code-symbol renames).
     public func notification(_ name: String, subject: AnyObject? = nil, payload: CanonicalValue? = nil) {
         lock.lock(); defer { lock.unlock() }
-        appendLocked(kind: .notification, label: name, subject: subject, payload: payload, duration: nil, tier: .semantic)
+        appendLocked(kind: .notification, label: name, subject: subject, payload: payload,
+                     duration: nil, tier: .semantic)
     }
 
     /// Record an observable state / property mutation (KVO) — a durable **semantic**-tier side effect.
@@ -114,7 +115,9 @@ public final class TraceRecorder: @unchecked Sendable {
     }
 
     /// The current clock reading, in ticks. Used by `@Timed` macro-generated timing.
-    public func now() -> Int64 { clock.now() }
+    public func now() -> Int64 {
+        clock.now()
+    }
 
     /// Record a pre-measured signpost interval (the duration was computed by the caller). Used by the
     /// `@Timed` method instrumentation, which brackets the whole method itself.
@@ -130,7 +133,8 @@ public final class TraceRecorder: @unchecked Sendable {
         let event = TraceEvent(
             seq: seqCounter, kind: kind, label: label, thread: currentThreadLocked(),
             subject: symbolicIDLocked(subject), payload: payload, durationTicks: duration,
-            depth: depth, tier: tier)
+            depth: depth, tier: tier
+        )
         events.append(event)
         seqCounter += 1
     }
@@ -138,7 +142,9 @@ public final class TraceRecorder: @unchecked Sendable {
     private func symbolicIDLocked(_ subject: AnyObject?) -> Int? {
         guard let subject else { return nil }
         let key = ObjectIdentifier(subject)
-        if let existing = identityMap[key] { return existing }
+        if let existing = identityMap[key] {
+            return existing
+        }
         let assigned = nextIdentity
         nextIdentity += 1
         identityMap[key] = assigned
@@ -146,9 +152,13 @@ public final class TraceRecorder: @unchecked Sendable {
     }
 
     private func currentThreadLocked() -> LogicalThread {
-        if Thread.isMainThread { return .main }
+        if Thread.isMainThread {
+            return .main
+        }
         let key = ObjectIdentifier(Thread.current)
-        if let existing = workerMap[key] { return .worker(existing) }
+        if let existing = workerMap[key] {
+            return .worker(existing)
+        }
         let assigned = nextWorker
         nextWorker += 1
         workerMap[key] = assigned

@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
-import HaruspecTrace
 import HaruspecMacros
+import HaruspecTrace
 
 /// Baseline implementation — the "golden" behavior every change is verified against.
 ///

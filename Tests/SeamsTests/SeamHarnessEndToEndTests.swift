@@ -1,7 +1,7 @@
-import XCTest
 @testable import HaruspecCore
-@testable import HaruspecTrace
 @testable import HaruspecSeams
+@testable import HaruspecTrace
+import XCTest
 
 /// The whole loop, end to end: the **seam harness feeding the behavioral-diff engine**.
 ///
@@ -14,7 +14,6 @@ import XCTest
 /// bucket) *flows into the output*, so tolerances can't absorb it — only seam replay can. Record once,
 /// replay into both branches, and a code change is isolated against a held-identical environment.
 final class SeamHarnessEndToEndTests: XCTestCase {
-
     private static let sessionStarted = Notification.Name("SessionStarted")
     private static let checkoutCompleted = Notification.Name("CheckoutCompleted")
     private static let names: Set<String> = ["SessionStarted", "CheckoutCompleted"]
@@ -32,9 +31,9 @@ final class SeamHarnessEndToEndTests: XCTestCase {
         let defaults = SeamDefaults(cassette: cassette)
 
         TraceContext.$current.withValue(recorder) {
-            let startedAtMicros = Int(clock.now() * 1_000_000)                    // seam: time → output
+            let startedAtMicros = Int(clock.now() * 1_000_000) // seam: time → output
             let region = defaults.string(forKey: "region", live: { "US" }) ?? "?" // seam: config
-            let bucket = Int.random(in: 0..<100, using: &rng)                     // seam: randomness (A/B)
+            let bucket = Int.random(in: 0 ..< 100, using: &rng) // seam: randomness (A/B)
 
             center.post(name: Self.sessionStarted, object: nil,
                         userInfo: ["region": region, "startedAt": startedAtMicros])

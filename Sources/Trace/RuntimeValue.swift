@@ -1,6 +1,6 @@
 import Foundation
-import ObjectiveC
 import HaruspecCore
+import ObjectiveC
 
 /// Best-effort conversion of a runtime `Any` into a `CanonicalValue`.
 ///
@@ -29,7 +29,9 @@ public enum RuntimeValue {
         // NSNumber first: it subsumes bridged Swift Bool/Int/Double and disambiguates them by type,
         // avoiding the classic "5 as? Bool == true" bridging trap.
         case let number as NSNumber:
-            if CFGetTypeID(number) == CFBooleanGetTypeID() { return .bool(number.boolValue) }
+            if CFGetTypeID(number) == CFBooleanGetTypeID() {
+                return .bool(number.boolValue)
+            }
             switch String(cString: number.objCType) {
             case "f", "d": return .double(number.doubleValue)
             default: return .int(number.int64Value)
@@ -37,10 +39,13 @@ public enum RuntimeValue {
 
         case let string as String:
             return .string(string)
+
         case let array as [Any]:
             return .array(array.map { canonical($0, depth: depth, visited: visited) })
+
         case let dict as [String: Any]:
             return .object(dict.mapValues { canonical($0, depth: depth, visited: visited) })
+
         case let dict as [AnyHashable: Any]:
             return .object(Dictionary(uniqueKeysWithValues: dict.map {
                 (String(describing: $0.key), canonical($0.value, depth: depth, visited: visited))
@@ -91,8 +96,8 @@ public enum RuntimeValue {
         while let current = cls, current != NSObject.self {
             var count: UInt32 = 0
             if let list = class_copyPropertyList(current, &count) {
-                for i in 0..<Int(count) {
-                    let name = String(cString: property_getName(list[i]))
+                for index in 0 ..< Int(count) {
+                    let name = String(cString: property_getName(list[index]))
                     let value = object.value(forKey: name)
                     result[name] = value.map { canonical($0, depth: depth + 1, visited: visited) } ?? .null
                 }

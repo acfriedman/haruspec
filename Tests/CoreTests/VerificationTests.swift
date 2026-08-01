@@ -1,22 +1,21 @@
-import XCTest
 @testable import HaruspecCore
+import XCTest
 
 /// The three-tier verdict lives on `VerificationResult`, which composes a pure `TraceDiff` with a
 /// `Coverage` signal. These tests pin the soundness core — the `resolve` downgrade rule — against
 /// hand-built diffs + coverage, no capture or replay needed. The one law under test: **never emit a
 /// false EQUIVALENT**; an uncovered surface downgrades to CANNOT-VERIFY, a real divergence stands.
 final class VerificationTests: XCTestCase {
-
     private func diff(_ verdict: TraceDiff.Verdict, _ divergences: [Divergence] = []) -> TraceDiff {
         TraceDiff(verdict: verdict, baselineName: "base", candidateName: "cand", divergences: divergences)
     }
 
     // Complete: both declared seams exercised cleanly, no gaps.
     private let complete = Coverage(declared: ["clock", "rng"], exercised: ["clock", "rng"], gaps: [])
-    // A live fallback (miss) on `rng` — isolation broke.
+    /// A live fallback (miss) on `rng` — isolation broke.
     private let missGap = Coverage(declared: ["clock", "rng"], exercised: ["clock"],
                                    gaps: [Coverage.Gap(boundary: "rng", ordinal: 2, reason: .unrecorded)])
-    // A declared seam the replay never reached — lowers the fraction, but no live fallback.
+    /// A declared seam the replay never reached — lowers the fraction, but no live fallback.
     private let unexercised = Coverage(declared: ["clock", "rng"], exercised: ["clock"],
                                        gaps: [Coverage.Gap(boundary: "rng", reason: .unexercised)])
 

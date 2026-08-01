@@ -1,5 +1,5 @@
-import XCTest
 @testable import HaruspecCore
+import XCTest
 
 /// `VolatileField` addressing: the typed factories, scoped matching, and the JSON forms
 /// (bare string ⇄ scoped object).
@@ -51,16 +51,16 @@ final class ToleranceSpecTests: XCTestCase {
         XCTAssertEqual(spec.volatileFields, [
             .key("orderID"),
             .key("id", inEvent: "checkout"),
-            .path("receipt.issuedAt", inEvent: "checkout"),
+            .path("receipt.issuedAt", inEvent: "checkout")
         ])
     }
 
     func testJSONRejectsMalformedRules() {
         for bad in [
             #"{"volatileFields": [{"key": "orderID", "path": "receipt"}]}"#, // both coordinates
-            #"{"volatileFields": [{"label": "checkout"}]}"#,                 // neither coordinate
-            #"{"volatileFields": [{"path": ""}]}"#,                          // empty path
-            #"{"volatileFields": [{"path": "receipt..issuedAt"}]}"#,         // empty component
+            #"{"volatileFields": [{"label": "checkout"}]}"#, // neither coordinate
+            #"{"volatileFields": [{"path": ""}]}"#, // empty path
+            #"{"volatileFields": [{"path": "receipt..issuedAt"}]}"# // empty component
         ] {
             XCTAssertThrowsError(try JSONDecoder().decode(ToleranceSpec.self, from: Data(bad.utf8)),
                                  bad)

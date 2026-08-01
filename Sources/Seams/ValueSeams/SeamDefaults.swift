@@ -42,5 +42,7 @@ public final class SeamDefaults: @unchecked Sendable {
         return writes
     }
 
-    private func track(_ key: String) -> String { "\(seam).\(key)" }
+    private func track(_ key: String) -> String {
+        "\(seam).\(key)"
+    }
 }

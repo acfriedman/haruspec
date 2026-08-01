@@ -1,11 +1,10 @@
-import XCTest
 @testable import HaruspecCore
+import XCTest
 
 /// `IntentSpec` is the symmetric complement to `ToleranceSpec`: it reclassifies *declared* divergences
 /// as `.intended` (non-gating) so an extension-mode verdict gates only on the residual `.collateral`
 /// ones. These tests pin the classification logic against hand-built divergences — no capture needed.
 final class IntentSpecTests: XCTestCase {
-
     private func diff(_ divergences: [Divergence]) -> TraceDiff {
         TraceDiff(verdict: divergences.contains(where: \.isGating) ? .diverged : .equivalent,
                   baselineName: "b", candidateName: "c", divergences: divergences)
@@ -33,7 +32,7 @@ final class IntentSpecTests: XCTestCase {
     func testUndeclaredChangeStaysCollateralAndGates() {
         let classified = diff([
             d(.unexpectedEvent, "LoyaltyPointsEarned"),
-            d(.missingEvent, "CartDidChange"),
+            d(.missingEvent, "CartDidChange")
         ]).classified(against: IntentSpec(expectedNewEvents: ["LoyaltyPointsEarned"]))
 
         XCTAssertFalse(classified.isEquivalent, "the undeclared dropped notification still gates")
@@ -47,7 +46,7 @@ final class IntentSpecTests: XCTestCase {
     func testIntentIsFieldSpecific() {
         let classified = diff([
             d(.valueMismatch, "CheckoutDidComplete", "pointsEarned: baseline=null candidate=25"),
-            d(.valueMismatch, "CheckoutDidComplete", "totalCents: baseline=2525 candidate=2526"),
+            d(.valueMismatch, "CheckoutDidComplete", "totalCents: baseline=2525 candidate=2526")
         ]).classified(against: IntentSpec(expectedValueChanges: ["CheckoutDidComplete": ["pointsEarned"]]))
 
         XCTAssertEqual(classified.intendedCount, 1, "only pointsEarned was declared")
@@ -64,7 +63,7 @@ final class IntentSpecTests: XCTestCase {
     func testReorderAndTimingAreNotYetDeclarable() {
         let classified = diff([
             d(.reordered, "CartDidChange"),
-            d(.timingRegression, "CartService.checkout"),
+            d(.timingRegression, "CartService.checkout")
         ]).classified(against: IntentSpec(expectedNewEvents: ["CartDidChange"],
                                           expectedValueChanges: ["CartService.checkout": []]))
         XCTAssertEqual(classified.collateralCount, 2, "reorder/timing intent is not expressible yet")

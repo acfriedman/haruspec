@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
-import HaruspecTrace
 import HaruspecSeams
+import HaruspecTrace
 
 // The Continuous (PR) shape: one class, two *builds*. The Campaign shape (`verify(against:)`) diffs two
 // implementations coexisting as types in one build; a PR has only one — base and branch are separate
@@ -69,11 +69,21 @@ public extension ScenarioPlan {
         return encoder
     }
 
-    func jsonData() throws -> Data { try Self.canonicalEncoder().encode(self) }
-    func write(to url: URL) throws { try jsonData().write(to: url) }
+    func jsonData() throws -> Data {
+        try Self.canonicalEncoder().encode(self)
+    }
 
-    init(jsonData: Data) throws { self = try JSONDecoder().decode(ScenarioPlan.self, from: jsonData) }
-    init(contentsOf url: URL) throws { try self.init(jsonData: Data(contentsOf: url)) }
+    func write(to url: URL) throws {
+        try jsonData().write(to: url)
+    }
+
+    init(jsonData: Data) throws {
+        self = try JSONDecoder().decode(ScenarioPlan.self, from: jsonData)
+    }
+
+    init(contentsOf url: URL) throws {
+        try self.init(jsonData: Data(contentsOf: url))
+    }
 }
 
 // MARK: - Scope selection
@@ -160,7 +170,9 @@ public extension Scenario {
                                               tolerances: tolerances)
                 .classified(against: intent)
             replays.append(replay)
-            if representative == nil { representative = diff }
+            if representative == nil {
+                representative = diff
+            }
 
             guard diff.isEquivalent else {
                 let coverage = coverage(replays: [replay], domainHeld: false,

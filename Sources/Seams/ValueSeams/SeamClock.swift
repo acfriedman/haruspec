@@ -21,8 +21,12 @@ public struct SeamClock {
     }
 
     /// Seconds since the epoch — recorded on the golden run, replayed identically thereafter.
-    public func now() -> Double { cassette.double(seam: seam, live: live) }
+    public func now() -> Double {
+        cassette.double(seam: seam, live: live)
+    }
 
     /// A `Date` view of `now()`, for code that wants the Foundation type.
-    public func date() -> Date { Date(timeIntervalSince1970: now()) }
+    public func date() -> Date {
+        Date(timeIntervalSince1970: now())
+    }
 }

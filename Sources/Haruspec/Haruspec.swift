@@ -21,7 +21,7 @@
 // which references both `Haruspec.marker(...)` and the `Scenario` types under a lone `import Haruspec`.
 
 @_exported import HaruspecCore
-@_exported import HaruspecTrace
 @_exported import HaruspecMacros
-@_exported import HaruspecSeams
 @_exported import HaruspecScenario
+@_exported import HaruspecSeams
+@_exported import HaruspecTrace

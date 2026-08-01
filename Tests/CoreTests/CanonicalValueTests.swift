@@ -1,19 +1,19 @@
-import XCTest
 @testable import HaruspecCore
+import XCTest
 
 final class CanonicalValueTests: XCTestCase {
     func testCanonicalStringSortsObjectKeys() {
-        let a: CanonicalValue = ["b": 2, "a": 1, "c": 3]
-        let b: CanonicalValue = ["c": 3, "a": 1, "b": 2]
+        let original: CanonicalValue = ["b": 2, "a": 1, "c": 3]
+        let reordered: CanonicalValue = ["c": 3, "a": 1, "b": 2]
         // Same structure, different insertion order → identical canonical text.
-        XCTAssertEqual(a.canonicalString, b.canonicalString)
-        XCTAssertEqual(a.canonicalString, "{\"a\":1,\"b\":2,\"c\":3}")
+        XCTAssertEqual(original.canonicalString, reordered.canonicalString)
+        XCTAssertEqual(original.canonicalString, "{\"a\":1,\"b\":2,\"c\":3}")
     }
 
     func testJSONRoundTrip() throws {
         let value: CanonicalValue = [
             "n": .null, "flag": true, "count": 7, "ratio": 1.5,
-            "name": "cart", "tags": ["a", "b"], "nested": ["x": 1],
+            "name": "cart", "tags": ["a", "b"], "nested": ["x": 1]
         ]
         let data = try JSONEncoder().encode(value)
         let decoded = try JSONDecoder().decode(CanonicalValue.self, from: data)

@@ -6,7 +6,7 @@ import HaruspecCore
 // wraps `HTML`'s page skeleton + divergence cards with the stat row and the minimal-counterexample
 // hero that only a scenario run can produce (orderings explored, failing order, varied seam values).
 //
-// TODO (stretch — richest view): a full side-by-side *event timeline* of the baseline vs candidate traces
+// TODO: (stretch — richest view): a full side-by-side *event timeline* of the baseline vs candidate traces
 // with divergent rows highlighted. Blocked on Haruspec exposing the two underlying `Trace`s on
 // `ScenarioVerdict` (only `diff.divergences` is public today). To do it, add the pair of traces to the
 // verdict, then render a `timelineSection(baseline:candidate:)` in `HTML` next to `divergenceSection`.
@@ -22,18 +22,18 @@ public extension ScenarioVerdict {
             HTML.tile(label: "Verdict", value: HTML.shortVerdict(verdict), accent: HTML.accent(verdict)),
             HTML.tile(label: "Orderings explored", value: "\(orderingsExplored)"),
             HTML.tile(label: "Divergences", value: "\(diff.divergences.count)",
-                            accent: diff.divergences.isEmpty ? "ok" : "bad"),
+                      accent: diff.divergences.isEmpty ? "ok" : "bad")
         ]
         if let fraction = coverage.fraction {
             tiles.append(HTML.tile(label: "Coverage",
-                                         value: "\(Int((fraction * 100).rounded()))% of \(coverage.declared.count)",
-                                         accent: coverage.unrecordedReach.isEmpty ? "ok" : "bad"))
+                                   value: "\(Int((fraction * 100).rounded()))% of \(coverage.declared.count)",
+                                   accent: coverage.unrecordedReach.isEmpty ? "ok" : "bad"))
         }
         let seams = counterexampleSeamPairs
         if !seams.isEmpty {
             tiles.append(HTML.tile(label: "Counterexample",
-                                         value: seams.map { "\($0.key)=\($0.value)" }.joined(separator: " · "),
-                                         mono: true))
+                                   value: seams.map { "\($0.key)=\($0.value)" }.joined(separator: " · "),
+                                   mono: true))
         }
 
         let body: String = diff.divergences.isEmpty
@@ -44,7 +44,7 @@ public extension ScenarioVerdict {
             HTML.hero(verdict, title: name, baseline: diff.baselineName, candidate: name),
             HTML.statSection(tiles),
             HTML.counterexampleSection(seams: seams, order: failingOrder),
-            body,
+            body
         ])
     }
 
@@ -56,6 +56,7 @@ public extension ScenarioVerdict {
         return HTML.cleanSection(
             summary: "Behavior matched across everything explored",
             detail: "All \(orderingsExplored) call ordering\(plural) — and every generated seam value — produced "
-                + "a byte-for-byte identical behavior trace (within declared tolerances). No divergences.")
+                + "a byte-for-byte identical behavior trace (within declared tolerances). No divergences."
+        )
     }
 }

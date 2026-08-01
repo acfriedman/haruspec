@@ -1,7 +1,7 @@
-import XCTest
 import Foundation
 @testable import HaruspecCore
 @testable import HaruspecTrace
+import XCTest
 
 final class RuntimeValueTests: XCTestCase {
     func testDisambiguatesBridgedNumbers() {
@@ -18,15 +18,15 @@ final class RuntimeValueTests: XCTestCase {
                        ["a": 1, "b": "two"])
     }
 
-    // A non-Encodable Swift struct is canonicalized structurally by reflection — no `Codable`
-    // conformance (and no hand-written DTO mirror) required to get a diffable payload.
+    /// A non-Encodable Swift struct is canonicalized structurally by reflection — no `Codable`
+    /// conformance (and no hand-written DTO mirror) required to get a diffable payload.
     func testCanonicalizesNonEncodableStructByReflection() {
-        struct Plain { let x = 1; let name = "a" }
-        XCTAssertEqual(RuntimeValue.canonical(Plain()), ["x": 1, "name": "a"])
+        struct Plain { let count = 1; let name = "a" }
+        XCTAssertEqual(RuntimeValue.canonical(Plain()), ["count": 1, "name": "a"])
     }
 
-    // A plain Obj-C object (no Encodable, no Codable mirror) is walked via its runtime property
-    // list + KVC — this is the tax the reflection fallback deletes for migration authors.
+    /// A plain Obj-C object (no Encodable, no Codable mirror) is walked via its runtime property
+    /// list + KVC — this is the tax the reflection fallback deletes for migration authors.
     func testCanonicalizesObjCObjectByPropertyList() {
         let receipt = Receipt()
         receipt.orderID = "A-100"
@@ -34,7 +34,7 @@ final class RuntimeValueTests: XCTestCase {
         XCTAssertEqual(RuntimeValue.canonical(receipt), ["orderID": "A-100", "total": 42])
     }
 
-    // Reflection recurses: nested objects and unwrapped optionals become nested structure.
+    /// Reflection recurses: nested objects and unwrapped optionals become nested structure.
     func testCanonicalizesNestedStructureAndUnwrapsOptionals() {
         struct Line { let sku = "X"; let qty = 2 }
         struct Order { let line = Line(); let note: String? = nil; let ref: Int? = 7 }
@@ -104,9 +104,9 @@ final class NotificationInterceptorTests: XCTestCase {
         let recorderB = TraceRecorder(name: "b")
         let centerA = NotificationCenter()
         let centerB = NotificationCenter()
-        let a = NotificationInterceptor(recorder: recorderA, center: centerA, names: ["Ping"])
-        let b = NotificationInterceptor(recorder: recorderB, center: centerB, names: ["Ping"])
-        a.start(); b.start()
+        let interceptorA = NotificationInterceptor(recorder: recorderA, center: centerA, names: ["Ping"])
+        let interceptorB = NotificationInterceptor(recorder: recorderB, center: centerB, names: ["Ping"])
+        interceptorA.start(); interceptorB.start()
 
         centerA.post(name: Notification.Name("Ping"), object: nil, userInfo: ["src": 1]) // only A observes centerA
 
@@ -117,7 +117,7 @@ final class NotificationInterceptorTests: XCTestCase {
         }
         done.wait()
 
-        a.stop(); b.stop()
+        interceptorA.stop(); interceptorB.stop()
 
         XCTAssertEqual(recorderA.trace().events.map(\.label), ["Ping"], "A's window sees only its own center")
         XCTAssertEqual(recorderA.trace().events.first?.payload, ["src": 1])

@@ -1,0 +1,12 @@
+# Style decisions 2026-08-01: defaults on purpose — identifier_name (min 3 chars),
+# line_length (120 warning), and trailing_comma (forbidden) are all deliberate.
+excluded:
+  - .build
+
+identifier_name:
+  excluded:
+    # `id` is idiomatic Swift (Identifiable, JSON-RPC ids).
+    - id
+    # Capitalized DSL factory functions that read like declarations (deliberate idiom).
+    - Seam
+    - Ordering

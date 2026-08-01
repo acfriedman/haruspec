@@ -1,7 +1,7 @@
-import XCTest
 @testable import HaruspecCore
 @testable import HaruspecSeams
 import LegacyObjC
+import XCTest
 
 /// The swizzle seam against a **genuine Objective-C singleton** (`LegacyObjC/LegacyObjCManager.m`) — the
 /// case the earlier `SingletonSeamTests` only *simulated* with a Swift `@objc dynamic` fixture. The
@@ -21,7 +21,8 @@ final class ObjCSeamTests: XCTestCase {
     private static let swizzled: Bool = SeamSwizzle.exchange(
         LegacyObjCManager.self,
         #selector(LegacyObjCManager.deviceToken),
-        with: #selector(LegacyObjCManager.seam_deviceToken))
+        with: #selector(LegacyObjCManager.seam_deviceToken)
+    )
 
     override func setUp() {
         super.setUp()

@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
-import HaruspecTrace
 import HaruspecSeams
+import HaruspecTrace
 
 /// The outcome of a scenario run: the three-tier verdict *with the coverage it was measured over*, how
 /// much was explored, and — for an order-dependent divergence — the minimal failing call sequence.
@@ -16,23 +16,31 @@ public struct ScenarioVerdict: Codable, Sendable {
     /// The generated input that triggered a divergence (its varied seam values are the counterexample).
     public let counterexample: CassetteData?
 
-    public var verdict: TraceDiff.Verdict { result.verdict }
-    public var diff: TraceDiff { result.diff }
+    public var verdict: TraceDiff.Verdict {
+        result.verdict
+    }
+
+    public var diff: TraceDiff {
+        result.diff
+    }
+
     /// The declared interrogation surface (`op:` boundaries + seams) and how much of it was exercised.
-    public var coverage: Coverage { result.coverage }
+    public var coverage: Coverage {
+        result.coverage
+    }
 
     /// A compact rendering built from the diff's public surface (a caller / LLM would print this).
     public func report() -> String {
-        let banner: String
-        switch verdict {
-        case .equivalent:   banner = "✅ EQUIVALENT"
-        case .diverged:     banner = "❌ DIVERGED"
-        case .cannotVerify: banner = "⚠️ CANNOT-VERIFY"
+        let banner = switch verdict {
+        case .equivalent: "✅ EQUIVALENT"
+        case .diverged: "❌ DIVERGED"
+        case .cannotVerify: "⚠️ CANNOT-VERIFY"
         }
         var lines = ["\(banner)  \(diff.baselineName) → \(diff.candidateName)",
                      "  orderings explored: \(orderingsExplored)"]
         if let fraction = coverage.fraction {
-            var line = "  coverage: \(Int((fraction * 100).rounded()))% of \(coverage.declared.count) declared boundaries"
+            var line = "  coverage: \(Int((fraction * 100).rounded()))% "
+                + "of \(coverage.declared.count) declared boundaries"
             if let domain = coverage.domainFraction, domain > 0 {
                 line += " · domain-swept \(Int((domain * 100).rounded()))%"
             }
@@ -45,9 +53,9 @@ public struct ScenarioVerdict: Codable, Sendable {
             lines.append("  behavior matches across everything explored (0 divergences)")
         } else {
             lines.append("  \(diff.divergences.count) divergence(s):")
-            for d in diff.divergences {
-                let mark = d.classification == .intended ? "✓ intended " : "≠ "
-                lines.append("    \(mark)\(d.label): \(d.detail)")
+            for divergence in diff.divergences {
+                let mark = divergence.classification == .intended ? "✓ intended " : "≠ "
+                lines.append("    \(mark)\(divergence.label): \(divergence.detail)")
             }
         }
         if let failing = failingOrder {
@@ -65,8 +73,14 @@ public struct ScenarioVerdict: Codable, Sendable {
     var counterexampleSeamPairs: [(key: String, value: String)] {
         guard let tracks = counterexample?.tracks else { return [] }
         let ints = tracks.compactMapValues { values -> String? in
-            let vs = values.compactMap { if case let .int(v) = $0 { return String(v) } else { return nil } }
-            return vs.isEmpty ? nil : vs.joined(separator: ",")
+            let rendered = values.compactMap {
+                if case let .int(intValue) = $0 {
+                    String(intValue)
+                } else {
+                    nil
+                }
+            }
+            return rendered.isEmpty ? nil : rendered.joined(separator: ",")
         }
         return ints.sorted { $0.key < $1.key }.map { (key: $0.key, value: $0.value) }
     }
@@ -128,7 +142,9 @@ public extension Scenario {
         let context = SeamContext(notifications: center, cassette: cassette)
         let system = make(context)
         TraceContext.$current.withValue(recorder) {
-            for op in order { op.action(system, context) }
+            for operation in order {
+                operation.action(system, context)
+            }
         }
         return recorder.trace()
     }
@@ -168,7 +184,9 @@ public extension Scenario {
             exercised.formUnion(seams.exercised)
             for gap in seams.gaps where gap.reason == .unrecorded {
                 let key = "\(gap.boundary)#\(gap.ordinal ?? -1)"
-                if seenGaps.insert(key).inserted { gaps.append(gap) }
+                if seenGaps.insert(key).inserted {
+                    gaps.append(gap)
+                }
             }
         }
         let missedSeams = Set(gaps.map(\.boundary))
@@ -193,14 +211,14 @@ public extension Scenario {
     /// order that still diverges (the "localize" the north star asks for, applied to sequencing).
     private func shrink(candidate: @escaping (SeamContext) -> S, failing: [Op<S>], cassette: CassetteData) -> [Op<S>] {
         var minimal = failing
-        var i = 0
-        while i < minimal.count {
+        var index = 0
+        while index < minimal.count {
             var trial = minimal
-            trial.remove(at: i)
+            trial.remove(at: index)
             if !trial.isEmpty, diverges(candidate: candidate, order: trial, cassette: cassette) != nil {
-                minimal = trial            // op wasn't needed to reproduce
+                minimal = trial // op wasn't needed to reproduce
             } else {
-                i += 1
+                index += 1
             }
         }
         return minimal
@@ -212,13 +230,19 @@ public extension Scenario {
 func linearExtensions<S>(_ ops: [Op<S>], max: Int) -> [[Op<S>]] {
     var result: [[Op<S>]] = []
     func recurse(_ placed: [Op<S>], _ remaining: [Op<S>]) {
-        if result.count >= max { return }
-        if remaining.isEmpty { result.append(placed); return }
+        if result.count >= max {
+            return
+        }
+        if remaining.isEmpty {
+            result.append(placed); return
+        }
         let done = Set(placed.map(\.label))
-        for op in remaining {
-            guard op.afters.allSatisfy(done.contains) else { continue }
-            if op.mustBeLast && remaining.count > 1 { continue }
-            recurse(placed + [op], remaining.filter { $0.label != op.label })
+        for operation in remaining {
+            guard operation.afters.allSatisfy(done.contains) else { continue }
+            if operation.mustBeLast, remaining.count > 1 {
+                continue
+            }
+            recurse(placed + [operation], remaining.filter { $0.label != operation.label })
         }
     }
     recurse([], ops)

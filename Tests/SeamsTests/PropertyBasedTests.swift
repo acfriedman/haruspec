@@ -1,7 +1,7 @@
-import XCTest
 @testable import HaruspecCore
-@testable import HaruspecTrace
 @testable import HaruspecSeams
+@testable import HaruspecTrace
+import XCTest
 
 /// Property-based generation at the seam, differential flavor. A single recorded cassette proves
 /// equivalence on ONE path; a path-dependent regression the golden input never triggers slips through as
@@ -9,7 +9,6 @@ import XCTest
 /// it — the `SeamCoverageTests` money-shot one level deeper: a *value*-dependent miss, not an unrecorded
 /// boundary — and a held run *credits domain coverage*, raising the reported surface past a single point.
 final class PropertyBasedTests: XCTestCase {
-
     private static let checkoutCompleted = Notification.Name("CheckoutCompleted")
 
     /// "Production" checkout. Reads a `discount` value seam (the same `cassette.int` primitive `SeamClock`
@@ -23,8 +22,8 @@ final class PropertyBasedTests: XCTestCase {
         interceptor.start(); defer { interceptor.stop() }
 
         TraceContext.$current.withValue(recorder) {
-            let discount = cassette.int(seam: "discount", live: { 100 })  // seam → output
-            _ = cassette.int(seam: "noise", live: { 7 })                  // seam read but irrelevant to behavior
+            let discount = cassette.int(seam: "discount", live: { 100 }) // seam → output
+            _ = cassette.int(seam: "noise", live: { 7 }) // seam read but irrelevant to behavior
             let result = total(subtotal, discount)
             center.post(name: Self.checkoutCompleted, object: nil, userInfo: ["totalCents": Int(result)])
             Haruspec.marker("checkout.completed")
@@ -32,10 +31,17 @@ final class PropertyBasedTests: XCTestCase {
         return recorder.trace()
     }
 
-    // Pricing branches: baseline, a behavior-preserving refactor, and a path-dependent regression.
-    private func baseline(_ subtotal: Int64, _ discount: Int64) -> Int64 { subtotal - discount }
-    private func refactored(_ subtotal: Int64, _ discount: Int64) -> Int64 { subtotal + (-discount) }  // ≡ baseline
-    private func clamped(_ subtotal: Int64, _ discount: Int64) -> Int64 { max(0, subtotal - discount) } // bites when discount > subtotal
+    /// Pricing branches: baseline, a behavior-preserving refactor, and a path-dependent regression.
+    private func baseline(_ subtotal: Int64, _ discount: Int64) -> Int64 {
+        subtotal - discount
+    }
+
+    private func refactored(_ subtotal: Int64, _ discount: Int64) -> Int64 {
+        subtotal + -discount
+    } // ≡ baseline
+    private func clamped(_ subtotal: Int64, _ discount: Int64) -> Int64 {
+        max(0, subtotal - discount)
+    } // bites when discount > subtotal
 
     private func record(_ subtotal: Int64) -> CassetteData {
         let recording = Cassette()
@@ -45,7 +51,7 @@ final class PropertyBasedTests: XCTestCase {
 
     /// The gap being closed: on the one recorded path, the regression is invisible.
     func testSingleCassetteMissesThePathDependentRegression() {
-        let tape = record(1000)  // golden discount = 100 → total 900
+        let tape = record(1000) // golden discount = 100 → total 900
 
         // Baseline vs the clamp on the recorded discount: 100 ≤ 1000, so the clamp never fires → the
         // trace diff is EQUIVALENT. The bug exists but this single input can't see it.
@@ -59,11 +65,12 @@ final class PropertyBasedTests: XCTestCase {
     func testPropertyGenerationCatchesAndLocalizesTheRegression() throws {
         let tape = record(1000)
         let property = DifferentialProperty(golden: tape) { cassette, branch in
-            self.runCheckout(cassette: cassette, subtotal: 1000, total: branch == .candidate ? self.clamped : self.baseline)
+            self.runCheckout(cassette: cassette, subtotal: 1000,
+                             total: branch == .candidate ? self.clamped : self.baseline)
         }
 
         let result = property.check(count: 64,
-                                    varying: ["discount": .int(0...2000), "noise": .int(0...1000)],
+                                    varying: ["discount": .int(0 ... 2000), "noise": .int(0 ... 1000)],
                                     seed: 42)
 
         XCTAssertFalse(result.heldOverSurface, "some generated discount must trigger the clamp divergence")
@@ -83,7 +90,7 @@ final class PropertyBasedTests: XCTestCase {
 
         // A failed run credits no domain coverage — you found a bug, not a cleared surface.
         XCTAssertTrue(result.coverage.domainExercised.isEmpty)
-        XCTAssertEqual(property.verify(count: 64, varying: ["discount": .int(0...2000)], seed: 42).verdict, .diverged)
+        XCTAssertEqual(property.verify(count: 64, varying: ["discount": .int(0 ... 2000)], seed: 42).verdict, .diverged)
     }
 
     /// The loop closes: a behavior-preserving refactor holds over the domain, so the property run
@@ -91,10 +98,11 @@ final class PropertyBasedTests: XCTestCase {
     func testHeldPropertyRunCreditsDomainCoverage() {
         let tape = record(1000)
         let property = DifferentialProperty(golden: tape) { cassette, branch in
-            self.runCheckout(cassette: cassette, subtotal: 1000, total: branch == .candidate ? self.refactored : self.baseline)
+            self.runCheckout(cassette: cassette, subtotal: 1000,
+                             total: branch == .candidate ? self.refactored : self.baseline)
         }
 
-        let verified = property.verify(count: 64, varying: ["discount": .int(0...2000)], seed: 1)
+        let verified = property.verify(count: 64, varying: ["discount": .int(0 ... 2000)], seed: 1)
 
         // The refactor is equivalent over the whole domain → a trustworthy EQUIVALENT…
         XCTAssertEqual(verified.verdict, .equivalent)
@@ -112,6 +120,12 @@ final class PropertyBasedTests: XCTestCase {
     }
 
     private func intTrack(_ data: CassetteData, _ seam: String) -> [Int64]? {
-        data.tracks[seam]?.compactMap { if case let .int(v) = $0 { return v } else { return nil } }
+        data.tracks[seam]?.compactMap {
+            if case let .int(value) = $0 {
+                value
+            } else {
+                nil
+            }
+        }
     }
 }
