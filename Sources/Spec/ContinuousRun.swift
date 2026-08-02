@@ -39,6 +39,14 @@ public enum ContinuousRun: Sendable {
     public static let planPathKey = "HARUSPEC_PLAN_PATH"
     public static let resultsDirectoryKey = "HARUSPEC_RESULTS_DIR"
 
+    /// Which side this run is, for callers that selected on the mode before assembling the run.
+    public var mode: ContinuousMode {
+        switch self {
+        case .record: .record
+        case .replay: .replay
+        }
+    }
+
     /// `nil` when no mode is selected, which disables the suite. A selected mode with a missing
     /// destination throws instead: paths are always explicit, never defaulted.
     public static func fromEnvironment(
