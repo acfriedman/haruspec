@@ -125,6 +125,50 @@ final class SpecCatalogTests: XCTestCase {
         XCTAssertTrue(replayed.succeeded, replayed.summary)
     }
 
+    // MARK: One-call checks
+
+    func testCheckPassesWhenACaseEarnsItsDeclaredVerdict() throws {
+        // The counterexample meets its expectation by diverging, so neither case throws.
+        try catalog().check(migrationCase: "promo-cart/RoundBugCart", reportsIn: scratch())
+        try catalog().check(migrationCase: "promo-cart/RefactorCart", reportsIn: scratch())
+    }
+
+    func testCheckThrowsTheReportWhenAnExpectationIsUnmet() {
+        // RefactorCart is faithful, but declared here as a counterexample — so it fails by holding.
+        let mismatched = SpecCatalog(
+            cart("promo-cart")
+                .candidates { Candidate("RefactorCart", expecting: .diverged, makeRefactor) }
+                .entry()
+        )
+
+        XCTAssertThrowsError(try mismatched.check(migrationCase: "promo-cart/RefactorCart")) { error in
+            let failure = error as? SpecCatalog.CheckFailure
+            XCTAssertTrue(
+                failure?.description.hasPrefix("expected diverged, got equivalent") ?? false,
+                failure?.description ?? "\(error)"
+            )
+        }
+    }
+
+    func testCheckNamesTheCaseWhenItIsNoLongerDeclared() {
+        XCTAssertThrowsError(try catalog().check(migrationCase: "promo-cart/Renamed")) { error in
+            XCTAssertEqual(
+                (error as? SpecCatalog.CheckFailure)?.description,
+                "promo-cart/Renamed is no longer declared"
+            )
+        }
+    }
+
+    func testContinuousCheckThrowsWhenNoModeIsSelected() {
+        XCTAssertThrowsError(
+            try catalog().checkContinuous(spec: "promo-cart", environment: [:])
+        ) { error in
+            XCTAssertTrue(
+                (error as? SpecCatalog.CheckFailure)?.description.contains("HARUSPEC_MODE") ?? false
+            )
+        }
+    }
+
     func testAnUndeclaredSpecFailsTheLookup() {
         XCTAssertNil(catalog().runContinuous(spec: "renamed", environment: ["HARUSPEC_MODE": "record"]))
     }

@@ -82,6 +82,48 @@ public struct SpecCatalog {
         return entries.map(\.name).filter { $0 == selected }
     }
 
+    /// A case that didn't hold, carrying the report as its message so a test runner prints the
+    /// verdict rather than a type name.
+    public struct CheckFailure: Error, CustomStringConvertible {
+        public let description: String
+    }
+
+    /// Run one `scenario/candidate` case, print its report, and throw if it didn't earn the verdict
+    /// its candidate declared. The whole body of a migration test case — a test target calls this
+    /// and asserts nothing itself, because there is nothing left to decide.
+    public func check(migrationCase: String, reportsIn directory: URL? = nil) throws {
+        guard let verdict = verify(migrationCase: migrationCase, reportsIn: directory) else {
+            throw CheckFailure(description: "\(migrationCase) is no longer declared")
+        }
+        print("\n─── \(migrationCase) ───\n\(verdict.report())\n\(Self.reportLink(verdict.htmlReportPath))\n")
+        guard verdict.metExpectation else {
+            throw CheckFailure(description: verdict.report())
+        }
+    }
+
+    /// The continuous twin of `check(migrationCase:)`: run the side the environment selects, print
+    /// the verdict, and throw unless it held.
+    public func checkContinuous(
+        spec: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) throws {
+        guard let outcome = runContinuous(spec: spec, environment: environment) else {
+            throw CheckFailure(description: "\(spec) is no longer declared")
+        }
+        print("\n─── \(spec) · continuous ───\n\(outcome.summary)\n\(Self.reportLink(outcome.htmlReportPath))\n")
+        guard outcome.succeeded else {
+            throw CheckFailure(description: outcome.summary)
+        }
+    }
+
+    /// A `file://` line for the rendered report — ⌘-click it in Xcode's console, or `open` it.
+    private static func reportLink(_ path: String?) -> String {
+        guard let path else {
+            return "  📄 (no HTML report written)"
+        }
+        return "  📄 visual report: file://\(path)"
+    }
+
     /// Run the continuous side the environment selects for one spec. `nil` when the name isn't
     /// declared; a selected mode with a missing destination comes back as a failed outcome.
     public func runContinuous(
