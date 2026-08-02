@@ -2,12 +2,14 @@ import Foundation
 import HaruspecCore
 import HaruspecDemo
 import HaruspecMCP
+import HaruspecScenario
 import HaruspecTrace
 
 // A thin, dependency-free CLI over the engine. Subcommands:
 //   haruspec diff <baseline.json> <candidate.json> [--tolerance <spec.json>] [--intent <spec.json>] [--agent] [--json]
 //   haruspec demo [--out <dir>]
 //   haruspec canonicalize <trace.json> [--tolerance <spec.json>] [--out <file.json>]
+//   haruspec report <result.json> [--markdown] [--html <path>] [--agent]
 //
 // Exit codes:  0 ok / equivalent · 1 runtime error · 2 usage error · 3 behavioral divergence ·
 //              4 cannot-verify (the oracle abstained — an uncovered/un-isolable surface).
@@ -87,6 +89,13 @@ USAGE:
 
   haruspec canonicalize <trace.json> [--tolerance <spec.json>] [--out <file.json>]
       Emit the canonical, redacted form of a trace.
+
+  haruspec report <result.json> [--markdown] [--html <path>] [--agent]
+      Render a scenario verdict artifact (the result.json a verify(replaying:) run writes) and exit
+      with its verdict code — the CI gate reads THIS exit code, not the test runner's.
+      --markdown            GitHub-flavored markdown (PR comment / job summary) instead of text.
+      --html <path>         also write the self-contained visual report to <path>.
+      --agent               append the relay guide telling a consuming agent how to report the verdict.
 
   haruspec mcp
       Serve the engine as MCP tools over stdio (verify_behavioral_parity, canonicalize_trace),
@@ -196,6 +205,28 @@ func runCanonicalize(_ rest: [String]) -> Never {
     }
 }
 
+func runReport(_ rest: [String]) -> Never {
+    let (flags, positionals) = parse(rest)
+    guard positionals.count == 1 else { fail("report needs <result.json>\n\n\(usage)", code: .usage) }
+    do {
+        let verdict = try ScenarioVerdict(contentsOf: URL(fileURLWithPath: positionals[0]))
+        if let htmlPath = flags["html"], !htmlPath.isEmpty {
+            try verdict.writeHTMLReport(to: URL(fileURLWithPath: htmlPath))
+            FileHandle.standardError.write(Data("haruspec: wrote HTML report to \(htmlPath)\n".utf8))
+        }
+        let markdown = flags["markdown"] != nil
+        print(markdown ? verdict.markdownReport() : verdict.report())
+        if flags["agent"] != nil {
+            let brief = verdict.result.agentBrief()
+            // In markdown mode the brief is machine-facing text, not prose — fence it.
+            print(markdown ? "\n```text\n\(brief)\n```" : "\n" + brief)
+        }
+        exit(exitCode(for: verdict.verdict).rawValue)
+    } catch {
+        fail("report failed: \(error)", code: .runtime)
+    }
+}
+
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard let command = arguments.first else { print(usage); exit(ExitCode.success.rawValue) }
 let rest = Array(arguments.dropFirst())
@@ -204,6 +235,7 @@ switch command {
 case "diff": runDiff(rest)
 case "demo": runDemo(rest)
 case "canonicalize": runCanonicalize(rest)
+case "report": runReport(rest)
 case "mcp": MCPServer().run()
 case "help", "--help", "-h": print(usage); exit(ExitCode.success.rawValue)
 default: fail("unknown command \"\(command)\"\n\n\(usage)", code: .usage)
