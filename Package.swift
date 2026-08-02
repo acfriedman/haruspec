@@ -68,11 +68,14 @@ let package = Package(
         // The CLI target is `HaruspecCLI` (its product/binary is `haruspec`): a target literally
         // named `haruspec` would differ only in case from the `Haruspec` umbrella module, which collides
         // at the build-artifact layer on case-insensitive filesystems (macOS/Windows).
+        // HaruspecScenario is an internal target dep here (not a product): the `report` subcommand
+        // decodes and renders `ScenarioVerdict` artifacts, which live in the Scenario module.
         .executableTarget(name: "HaruspecCLI", dependencies: [
             "HaruspecCore",
             "HaruspecTrace",
             "HaruspecDemo",
-            "HaruspecMCP"
+            "HaruspecMCP",
+            "HaruspecScenario"
         ], path: "Sources/CLI"),
 
         // The developer-facing Scenario DSL (result-builder + Haruspec.verify). Prototype.
@@ -124,7 +127,10 @@ let package = Package(
             "HaruspecMacros",
             "HaruspecSeams",
             "LegacyObjC"
-        ], path: "Tests/ScenarioTests"),
+        ], path: "Tests/ScenarioTests", resources: [
+            // The committed result.json the decode-compat test and the CLI smoke run render.
+            .copy("Fixtures")
+        ]),
 
         .testTarget(name: "HaruspecMCPTests", dependencies: ["HaruspecMCP", "HaruspecCore"], path: "Tests/MCPTests"),
 

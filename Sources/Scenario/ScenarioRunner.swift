@@ -4,7 +4,9 @@ import HaruspecSeams
 import HaruspecTrace
 
 /// The outcome of a scenario run: the three-tier verdict *with the coverage it was measured over*, how
-/// much was explored, and — for an order-dependent divergence — the minimal failing call sequence.
+/// much was explored, and — for an order-dependent divergence — the failing call sequence: shrunk to
+/// minimal by `verify(against:)`, but the *raw recorded ordering* on `verify(replaying:)`, which never
+/// shrinks (a shrunk variant has no recorded golden to diff against).
 /// `Codable`, so a verify run is writable as a `result.json` artifact a reviewer can read and reproduce.
 public struct ScenarioVerdict: Codable, Sendable {
     /// The diff + coverage pair carrying the *resolved* verdict (see `VerificationResult`): an
