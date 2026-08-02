@@ -133,9 +133,10 @@ instrumentation.
 ## Try it
 
 ```bash
-swift test          # 140 tests: diff primitive, seam harness, coverage, property gen, plan replay, MCP
+swift test          # 166 tests: diff primitive, seam harness, coverage, property gen, plan replay, MCP
 swift run haruspec demo   # capture baseline/refactor/regression, print both verdicts
 swift run haruspec mcp    # serve verify_behavioral_parity + canonicalize_trace as MCP tools (stdio)
+swift run haruspec report result.json --markdown   # render a replay verdict for a PR; exit = the CI gate
 ```
 
 Agents get the same verdict as tools: `haruspec mcp` speaks MCP over stdio, and this repo's

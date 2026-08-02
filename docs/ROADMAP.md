@@ -63,8 +63,13 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   boundary: an op the current build can't replay (rename drift) or a seam read past the recording is an
   `.unrecorded` coverage gap → CANNOT-VERIFY, never a silent skip. `--scope` selection rides the
   trace-derived `coveredClasses` index (`covers(anyOf:)`), so CI re-runs only plans whose recorded reach
-  intersects the diff. *Deferred (automation layer):* `git diff` → scope derivation, a scenario CLI
-  subcommand, CI artifact collection.
+  intersects the diff. *Automation layer landed 2026-08-01:* committed gzip plan artifacts
+  (deterministic framing + a validated `schemaVersion` gate), `ScenarioVerdict` file helpers +
+  `markdownReport()`, the `haruspec report` subcommand (render + exit-code gate), and the example
+  app's per-PR replay workflow with sticky verdict comments and a push-to-main freshness guard —
+  first live catch: a one-cent "behavior-neutral" refactor
+  ([example-xcode-migration PR #5](https://github.com/acfriedman/example-xcode-migration/pull/5)).
+  *Still deferred:* `git diff` → scope derivation and a scenario catalog/discovery subcommand.
 - ⏳ **Richer narration + surprise score** — LLM-authored per-divergence explanations (what changed,
   where it originates, whether it's plausibly the feature) and a ranked surprise score, beyond the
   current deterministic labels + relay guide.
