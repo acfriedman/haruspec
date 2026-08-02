@@ -72,7 +72,11 @@ public struct TracedMethodMacro: BodyMacro {
             innerBody: original,
             timed: timed
         )
-        return Array(CodeBlockItemListSyntax("\(raw: body)"))
+
+        // Instrument only under #if DEBUG, so `@Traced` can sit on a type that ships. Release keeps
+        // the method's own statements verbatim — no shim, no recorder lookup, nothing to strip.
+        let guarded = "#if DEBUG\n\(body)\n#else\n\(original)\n#endif"
+        return Array(CodeBlockItemListSyntax("\(raw: guarded)"))
     }
 }
 

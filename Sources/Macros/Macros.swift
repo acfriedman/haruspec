@@ -17,6 +17,12 @@
 ///
 /// With no argument the type's own name is used. Pass `timing: true` to also record a signpost
 /// interval for *every* method; for per-method timing use `@Timed` instead.
+///
+/// **Safe on code that ships.** The instrumentation is emitted inside `#if DEBUG`; a release build
+/// keeps each method's own statements verbatim — no shim, no recorder lookup, nothing to strip. So
+/// the attribute goes on the real type rather than a DEBUG-only copy of it, and a migration
+/// candidate stays one unconditional class. (The module is still linked in release; only the
+/// generated behavior is gated.)
 @attached(memberAttribute)
 public macro Traced(_ typeLabel: String? = nil, timing: Bool = false) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedMacro")
