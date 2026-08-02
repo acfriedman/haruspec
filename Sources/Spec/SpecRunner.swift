@@ -102,10 +102,11 @@ public extension Spec {
     func verify(against candidate: @escaping (SeamContext) -> S) -> SpecVerdict {
         // Golden: the declared order under live seams — the template every variation is derived from.
         let recording = Cassette()
-        _ = capture(make: makeSystem, order: operations, cassette: recording)
+        _ = capture(make: makeSystem, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
 
-        let orderings = exploreOrdering ? linearExtensions(operations, max: maxOrderings) : [operations]
+        let orderings = exploreOrdering ? linearExtensions(operations, max: maxOrderings, repeating: orderingRepeats) :
+            [operations]
 
         for order in orderings {
             let cassettes = seamDomains.isEmpty
@@ -141,6 +142,21 @@ public extension Spec {
     }
 
     // MARK: - Hidden machinery
+
+    /// The longest call sequence exploration can produce: the declared ops, each repeated as far as
+    /// `Ordering(repeating:)` allows. The golden cassette is recorded over *this* rather than the
+    /// declared order, so every explored ordering has enough recorded seam readings — a shorter one
+    /// just consumes a prefix of each track. Recording over the declared order instead would leave a
+    /// repeated op's second read with nothing to replay, which surfaces as an `.unrecorded` gap and
+    /// downgrades an otherwise-equivalent verdict to CANNOT-VERIFY.
+    func explorationOrder() -> [Op<S>] {
+        guard exploreOrdering else {
+            return operations
+        }
+        return operations.flatMap { operation in
+            Array(repeating: operation, count: operation.repeatable ? Swift.max(1, orderingRepeats) : 1)
+        }
+    }
 
     /// Drive one (system, ordering, cassette) and return its behavior trace — the recorder, interceptor,
     /// and ambient context the developer never touches. (Internal: `record`/`verify(replaying:)` drive
@@ -248,7 +264,15 @@ public extension Spec {
 
 /// Enumerate linear extensions of the declared partial order (respecting `.after` and `.last`), capped.
 /// Full N! never happens; constraints prune to orderings a real caller could produce.
-func linearExtensions<S>(_ ops: [Op<S>], max: Int) -> [[Op<S>]] {
+/// Linear extensions of the declared partial order, over a *multiset* of ops: a repeatable op
+/// contributes `repeating` occurrences, so orderings explore applying an operation more than once —
+/// which is where merge-into-existing and remove-what-is-not-there branches live. Ops marked
+/// `.once()` (and `.last()`, which implies it) contribute exactly one.
+func linearExtensions<S>(_ ops: [Op<S>], max: Int, repeating: Int = 1) -> [[Op<S>]] {
+    let multiset = ops.flatMap { operation in
+        Array(repeating: operation, count: operation.repeatable ? Swift.max(1, repeating) : 1)
+    }
+
     var result: [[Op<S>]] = []
     func recurse(_ placed: [Op<S>], _ remaining: [Op<S>]) {
         if result.count >= max {
@@ -258,14 +282,19 @@ func linearExtensions<S>(_ ops: [Op<S>], max: Int) -> [[Op<S>]] {
             result.append(placed); return
         }
         let done = Set(placed.map(\.label))
-        for operation in remaining {
+        // One branch per *distinct* next op: two occurrences of the same label are interchangeable,
+        // so recursing on both would enumerate the same ordering twice.
+        var tried: Set<String> = []
+        for (index, operation) in remaining.enumerated() where tried.insert(operation.label).inserted {
             guard operation.afters.allSatisfy(done.contains) else { continue }
             if operation.mustBeLast, remaining.count > 1 {
                 continue
             }
-            recurse(placed + [operation], remaining.filter { $0.label != operation.label })
+            var rest = remaining
+            rest.remove(at: index)
+            recurse(placed + [operation], rest)
         }
     }
-    recurse([], ops)
+    recurse([], multiset)
     return result
 }

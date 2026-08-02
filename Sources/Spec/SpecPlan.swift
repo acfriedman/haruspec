@@ -156,10 +156,11 @@ public extension Spec {
     /// first probe is the declared order under the golden cassette — the representative run.
     func record() -> SpecPlan {
         let recording = Cassette()
-        _ = capture(make: makeSystem, order: operations, cassette: recording)
+        _ = capture(make: makeSystem, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
 
-        let orderings = exploreOrdering ? linearExtensions(operations, max: maxOrderings) : [operations]
+        let orderings = exploreOrdering ? linearExtensions(operations, max: maxOrderings, repeating: orderingRepeats) :
+            [operations]
         let cassettes = seamDomains.isEmpty
             ? [golden]
             : golden.generatedVariants(

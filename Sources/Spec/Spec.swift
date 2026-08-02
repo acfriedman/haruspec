@@ -38,6 +38,9 @@ public struct Op<S> {
     let action: (S, SeamContext) -> Void
     var mustBeLast = false
     var afters: [String] = []
+    /// Whether ordering exploration may place this op more than once. `.last()` ops are pinned to a
+    /// single occurrence by construction — a second one could not also be last.
+    var repeatable = true
 
     /// A simple op.
     public init(_ label: String, _ action: @escaping (S) -> Void) {
@@ -52,9 +55,15 @@ public struct Op<S> {
         self.action = action
     }
 
-    /// This op must run last (e.g. `checkout`).
+    /// This op must run last (e.g. `checkout`). Implies `.once()`.
     public func last() -> Op<S> {
-        var copy = self; copy.mustBeLast = true; return copy
+        var copy = self; copy.mustBeLast = true; copy.repeatable = false; return copy
+    }
+
+    /// Exempt this op from ordering repetition — it runs at most once per ordering. For an op whose
+    /// second application is meaningless or destructive rather than interesting.
+    public func once() -> Op<S> {
+        var copy = self; copy.repeatable = false; return copy
     }
 
     /// This op may only run after `label` (a partial-order edge).
@@ -66,7 +75,7 @@ public struct Op<S> {
 /// A declared variation of the input surface: seam values, and/or call ordering.
 public enum Variation {
     case seam(String, SeamDomain)
-    case ordering(max: Int)
+    case ordering(max: Int, repeating: Int)
 }
 
 /// Vary a seam over a domain (property-based breadth). Composes with `Ordering`.
@@ -75,8 +84,14 @@ public func Seam(_ name: String, _ domain: SeamDomain) -> Variation {
 }
 
 /// Explore valid call orderings (linear extensions of the declared partial order).
-public func Ordering(max: Int = 100) -> Variation {
-    .ordering(max: max)
+///
+/// `repeating` is how many times an op may appear in one ordering — 2 by default, because applying
+/// an operation twice is where a surprising amount of legacy behavior lives (merge-into-existing
+/// rather than append; remove-what-is-not-there). Pass `1` to explore permutations only, or exempt
+/// a single op with `.once()`.
+public func Ordering(max: Int = 100, repeating: Int = 2) -> Variation {
+    precondition(repeating >= 1, "an op has to appear at least once")
+    return .ordering(max: max, repeating: repeating)
 }
 
 @resultBuilder public enum OperationsBuilder<S> {
@@ -113,6 +128,7 @@ public struct Spec<S> {
     var candidates: [Candidate<S>] = []
     var exploreOrdering = false
     var maxOrderings = 100
+    var orderingRepeats = 2
 
     public init(_ name: String) {
         self.name = name
@@ -177,7 +193,10 @@ public struct Spec<S> {
         for variation in build() {
             switch variation {
             case let .seam(name, domain): copy.seamDomains[name] = domain
-            case let .ordering(max): copy.exploreOrdering = true; copy.maxOrderings = max
+            case let .ordering(max, repeating):
+                copy.exploreOrdering = true
+                copy.maxOrderings = max
+                copy.orderingRepeats = repeating
             }
         }
         return copy
