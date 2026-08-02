@@ -10,6 +10,29 @@ import HaruspecCore
 // parameterizes over `migrationCases` / `continuousSpecs` (plain strings) and never names a
 // spec, so declaring a new one is a line in the catalog and nothing else.
 
+/// Declare one spec by conforming to this — the same shape SwiftUI asks of a `View`: a type whose
+/// whole job is to answer one property. `System` is inferred from the return type, so an author
+/// writes the spec and never the associated type.
+///
+///     struct CartMigration: SpecProviding {
+///         var spec: Spec<Cart> { … }
+///     }
+///
+/// Conforming is what lets a catalog take the declarations directly (`SpecCatalog(CartMigration())`)
+/// rather than each caller remembering to erase with `.entry()`.
+public protocol SpecProviding {
+    associatedtype System
+    var spec: Spec<System> { get }
+}
+
+public extension SpecProviding {
+    /// Erase this declaration for a `SpecCatalog`. Not on the protocol itself: the signature
+    /// mentions no associated type, so it stays callable on `any SpecProviding`.
+    func entry() -> SpecEntry {
+        spec.entry()
+    }
+}
+
 /// A spec with its system type erased: name, declared candidates, and the two ways to run it.
 public struct SpecEntry {
     public let name: String
@@ -44,6 +67,15 @@ public struct SpecCatalog {
 
     public init(_ entries: SpecEntry...) {
         self.init(entries)
+    }
+
+    /// The usual spelling: hand the catalog the declarations themselves.
+    public init(_ providers: [any SpecProviding]) {
+        self.init(providers.map { $0.entry() })
+    }
+
+    public init(_ providers: any SpecProviding...) {
+        self.init(providers.map { $0.entry() })
     }
 
     // MARK: Migration

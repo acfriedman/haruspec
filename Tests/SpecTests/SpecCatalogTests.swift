@@ -21,6 +21,26 @@ private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
     RoundBugCart(center: ctx.notifications)
 }
 
+/// The conformance shape an adopting app writes.
+private struct PromoCartSpec: SpecProviding {
+    var name = "promo-cart"
+
+    var spec: Spec<PromoCart> {
+        Spec<PromoCart>(name)
+            .system(makeGood)
+            .operations {
+                Op("addCoffee") { $0.addItem(priceCents: 999, qty: 3) }
+                Op("promo") { $0.applyPromo() }
+                Op("checkout") { _ = $0.checkout() }.last()
+            }
+            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
+            .candidates {
+                Candidate("RefactorCart", makeRefactor)
+                Candidate("RoundBugCart", expecting: .diverged, makeRoundBug)
+            }
+    }
+}
+
 final class SpecCatalogTests: XCTestCase {
     private func scratch() -> URL {
         FileManager.default.temporaryDirectory
@@ -123,6 +143,22 @@ final class SpecCatalogTests: XCTestCase {
             "HARUSPEC_RESULTS_DIR": resultsDir.path
         ]))
         XCTAssertTrue(replayed.succeeded, replayed.summary)
+    }
+
+    // MARK: Declaring specs by conformance
+
+    func testACatalogTakesConformingDeclarationsDirectly() {
+        let declared = SpecCatalog(PromoCartSpec(), PromoCartSpec(name: "promo-cart.second"))
+
+        XCTAssertEqual(declared.migrationCases, catalog().migrationCases)
+    }
+
+    func testAConformingDeclarationErasesToTheSameEntry() {
+        let viaProtocol = SpecCatalog(PromoCartSpec())
+        let viaEntry = SpecCatalog(PromoCartSpec().spec.entry())
+
+        XCTAssertEqual(viaProtocol.entries.first?.name, viaEntry.entries.first?.name)
+        XCTAssertEqual(viaProtocol.entries.first?.candidateNames, viaEntry.entries.first?.candidateNames)
     }
 
     // MARK: One-call checks
