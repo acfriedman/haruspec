@@ -42,17 +42,47 @@ public struct SplitMix64: RandomNumberGenerator {
     }
 }
 
-/// The generation domain for one seam's readings. Scalar-only for the first cut; structured/corpus
-/// domains (schema-aware network payloads, recorded-value distributions) are a later refinement.
+/// The generation domain for one seam's readings: a numeric range, or a declared set of values.
+/// Structured/corpus domains (schema-aware network payloads, recorded-value distributions) are a
+/// later refinement.
 public enum SeamDomain: Sendable {
     case int(ClosedRange<Int64>)
     case double(ClosedRange<Double>)
+    /// Uniform choice from a declared set — the categorical axis, for inputs whose interesting
+    /// values are named rather than ranged (a promo code that is sometimes valid, a status string,
+    /// an enum's raw values). Prefer the `oneOf` sugar below, which rejects an empty set.
+    case anyOf([CanonicalValue])
 
     func sample(using rng: inout SplitMix64) -> CanonicalValue {
         switch self {
         case let .int(range): .int(Int64.random(in: range, using: &rng))
         case let .double(range): .double(Double.random(in: range, using: &rng))
+        case let .anyOf(values):
+            // Non-empty by construction via `oneOf`; a hand-built empty set has nothing to vary.
+            values.isEmpty ? .null : values[Int(UInt64.random(in: 0 ..< UInt64(values.count), using: &rng))]
         }
+    }
+}
+
+public extension SeamDomain {
+    /// Vary over a named set. Empty traps at construction rather than silently varying nothing —
+    /// a seam declared with no values would report domain coverage it never had.
+    static func oneOf(_ values: [String]) -> SeamDomain {
+        precondition(!values.isEmpty, "oneOf needs at least one value to vary over")
+        return .anyOf(values.map(CanonicalValue.string))
+    }
+
+    static func oneOf(_ values: String...) -> SeamDomain {
+        oneOf(values)
+    }
+
+    static func oneOf(_ values: [Int64]) -> SeamDomain {
+        precondition(!values.isEmpty, "oneOf needs at least one value to vary over")
+        return .anyOf(values.map(CanonicalValue.int))
+    }
+
+    static func oneOf(_ values: Int64...) -> SeamDomain {
+        oneOf(values)
     }
 }
 

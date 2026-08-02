@@ -1,0 +1,93 @@
+import Foundation
+import HaruspecCore
+import HaruspecSeams
+import HaruspecSpec
+import XCTest
+
+// The categorical axis: inputs whose interesting values are named rather than ranged. Without it a
+// spec has to smuggle the choice through an int (`seams.int("promoValid") == 1 ? "SAVE10" : "NOPE"`),
+// which hides what is being varied from anyone reading the spec.
+
+private final class Greeter {
+    private(set) var greetings: [String] = []
+    func greet(_ salutation: String) {
+        greetings.append(salutation)
+    }
+}
+
+final class CategoricalSeamTests: XCTestCase {
+    private func spec(recording: @escaping (String) -> Void) -> Spec<Greeter> {
+        Spec<Greeter>("greeter.categorical")
+            .system { _ in Greeter() }
+            .operations {
+                Op("greet") { sut, seams in
+                    let salutation = seams.string("salutation", default: "hello")
+                    recording(salutation)
+                    sut.greet(salutation)
+                }
+            }
+            .vary { Seam("salutation", .oneOf("hello", "hola", "bonjour")) }
+    }
+
+    func testEveryDeclaredValueIsReachable() {
+        // Recording explores the declared surface, so the generated cassettes should between them
+        // cover the whole set rather than pinning one value.
+        var seen: Set<String> = []
+        _ = spec(recording: { seen.insert($0) }).record()
+
+        XCTAssertEqual(seen, ["hello", "hola", "bonjour"])
+    }
+
+    func testOnlyDeclaredValuesAreEverProduced() {
+        var seen: Set<String> = []
+        _ = spec(recording: { seen.insert($0) }).record()
+
+        XCTAssertTrue(seen.isSubset(of: ["hello", "hola", "bonjour"]))
+    }
+
+    func testTheSameSeedReplaysTheSameChoices() {
+        var first: [String] = []
+        var second: [String] = []
+        _ = spec(recording: { first.append($0) }).record()
+        _ = spec(recording: { second.append($0) }).record()
+
+        XCTAssertEqual(first, second, "generation is seeded; a categorical draw must be reproducible")
+    }
+
+    /// The golden probe runs under *live* seams, so it reads each seam's `default` — generated
+    /// variants replace it afterwards. A spec whose default sits outside its declared set therefore
+    /// verifies one input it never declared, which is worth seeing rather than discovering.
+    func testTheGoldenProbeReadsTheDefaultBeforeVariantsReplaceIt() {
+        var seen: Set<String> = []
+        let pinned = Spec<Greeter>("greeter.pinned")
+            .system { _ in Greeter() }
+            .operations {
+                Op("greet") { sut, seams in
+                    let salutation = seams.string("salutation", default: "undeclared")
+                    seen.insert(salutation)
+                    sut.greet(salutation)
+                }
+            }
+            .vary { Seam("salutation", .oneOf("only")) }
+        _ = pinned.record()
+
+        XCTAssertEqual(seen, ["undeclared", "only"])
+    }
+
+    func testIntSetsVaryOverExactlyTheDeclaredValues() {
+        var seen: Set<Int64> = []
+        let spec = Spec<Greeter>("greeter.ints")
+            .system { _ in Greeter() }
+            .operations {
+                Op("greet") { sut, seams in
+                    let qty = seams.int("qty", default: 0)
+                    seen.insert(qty)
+                    sut.greet("\(qty)")
+                }
+            }
+            .vary { Seam("qty", .oneOf([0, 7, 999])) }
+        _ = spec.record()
+
+        XCTAssertEqual(seen, [0, 7, 999], "a categorical int must not fill the gaps between values")
+    }
+}

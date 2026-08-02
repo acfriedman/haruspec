@@ -24,6 +24,12 @@ public struct SeamContext {
     public func double(_ seam: String, default value: Double) -> Double {
         cassette.double(seam: seam, live: { value })
     }
+
+    /// The categorical read, paired with `.oneOf(…)`: an input whose interesting values are named
+    /// rather than ranged reads as itself, instead of an int the op has to decode.
+    public func string(_ seam: String, default value: String) -> String {
+        cassette.string(seam: seam, live: { value }) ?? value
+    }
 }
 
 /// A labeled, typed operation on the system under test, plus ordering constraints. `$0` is the system.
