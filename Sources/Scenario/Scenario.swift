@@ -103,6 +103,8 @@ public struct Scenario<S> {
     var tolerances: ToleranceSpec = .strict
     var intent: IntentSpec = .none
     var seamDomains: [String: SeamDomain] = [:]
+    /// The builds to verify against this scenario's baseline, declared via `.candidates { }`.
+    var candidates: [Candidate<S>] = []
     var exploreOrdering = false
     var maxOrderings = 100
 
