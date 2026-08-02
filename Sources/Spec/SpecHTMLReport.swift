@@ -1,20 +1,20 @@
 import Foundation
 import HaruspecCore
 
-// The scenario-level visual report — the counterexample-hero wrapper around the shared divergence body.
-// Mirrors how `ScenarioVerdict.report()` (in ScenarioRunner.swift) wraps `TraceDiff`'s text body: this
+// The spec-level visual report — the counterexample-hero wrapper around the shared divergence body.
+// Mirrors how `SpecVerdict.report()` (in SpecRunner.swift) wraps `TraceDiff`'s text body: this
 // wraps `HTML`'s page skeleton + divergence cards with the stat row and the minimal-counterexample
-// hero that only a scenario run can produce (orderings explored, failing order, varied seam values).
+// hero that only a spec run can produce (orderings explored, failing order, varied seam values).
 //
 // TODO: (stretch — richest view): a full side-by-side *event timeline* of the baseline vs candidate traces
 // with divergent rows highlighted. Blocked on Haruspec exposing the two underlying `Trace`s on
-// `ScenarioVerdict` (only `diff.divergences` is public today). To do it, add the pair of traces to the
+// `SpecVerdict` (only `diff.divergences` is public today). To do it, add the pair of traces to the
 // verdict, then render a `timelineSection(baseline:candidate:)` in `HTML` next to `divergenceSection`.
 
-extension ScenarioVerdict: HTMLReporting {}
+extension SpecVerdict: HTMLReporting {}
 
-public extension ScenarioVerdict {
-    /// A self-contained, themeable HTML rendering of the scenario verdict — the visual companion to
+public extension SpecVerdict {
+    /// A self-contained, themeable HTML rendering of the spec verdict — the visual companion to
     /// `report()`. Leads with the shrunk counterexample, then one card per divergence (or a clean panel).
     func htmlReport() -> String {
         let name = diff.candidateName

@@ -10,8 +10,8 @@ final class ValidationGateTests: XCTestCase {
     /// only in genuinely volatile fields (a fresh UUID, a wall-clock timestamp). Strict diffing sees
     /// that noise; the tolerance model cancels it. If this fails, the whole thesis wobbles.
     func testCaptureIsDeterministicUnderTolerances() {
-        let first = CheckoutScenario.baseline()
-        let second = CheckoutScenario.baseline()
+        let first = CheckoutSpec.baseline()
+        let second = CheckoutSpec.baseline()
 
         let strict = BehavioralDiff.compare(baseline: first, candidate: second)
         XCTAssertFalse(strict.isEquivalent, "raw traces should differ on the volatile UUID/timestamp")
@@ -20,7 +20,7 @@ final class ValidationGateTests: XCTestCase {
         let tolerant = BehavioralDiff.compare(
             baseline: first,
             candidate: second,
-            tolerances: CheckoutScenario.tolerances
+            tolerances: CheckoutSpec.tolerances
         )
         XCTAssertTrue(tolerant.isEquivalent, "canonicalization + tolerances must make repeat runs equivalent")
     }
@@ -28,9 +28,9 @@ final class ValidationGateTests: XCTestCase {
     /// A genuine behavior-preserving refactor is *verified*, not merely asserted.
     func testRefactorVerifiesAsEquivalent() {
         let diff = BehavioralDiff.compare(
-            baseline: CheckoutScenario.baseline(),
-            candidate: CheckoutScenario.refactor(),
-            tolerances: CheckoutScenario.tolerances
+            baseline: CheckoutSpec.baseline(),
+            candidate: CheckoutSpec.refactor(),
+            tolerances: CheckoutSpec.tolerances
         )
         XCTAssertTrue(
             diff.isEquivalent,
@@ -42,9 +42,9 @@ final class ValidationGateTests: XCTestCase {
     /// and each regression is localized to the right kind of divergence.
     func testRegressionIsCaught() {
         let diff = BehavioralDiff.compare(
-            baseline: CheckoutScenario.baseline(),
-            candidate: CheckoutScenario.regression(),
-            tolerances: CheckoutScenario.tolerances
+            baseline: CheckoutSpec.baseline(),
+            candidate: CheckoutSpec.regression(),
+            tolerances: CheckoutSpec.tolerances
         )
         XCTAssertFalse(diff.isEquivalent)
         let kinds = Set(diff.divergences.map(\.kind))
@@ -73,11 +73,11 @@ final class ValidationGateTests: XCTestCase {
     /// regression — the dropped `CartDidChange` and the wrong `CheckoutDidComplete` total. Values live
     /// on real production seams, not on hand-authored marker payloads.
     func testDurableTierCatchesRegressionWhenStructuralIgnored() {
-        var spec = CheckoutScenario.tolerances
+        var spec = CheckoutSpec.tolerances
         spec.structuralComparison = .ignored
         let diff = BehavioralDiff.compare(
-            baseline: CheckoutScenario.baseline(),
-            candidate: CheckoutScenario.regression(),
+            baseline: CheckoutSpec.baseline(),
+            candidate: CheckoutSpec.regression(),
             tolerances: spec
         )
         XCTAssertFalse(diff.isEquivalent)
@@ -99,7 +99,7 @@ final class ValidationGateTests: XCTestCase {
 
     /// Traces survive a serialize → reload round-trip unchanged (capture→store→reload).
     func testTraceRoundTripsThroughJSON() throws {
-        let original = CheckoutScenario.baseline()
+        let original = CheckoutSpec.baseline()
         let reloaded = try Trace(jsonData: original.jsonData())
         XCTAssertEqual(original, reloaded)
     }

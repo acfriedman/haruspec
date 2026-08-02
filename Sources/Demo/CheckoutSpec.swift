@@ -2,11 +2,11 @@ import Foundation
 import HaruspecCore
 import HaruspecTrace
 
-/// Drives a fixed, deterministic checkout scenario against any `CartService` implementation and
+/// Drives a fixed, deterministic checkout spec against any `CartService` implementation and
 /// returns the captured trace. This is the "replay" half of capture→replay→diff: identical inputs,
 /// so any difference in the output trace is attributable to the code, not the driver.
-public enum CheckoutScenario {
-    /// Run the canonical scenario, capturing a trace under a deterministic clock.
+public enum CheckoutSpec {
+    /// Run the canonical spec, capturing a trace under a deterministic clock.
     ///
     /// Capture is fully ambient and zero-code on the service side: `@Traced` records call/args/return
     /// against `TraceContext.current` (bound here), and a `NotificationInterceptor` observes a
@@ -65,9 +65,9 @@ public enum CheckoutScenario {
     /// The declared intent for the `feature()` change: the loyalty additions were *meant* to happen,
     /// so they must not fail the gate. Both are declared on production seams (the notifications the app
     /// actually posts), not on marker payloads. Anything else the change altered is collateral. A
-    /// migration would use `IntentSpec.none` instead — parity mode is just the empty intent.
-    public static var intent: IntentSpec {
-        IntentSpec(
+    /// migration would use `Intent.none` instead — parity mode is just the empty intent.
+    public static var intent: Intent {
+        Intent(
             expectedNewEvents: ["LoyaltyPointsEarned"],
             expectedValueChanges: ["CheckoutDidComplete": ["pointsEarned"]]
         )
@@ -76,8 +76,8 @@ public enum CheckoutScenario {
     /// The declared tolerance contract for this application: fresh UUIDs/timestamps are volatile,
     /// the recompute interval has a small timing budget, and the two independent post-add
     /// notifications may be emitted in either order.
-    public static var tolerances: ToleranceSpec {
-        ToleranceSpec(
+    public static var tolerances: Tolerance {
+        Tolerance(
             volatileFields: [.key("orderID"), .key("issuedAt")],
             numericEpsilon: 0,
             timingBudgets: ["CartService.checkout": 50],

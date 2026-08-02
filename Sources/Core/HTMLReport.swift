@@ -6,13 +6,13 @@ import Foundation
 //
 // This file is the ONE source of the page chrome (CSS + skeleton) and the reusable divergence-card body,
 // mirroring how `DiffReport.swift` owns `bodyLines()`. `TraceDiff.htmlReport()` and
-// `VerificationResult.htmlReport()` build on it here; `ScenarioVerdict.htmlReport()` (in HaruspecScenario)
+// `VerificationResult.htmlReport()` build on it here; `SpecVerdict.htmlReport()` (in HaruspecSpec)
 // wraps the same body with its counterexample hero — so all three entry points render identically.
 //
 // HaruspecCore is Foundation-only / dependency-free; this is plain string building with no new deps.
 
 /// The shared HTML chrome: page skeleton, CSS, and the reusable section builders every `htmlReport()`
-/// composes. Public so the HaruspecScenario entry point can reuse the same building blocks rather than
+/// composes. Public so the HaruspecSpec entry point can reuse the same building blocks rather than
 /// re-declaring the banner/glyph vocabulary and CSS (the mistake the downstream prototype was forced into).
 public enum HTML {
     // MARK: - Page skeleton
@@ -57,7 +57,7 @@ public enum HTML {
         <div class="hero \(accent(verdict))">
           <div class="verdict">\(banner(verdict))</div>
           <div class="lede">
-            <div class="scenario">\(esc(title))</div>
+            <div class="spec">\(esc(title))</div>
             <div class="flow"><span class="chip base">\(esc(baseline))</span><span class="arrow">→</span>\
         <span class="chip cand">\(esc(candidate))</span></div>
           </div>
@@ -335,7 +335,7 @@ public enum HTML {
     .hero.warn { border-left-color:var(--warn); }
     .hero .verdict { font-size:26px; font-weight:700; white-space:nowrap; }
     .lede { margin-left:auto; text-align:right; }
-    .scenario { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--muted); \
+    .spec { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; color:var(--muted); \
     font-size:13px; margin-bottom:8px; }
     .flow { display:flex; align-items:center; gap:10px; justify-content:flex-end; }
     .flow .arrow { color:var(--muted); }
@@ -538,8 +538,8 @@ public extension VerificationResult {
 // MARK: - Writing the report to disk
 
 /// A verdict carrier that can render itself to a self-contained HTML report page. Conformed by every
-/// carrier that has an `htmlReport()` — `TraceDiff`, `VerificationResult`, and (in HaruspecScenario)
-/// `ScenarioVerdict` — so the persistence step below is written once instead of hand-rolled at each call
+/// carrier that has an `htmlReport()` — `TraceDiff`, `VerificationResult`, and (in HaruspecSpec)
+/// `SpecVerdict` — so the persistence step below is written once instead of hand-rolled at each call
 /// site. Rendering is the package's job (`htmlReport()`); *writing the string to a file* used to be the
 /// one bit every consumer (the CLI, the dogfood app) re-implemented with `FileManager` — this folds it in.
 public protocol HTMLReporting {

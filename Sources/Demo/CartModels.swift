@@ -33,7 +33,7 @@ public struct Receipt: Sendable, Equatable, Codable {
     }
 }
 
-/// The behavior contract every variant of the cart implements. The scenario driver only knows this
+/// The behavior contract every variant of the cart implements. The spec driver only knows this
 /// surface — exactly the position an AI agent is in when it refactors "the module."
 public protocol CartService: AnyObject {
     func addItem(sku: String, unitPriceCents: Int, quantity: Int)

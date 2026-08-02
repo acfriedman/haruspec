@@ -32,7 +32,7 @@ public enum EventTier: String, Codable, Sendable {
 /// A logical, run-stable thread identity.
 ///
 /// Raw OS thread ids are non-deterministic across runs, which would defeat diffing. We map them to
-/// `main` or a first-seen `worker(n)` — deterministic as long as the scenario is deterministic.
+/// `main` or a first-seen `worker(n)` — deterministic as long as the spec is deterministic.
 public enum LogicalThread: Sendable, Equatable, Hashable, CustomStringConvertible {
     case main
     case worker(Int)
@@ -147,7 +147,7 @@ extension TraceEvent: Codable {
     }
 }
 
-/// A captured golden behavior trace: the ordered sequence of events from one scenario run.
+/// A captured golden behavior trace: the ordered sequence of events from one spec run.
 public struct Trace: Codable, Sendable, Equatable {
     public var name: String
     public var schemaVersion: Int

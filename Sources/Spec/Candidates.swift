@@ -2,7 +2,7 @@ import Foundation
 import HaruspecCore
 import HaruspecSeams
 
-// A migration is rarely one candidate. The ports land incrementally, and a scenario is re-run against
+// A migration is rarely one candidate. The ports land incrementally, and a spec is re-run against
 // each of them — historically as one hand-written `verify(against:)` wrapper per port, all identical
 // but for a type name. Declaring them alongside the ops turns that into a list, and the expected
 // verdict travels with the declaration: a port being *replaced* is expected EQUIVALENT, while a port
@@ -13,7 +13,7 @@ import HaruspecSeams
 // constructor — `(SeamContext) -> S`, the same shape `.system` takes. Nothing about it survives a
 // round-trip through JSON, and keeping it in Swift keeps rename-safety and autocomplete.
 
-/// One build to interrogate against the scenario's baseline, and the verdict it is expected to earn.
+/// One build to interrogate against the spec's baseline, and the verdict it is expected to earn.
 public struct Candidate<S> {
     public let name: String
     /// What this candidate *should* produce. Defaults to `.equivalent` — the ordinary case, a port
@@ -47,7 +47,7 @@ public struct Candidate<S> {
 public struct CandidateVerdict: Sendable {
     public let name: String
     public let expected: TraceDiff.Verdict
-    public let verdict: ScenarioVerdict
+    public let verdict: SpecVerdict
     /// Where the rendered HTML report was written, if it was.
     public let htmlReportPath: String?
 
@@ -71,9 +71,9 @@ public struct CandidateVerdict: Sendable {
 
 // MARK: - Declaring and running candidates
 
-public extension Scenario {
-    /// The builds to verify against this scenario's baseline.
-    func candidates(@CandidatesBuilder<S> _ build: () -> [Candidate<S>]) -> Scenario<S> {
+public extension Spec {
+    /// The builds to verify against this spec's baseline.
+    func candidates(@CandidatesBuilder<S> _ build: () -> [Candidate<S>]) -> Spec<S> {
         var copy = self
         copy.candidates = build()
         return copy

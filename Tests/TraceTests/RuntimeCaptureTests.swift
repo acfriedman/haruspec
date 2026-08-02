@@ -100,7 +100,7 @@ final class NotificationInterceptorTests: XCTestCase {
     }
 
     /// Isolation is structural, not filtered: each capture window observes its *own* `NotificationCenter`,
-    /// so a concurrent window's posts never reach it — even across threads. This is how the scenario runner
+    /// so a concurrent window's posts never reach it — even across threads. This is how the spec runner
     /// keeps parallel windows disjoint (a fresh center per window, surfaced as `SeamContext.notifications`),
     /// replacing the old same-thread guard that papered over a *shared* `.default` center.
     func testSeparateCentersDoNotCrossPollinate() {

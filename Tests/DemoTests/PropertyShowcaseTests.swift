@@ -14,7 +14,7 @@ import XCTest
 final class PropertyShowcaseTests: XCTestCase {
     /// Drive a real `CartService`: unit price 999¢, quantity from the `coffeeQty` seam, promo applied.
     /// (No `removeItem`, so the isolated signal is the rounding off-by-one — not the dropped notification
-    /// the existing fixed-scenario demo already catches.)
+    /// the existing fixed-spec demo already catches.)
     private func capture(
         name: String,
         cassette: Cassette,
@@ -40,8 +40,8 @@ final class PropertyShowcaseTests: XCTestCase {
 
     /// Fresh order id / timestamp are volatile; the recompute interval gets a generous budget so the
     /// isolated signal is the value-dependent discount, not timing.
-    private var tolerances: ToleranceSpec {
-        ToleranceSpec(
+    private var tolerances: Tolerance {
+        Tolerance(
             volatileFields: [.key("orderID"), .key("issuedAt")],
             numericEpsilon: 0,
             timingBudgets: ["CartService.checkout": 500],

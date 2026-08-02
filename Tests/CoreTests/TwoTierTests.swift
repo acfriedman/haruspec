@@ -41,7 +41,7 @@ final class TwoTierTests: XCTestCase {
         let diff = BehavioralDiff.compare(
             baseline: baseline,
             candidate: renamed,
-            tolerances: ToleranceSpec(structuralComparison: .advisory)
+            tolerances: Tolerance(structuralComparison: .advisory)
         )
         XCTAssertTrue(diff.isEquivalent, "the semantic tier matches, so the verdict passes")
         XCTAssertFalse(diff.divergences.isEmpty, "the structural rename is still reported")
@@ -52,7 +52,7 @@ final class TwoTierTests: XCTestCase {
         let diff = BehavioralDiff.compare(
             baseline: baseline,
             candidate: renamed,
-            tolerances: ToleranceSpec(structuralComparison: .ignored)
+            tolerances: Tolerance(structuralComparison: .ignored)
         )
         XCTAssertTrue(diff.isEquivalent)
         XCTAssertTrue(diff.divergences.isEmpty, "structural events are dropped entirely")
@@ -66,7 +66,7 @@ final class TwoTierTests: XCTestCase {
         let diff = BehavioralDiff.compare(
             baseline: baseline,
             candidate: semanticRegression,
-            tolerances: ToleranceSpec(structuralComparison: .ignored)
+            tolerances: Tolerance(structuralComparison: .ignored)
         )
         XCTAssertFalse(diff.isEquivalent)
         XCTAssertEqual(diff.divergences.map(\.kind), [.valueMismatch])

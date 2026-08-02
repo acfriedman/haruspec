@@ -1,6 +1,6 @@
 import Foundation
 
-/// How a divergence relates to the change's *declared intent* (see `IntentSpec`). Tolerated deltas
+/// How a divergence relates to the change's *declared intent* (see `Intent`). Tolerated deltas
 /// never become divergences at all; of those that do, `intended` ones were declared and don't gate,
 /// `collateral` ones were not — the residual an extension-mode verdict fails on.
 public enum DivergenceClass: String, Codable, Sendable {
@@ -109,7 +109,7 @@ public enum BehavioralDiff {
     public static func compare(
         baseline rawBaseline: Trace,
         candidate rawCandidate: Trace,
-        tolerances spec: ToleranceSpec = .strict
+        tolerances spec: Tolerance = .strict
     ) -> TraceDiff {
         var baseline = Canonicalizer.canonicalize(rawBaseline, spec: spec).events
         var candidate = Canonicalizer.canonicalize(rawCandidate, spec: spec).events
@@ -217,7 +217,7 @@ public enum BehavioralDiff {
     private static func compareAligned(
         _ baseline: TraceEvent,
         _ candidate: TraceEvent,
-        spec: ToleranceSpec,
+        spec: Tolerance,
         isAdvisory: Bool,
         into out: inout [Divergence]
     ) {
@@ -253,7 +253,7 @@ public enum BehavioralDiff {
         _ baseline: CanonicalValue,
         _ candidate: CanonicalValue,
         path: String,
-        spec: ToleranceSpec
+        spec: Tolerance
     ) -> [String] {
         if let baselineNumber = numeric(baseline), let candidateNumber = numeric(candidate) {
             return abs(baselineNumber - candidateNumber) <= spec.numericEpsilon

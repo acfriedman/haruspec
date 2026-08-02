@@ -1,16 +1,16 @@
 import Foundation
 
 /// The declared "expected behavioral change" for a feature or enhancement — the symmetric complement
-/// to `ToleranceSpec`.
+/// to `Tolerance`.
 ///
 /// Tolerances say which deltas *don't matter* (volatile fields, jitter, order) and are filtered out
 /// before diffing. Intent says which deltas were *meant to happen* (the feature) and are surfaced but
 /// reclassified `.intended`, so they don't gate the verdict. Whatever remains is `.collateral`: an
 /// undeclared change the author didn't intend — the thing an extension-mode gate fails on.
 ///
-/// **Parity mode (migrations) is simply `IntentSpec.none`.** Extension mode (features) is a populated
+/// **Parity mode (migrations) is simply `Intent.none`.** Extension mode (features) is a populated
 /// spec. Same engine; the only difference is how much change was declared up front.
-public struct IntentSpec: Sendable, Equatable {
+public struct Intent: Sendable, Equatable {
     /// Event labels the change is allowed to ADD (present in candidate, absent in baseline).
     public var expectedNewEvents: [String]
 
@@ -33,7 +33,7 @@ public struct IntentSpec: Sendable, Equatable {
     }
 
     /// The empty spec: nothing was declared, so every divergence stays collateral. This is parity mode.
-    public static let none = IntentSpec()
+    public static let none = Intent()
 
     /// Does this spec declare `divergence` as an intended change?
     public func declares(_ divergence: Divergence) -> Bool {
@@ -59,9 +59,9 @@ public struct IntentSpec: Sendable, Equatable {
 
 public extension TraceDiff {
     /// Extension mode: reclassify divergences the intent spec declared as `.intended`, then re-derive
-    /// the verdict from the residual (gating, collateral) divergences. `IntentSpec.none` is a no-op
+    /// the verdict from the residual (gating, collateral) divergences. `Intent.none` is a no-op
     /// (parity mode) — every divergence stays collateral and the verdict is unchanged.
-    func classified(against intent: IntentSpec) -> TraceDiff {
+    func classified(against intent: Intent) -> TraceDiff {
         var result = self
         for index in result.divergences.indices where intent.declares(result.divergences[index]) {
             result.divergences[index].classification = .intended
@@ -81,7 +81,7 @@ public extension TraceDiff {
     }
 }
 
-extension IntentSpec: Codable {
+extension Intent: Codable {
     enum CodingKeys: String, CodingKey {
         case expectedNewEvents, expectedRemovedEvents, expectedValueChanges
     }
@@ -96,8 +96,8 @@ extension IntentSpec: Codable {
     }
 }
 
-public extension IntentSpec {
+public extension Intent {
     init(contentsOf url: URL) throws {
-        self = try JSONDecoder().decode(IntentSpec.self, from: Data(contentsOf: url))
+        self = try JSONDecoder().decode(Intent.self, from: Data(contentsOf: url))
     }
 }

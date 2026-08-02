@@ -3,7 +3,7 @@ import XCTest
 
 /// `VolatileField` addressing: the typed factories, scoped matching, and the JSON forms
 /// (bare string ⇄ scoped object).
-final class ToleranceSpecTests: XCTestCase {
+final class ToleranceTests: XCTestCase {
     func testKeyRuleMatchesAnyLabelAndDepth() {
         let rule = VolatileField.key("orderID")
         XCTAssertTrue(rule.matches(key: "orderID", label: "checkout", path: ["orderID"]))
@@ -47,7 +47,7 @@ final class ToleranceSpecTests: XCTestCase {
                             {"key": "id", "label": "checkout"},
                             {"path": "receipt.issuedAt", "label": "checkout"}]}
         """
-        let spec = try JSONDecoder().decode(ToleranceSpec.self, from: Data(json.utf8))
+        let spec = try JSONDecoder().decode(Tolerance.self, from: Data(json.utf8))
         XCTAssertEqual(spec.volatileFields, [
             .key("orderID"),
             .key("id", inEvent: "checkout"),
@@ -63,18 +63,18 @@ final class ToleranceSpecTests: XCTestCase {
             #"{"volatileFields": [{"path": "receipt..issuedAt"}]}"# // empty component
         ] {
             XCTAssertThrowsError(
-                try JSONDecoder().decode(ToleranceSpec.self, from: Data(bad.utf8)),
+                try JSONDecoder().decode(Tolerance.self, from: Data(bad.utf8)),
                 bad
             )
         }
     }
 
     func testJSONRoundTripPreservesBothForms() throws {
-        let spec = ToleranceSpec(volatileFields: [.key("orderID"),
-                                                  .key("id", inEvent: "checkout"),
-                                                  .path("receipt.issuedAt")])
+        let spec = Tolerance(volatileFields: [.key("orderID"),
+                                              .key("id", inEvent: "checkout"),
+                                              .path("receipt.issuedAt")])
         let data = try JSONEncoder().encode(spec)
-        let decoded = try JSONDecoder().decode(ToleranceSpec.self, from: data)
+        let decoded = try JSONDecoder().decode(Tolerance.self, from: data)
         XCTAssertEqual(decoded.volatileFields, spec.volatileFields)
 
         // The unscoped key rule encodes back to a bare string, keeping hand-written specs readable.

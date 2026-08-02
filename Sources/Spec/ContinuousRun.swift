@@ -1,11 +1,11 @@
 import Foundation
 import HaruspecCore
 
-// The CI harness over `record(to:)` / `verify(replayingContentsOf:)`. Those two give a scenario the
+// The CI harness over `record(to:)` / `verify(replayingContentsOf:)`. Those two give a spec the
 // ability to pin a golden plan on the base build and diff a changed build against it; what a PR
 // pipeline additionally needs — decide which side to run, validate its destinations, create them,
 // write `result.json` and the visual report, and hand back something a test can assert on — is
-// identical for every scenario. It lives here so an adopting app declares *what* to interrogate and
+// identical for every spec. It lives here so an adopting app declares *what* to interrogate and
 // nothing about how the Continuous shape is wired.
 //
 // The run is env-driven by default because the destinations are chosen by the pipeline, not the code:
@@ -96,9 +96,9 @@ public struct ContinuousOutcome: Sendable {
     }
 }
 
-// MARK: - Driving a scenario
+// MARK: - Driving a spec
 
-public extension Scenario {
+public extension Spec {
     /// Run whichever side the environment selects. A run that was never selected is a failure here,
     /// not a silent pass — gate the test on `ContinuousMode.fromEnvironment()` so it never gets called.
     func runContinuous(

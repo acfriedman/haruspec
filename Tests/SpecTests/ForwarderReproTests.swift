@@ -1,7 +1,7 @@
 import HaruspecCore
 import HaruspecMacros
-import HaruspecScenario
 import HaruspecSeams
+import HaruspecSpec
 import HaruspecTrace
 import XCTest
 
@@ -125,7 +125,7 @@ final class ReproSwiftPort: ReproCart {
 
 final class ForwarderReproTests: XCTestCase {
     func testForwarderBaselineVsFaithfulPortIsEquivalent() {
-        let scenario = Scenario<ReproCart>("cart.repro")
+        let spec = Spec<ReproCart>("cart.repro")
             .system { _ in TracedReproCart() }
             .operations {
                 Op("addCoffee") { sut, seams in
@@ -141,7 +141,7 @@ final class ForwarderReproTests: XCTestCase {
             .observe(notifications: ["CartDidChange", "CheckoutDidComplete"])
             .observing(on: .default)
             .tolerate(
-                ToleranceSpec(
+                Tolerance(
                     volatileFields: [.key("orderID")],
                     numericEpsilon: 0,
                     timingBudgets: [:],
@@ -155,7 +155,7 @@ final class ForwarderReproTests: XCTestCase {
                 Ordering(max: 50)
             }
 
-        let verdict = scenario.verify(against: { _ in ReproSwiftPort() })
+        let verdict = spec.verify(against: { _ in ReproSwiftPort() })
         print("=== FORWARDER REPRO ===")
         print(verdict.report())
         print("=== FORWARDER REPRO END ===")

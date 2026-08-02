@@ -10,7 +10,7 @@ import HaruspecCore
 /// scrolls past twenty rows has stopped being a verdict and become a log.
 private let divergenceRowCap = 20
 
-public extension ScenarioVerdict {
+public extension SpecVerdict {
     /// GitHub-flavored markdown rendering of the verdict, for PR comments and CI job summaries.
     /// Same three-tier vocabulary as `report()`; coverage is rendered only on verdicts whose replay
     /// swept the whole surface (a DIVERGED run stopped at the first non-equivalent probe, so its
@@ -32,7 +32,7 @@ public extension ScenarioVerdict {
     // MARK: - Sections
 
     private var headline: String {
-        // On replay both traces carry the scenario name; only render an arrow when they differ.
+        // On replay both traces carry the spec name; only render an arrow when they differ.
         let subject = diff.baselineName == diff.candidateName
             ? "`\(diff.baselineName)`"
             : "`\(diff.baselineName)` → `\(diff.candidateName)`"

@@ -2,7 +2,7 @@ import Foundation
 import HaruspecCore
 import HaruspecDemo
 import HaruspecMCP
-import HaruspecScenario
+import HaruspecSpec
 import HaruspecTrace
 
 // A thin, dependency-free CLI over the engine. Subcommands:
@@ -53,19 +53,19 @@ func parse(_ args: [String]) -> (flags: [String: String], positionals: [String])
     return (flags, positionals)
 }
 
-func loadTolerance(_ flags: [String: String]) -> ToleranceSpec {
+func loadTolerance(_ flags: [String: String]) -> Tolerance {
     guard let path = flags["tolerance"], !path.isEmpty else { return .strict }
     do {
-        return try ToleranceSpec(contentsOf: URL(fileURLWithPath: path))
+        return try Tolerance(contentsOf: URL(fileURLWithPath: path))
     } catch {
         fail("could not read tolerance spec at \(path): \(error)", code: .runtime)
     }
 }
 
-func loadIntent(_ flags: [String: String]) -> IntentSpec? {
+func loadIntent(_ flags: [String: String]) -> Intent? {
     guard let path = flags["intent"], !path.isEmpty else { return nil }
     do {
-        return try IntentSpec(contentsOf: URL(fileURLWithPath: path))
+        return try Intent(contentsOf: URL(fileURLWithPath: path))
     } catch {
         fail("could not read intent spec at \(path): \(error)", code: .runtime)
     }
@@ -83,7 +83,7 @@ USAGE:
       --html <path>         also write a self-contained visual HTML report to <path>.
 
   haruspec demo [--out <dir>] [--html]
-      Capture the built-in checkout scenario (baseline / refactor / regression / feature),
+      Capture the built-in checkout spec (baseline / refactor / regression / feature),
       write the traces, and print the verdicts — including parity vs. extension mode. Great first run.
       --html                also write a visual HTML report per verdict into <dir>.
 
@@ -91,7 +91,7 @@ USAGE:
       Emit the canonical, redacted form of a trace.
 
   haruspec report <result.json> [--markdown] [--html <path>] [--agent]
-      Render a scenario verdict artifact (the result.json a verify(replaying:) run writes) and exit
+      Render a spec verdict artifact (the result.json a verify(replaying:) run writes) and exit
       with its verdict code — the CI gate reads THIS exit code, not the test runner's.
       --markdown            GitHub-flavored markdown (PR comment / job summary) instead of text.
       --html <path>         also write the self-contained visual report to <path>.
@@ -138,16 +138,16 @@ func runDemo(_ rest: [String]) -> Never {
     let outDir = URL(fileURLWithPath: flags["out"].flatMap { $0.isEmpty ? nil : $0 } ?? "haruspec-demo")
     do {
         try FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
-        let baseline = CheckoutScenario.baseline()
-        let refactor = CheckoutScenario.refactor()
-        let regression = CheckoutScenario.regression()
-        let feature = CheckoutScenario.feature()
+        let baseline = CheckoutSpec.baseline()
+        let refactor = CheckoutSpec.refactor()
+        let regression = CheckoutSpec.regression()
+        let feature = CheckoutSpec.feature()
         try baseline.write(to: outDir.appendingPathComponent("baseline.json"))
         try refactor.write(to: outDir.appendingPathComponent("refactor.json"))
         try regression.write(to: outDir.appendingPathComponent("regression.json"))
         try feature.write(to: outDir.appendingPathComponent("feature.json"))
 
-        let spec = CheckoutScenario.tolerances
+        let spec = CheckoutSpec.tolerances
         print("Wrote traces to \(outDir.path)\n")
         print("── Refactor · parity mode (expected: EQUIVALENT) ────────────────")
         let refactorDiff = BehavioralDiff.compare(baseline: baseline, candidate: refactor, tolerances: spec)
@@ -162,7 +162,7 @@ func runDemo(_ rest: [String]) -> Never {
         let featureRaw = BehavioralDiff.compare(baseline: baseline, candidate: feature, tolerances: spec)
         print("\n── Feature · parity mode — no intent, every change is flagged ───")
         print(featureRaw.report())
-        let featureDiff = featureRaw.classified(against: CheckoutScenario.intent)
+        let featureDiff = featureRaw.classified(against: CheckoutSpec.intent)
         print("\n── Feature · extension mode — intended vs. collateral ───────────")
         print(featureDiff.report())
         print("\n" + featureDiff.agentBrief())
@@ -209,7 +209,7 @@ func runReport(_ rest: [String]) -> Never {
     let (flags, positionals) = parse(rest)
     guard positionals.count == 1 else { fail("report needs <result.json>\n\n\(usage)", code: .usage) }
     do {
-        let verdict = try ScenarioVerdict(contentsOf: URL(fileURLWithPath: positionals[0]))
+        let verdict = try SpecVerdict(contentsOf: URL(fileURLWithPath: positionals[0]))
         if let htmlPath = flags["html"], !htmlPath.isEmpty {
             try verdict.writeHTMLReport(to: URL(fileURLWithPath: htmlPath))
             FileHandle.standardError.write(Data("haruspec: wrote HTML report to \(htmlPath)\n".utf8))

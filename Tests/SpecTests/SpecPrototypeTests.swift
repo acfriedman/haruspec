@@ -1,7 +1,7 @@
 import HaruspecCore
 import HaruspecMacros // `@Traced` — the low-intrusion structural-tier capture
-import HaruspecScenario
 import HaruspecSeams // `SeamDomain` for property-varied op arguments
+import HaruspecSpec
 import HaruspecTrace // the deliberate `Haruspec.marker` in the SUT
 import XCTest
 
@@ -206,10 +206,10 @@ private func makeSilent(_ ctx: SeamContext) -> AnalyticsCart {
     SilentAnalyticsCart(center: ctx.notifications)
 }
 
-final class ScenarioPrototypeTests: XCTestCase {
+final class SpecPrototypeTests: XCTestCase {
     /// The entire authored surface — this is all a developer writes. No recorder, interceptor, or context.
-    private func cart() -> Scenario<PromoCart> {
-        Scenario<PromoCart>("promo-cart")
+    private func cart() -> Spec<PromoCart> {
+        Spec<PromoCart>("promo-cart")
             .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
@@ -221,7 +221,7 @@ final class ScenarioPrototypeTests: XCTestCase {
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
     }
 
-    func testScenarioPrototype() {
+    func testSpecPrototype() {
         let base = cart() // declared order only
         let explored = base.vary { Ordering(max: 50) } // + call-ordering variation
 
@@ -249,7 +249,7 @@ final class ScenarioPrototypeTests: XCTestCase {
     /// `.observing(on: .default)` lets a faithful port post to `NotificationCenter.default` exactly
     /// where legacy code does — no injected center. The interceptor must still capture that post.
     func testObservingOnDefaultCapturesUninjectedPost() {
-        let scenario = Scenario<DefaultPinger>("default-ping")
+        let spec = Spec<DefaultPinger>("default-ping")
             .system { _ in DefaultPinger(posts: true) }
             .operations { Op("ping") { $0.ping() } }
             .observe(notifications: ["Pinged"])
@@ -257,7 +257,7 @@ final class ScenarioPrototypeTests: XCTestCase {
 
         // Baseline posts to `.default`; a silent candidate omits it. The divergence can only appear
         // if the baseline's post to `.default` — reached via no injected center — was observed.
-        let verdict = scenario.verify(against: { _ in DefaultPinger(posts: false) })
+        let verdict = spec.verify(against: { _ in DefaultPinger(posts: false) })
         XCTAssertEqual(
             verdict.verdict,
             .diverged,
@@ -288,14 +288,14 @@ final class ScenarioPrototypeTests: XCTestCase {
         print("=== ARG PARAMETERIZATION END ===")
     }
 
-    /// The scenario declares *no* `.observe(...)` allowlist, so capture is all-notifications by default.
-    private func analyticsCart() -> Scenario<AnalyticsCart> {
-        Scenario<AnalyticsCart>("analytics-cart")
+    /// The spec declares *no* `.observe(...)` allowlist, so capture is all-notifications by default.
+    private func analyticsCart() -> Spec<AnalyticsCart> {
+        Spec<AnalyticsCart>("analytics-cart")
             .system(makeTracking)
             .operations { Op("add") { $0.addItem() } }
     }
 
-    /// Capture-all default: a channel the scenario never listed (`AnalyticsDidTrack`) is still watched,
+    /// Capture-all default: a channel the spec never listed (`AnalyticsDidTrack`) is still watched,
     /// so a candidate that drops it diverges as a `missingEvent` — no `.observe` call, no blind spot.
     func testCaptureAllDefaultSurfacesUnlistedDroppedNotification() {
         let verdict = analyticsCart().verify(against: makeSilent)
@@ -325,12 +325,12 @@ final class ScenarioPrototypeTests: XCTestCase {
 
         // … and equivalently via the raw tolerance field.
         let viaTolerance = analyticsCart()
-            .tolerate(ToleranceSpec(ignoredNotificationNames: ["AnalyticsDidTrack"]))
+            .tolerate(Tolerance(ignoredNotificationNames: ["AnalyticsDidTrack"]))
             .verify(against: makeSilent)
         XCTAssertEqual(
             viaTolerance.verdict,
             .equivalent,
-            "ToleranceSpec.ignoredNotificationNames drops the channel identically"
+            "Tolerance.ignoredNotificationNames drops the channel identically"
         )
     }
 }

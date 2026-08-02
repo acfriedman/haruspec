@@ -16,7 +16,7 @@ public enum Canonicalizer {
     /// component) — the coordinates scoped `VolatileField` rules match against.
     public static func redact(
         _ value: CanonicalValue,
-        spec: ToleranceSpec,
+        spec: Tolerance,
         label: String,
         path: [String] = []
     ) -> CanonicalValue {
@@ -37,7 +37,7 @@ public enum Canonicalizer {
     }
 
     /// Produce the canonical form of a whole trace under a tolerance spec.
-    public static func canonicalize(_ trace: Trace, spec: ToleranceSpec) -> Trace {
+    public static func canonicalize(_ trace: Trace, spec: Tolerance) -> Trace {
         let ignoredNotifications = Set(spec.ignoredNotificationNames)
         var events = trace.events.filter { event in
             if spec.ignoredKinds.contains(event.kind) {

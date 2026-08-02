@@ -1,10 +1,10 @@
 @testable import HaruspecCore
 import XCTest
 
-/// `IntentSpec` is the symmetric complement to `ToleranceSpec`: it reclassifies *declared* divergences
+/// `Intent` is the symmetric complement to `Tolerance`: it reclassifies *declared* divergences
 /// as `.intended` (non-gating) so an extension-mode verdict gates only on the residual `.collateral`
 /// ones. These tests pin the classification logic against hand-built divergences — no capture needed.
-final class IntentSpecTests: XCTestCase {
+final class IntentTests: XCTestCase {
     private func diff(_ divergences: [Divergence]) -> TraceDiff {
         TraceDiff(
             verdict: divergences.contains(where: \.isGating) ? .diverged : .equivalent,
@@ -27,7 +27,7 @@ final class IntentSpecTests: XCTestCase {
 
     func testDeclaredNewEventBecomesIntendedAndDoesNotGate() {
         let classified = diff([d(.unexpectedEvent, "LoyaltyPointsEarned")])
-            .classified(against: IntentSpec(expectedNewEvents: ["LoyaltyPointsEarned"]))
+            .classified(against: Intent(expectedNewEvents: ["LoyaltyPointsEarned"]))
         XCTAssertTrue(classified.isEquivalent, "only declared changes remain — nothing gates")
         XCTAssertEqual(classified.intendedCount, 1)
         XCTAssertEqual(classified.collateralCount, 0)
@@ -37,7 +37,7 @@ final class IntentSpecTests: XCTestCase {
         let classified = diff([
             d(.unexpectedEvent, "LoyaltyPointsEarned"),
             d(.missingEvent, "CartDidChange")
-        ]).classified(against: IntentSpec(expectedNewEvents: ["LoyaltyPointsEarned"]))
+        ]).classified(against: Intent(expectedNewEvents: ["LoyaltyPointsEarned"]))
 
         XCTAssertFalse(classified.isEquivalent, "the undeclared dropped notification still gates")
         XCTAssertEqual(classified.intendedCount, 1)
@@ -51,7 +51,7 @@ final class IntentSpecTests: XCTestCase {
         let classified = diff([
             d(.valueMismatch, "CheckoutDidComplete", "pointsEarned: baseline=null candidate=25"),
             d(.valueMismatch, "CheckoutDidComplete", "totalCents: baseline=2525 candidate=2526")
-        ]).classified(against: IntentSpec(expectedValueChanges: ["CheckoutDidComplete": ["pointsEarned"]]))
+        ]).classified(against: Intent(expectedValueChanges: ["CheckoutDidComplete": ["pointsEarned"]]))
 
         XCTAssertEqual(classified.intendedCount, 1, "only pointsEarned was declared")
         XCTAssertEqual(classified.collateralCount, 1, "the totalCents change is collateral")
@@ -60,7 +60,7 @@ final class IntentSpecTests: XCTestCase {
 
     func testEmptyFieldListAbsorbsAnyValueChangeOnThatLabel() {
         let classified = diff([d(.valueMismatch, "CheckoutDidComplete", "totalCents: baseline=2525 candidate=2526")])
-            .classified(against: IntentSpec(expectedValueChanges: ["CheckoutDidComplete": []]))
+            .classified(against: Intent(expectedValueChanges: ["CheckoutDidComplete": []]))
         XCTAssertTrue(classified.isEquivalent)
     }
 
@@ -68,7 +68,7 @@ final class IntentSpecTests: XCTestCase {
         let classified = diff([
             d(.reordered, "CartDidChange"),
             d(.timingRegression, "CartService.checkout")
-        ]).classified(against: IntentSpec(
+        ]).classified(against: Intent(
             expectedNewEvents: ["CartDidChange"],
             expectedValueChanges: ["CartService.checkout": []]
         ))
@@ -77,7 +77,7 @@ final class IntentSpecTests: XCTestCase {
 
     func testIntentSpecDecodesPartialJSON() throws {
         let json = Data(#"{"expectedNewEvents":["LoyaltyPointsEarned"]}"#.utf8)
-        let intent = try JSONDecoder().decode(IntentSpec.self, from: json)
+        let intent = try JSONDecoder().decode(Intent.self, from: json)
         XCTAssertEqual(intent.expectedNewEvents, ["LoyaltyPointsEarned"])
         XCTAssertTrue(intent.expectedRemovedEvents.isEmpty)
         XCTAssertTrue(intent.expectedValueChanges.isEmpty)

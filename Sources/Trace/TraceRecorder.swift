@@ -7,7 +7,7 @@ import os
 /// It records the "structured signals" — method entry/exit, notifications, state changes and
 /// signpost intervals — and, crucially, *canonicalizes at capture time*: object pointers become
 /// first-seen symbolic ids, OS threads become logical threads, and time becomes a logical clock.
-/// That is what lets two independent runs of the same scenario produce diffable traces.
+/// That is what lets two independent runs of the same spec produce diffable traces.
 ///
 /// Thread-safe (an `NSLock` guards all mutable state) so it can capture from concurrent code, which
 /// is exactly the setting a Swift-6 concurrency migration cares about.

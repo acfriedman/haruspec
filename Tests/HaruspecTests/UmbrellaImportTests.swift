@@ -1,4 +1,4 @@
-// ← the ONE import. No HaruspecCore / HaruspecTrace / HaruspecMacros / HaruspecSeams / HaruspecScenario.
+// ← the ONE import. No HaruspecCore / HaruspecTrace / HaruspecMacros / HaruspecSeams / HaruspecSpec.
 import Haruspec
 import XCTest
 
@@ -9,12 +9,12 @@ import XCTest
 //
 //   HaruspecMacros   — @Traced, @Timed, @Seamed
 //   HaruspecTrace    — Haruspec.marker / Haruspec.interval, TraceRecorder, NotificationInterceptor, ManualClock
-//   HaruspecCore     — ToleranceSpec, TraceDiff.Verdict
+//   HaruspecCore     — Tolerance, TraceDiff.Verdict
 //   HaruspecSeams    — Cassette, Seam, SeamClock, SeamDomain
-//   HaruspecScenario — Scenario / Op / Seam / Ordering / .verify(against:)
+//   HaruspecSpec — Spec / Op / Seam / Ordering / .verify(against:)
 //
 // It is also the empirical proof of the name-collision decision: this file calls both
-// `Haruspec.marker(...)` (the re-exported `enum Haruspec` from HaruspecTrace) AND uses the `Scenario`
+// `Haruspec.marker(...)` (the re-exported `enum Haruspec` from HaruspecTrace) AND uses the `Spec`
 // types, under a lone `import Haruspec`. Compiling clean confirms the module name and the type name
 // coexist without ambiguity.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -91,20 +91,20 @@ private func makeRefactor(_ ctx: SeamContext) -> Cart {
 }
 
 final class UmbrellaImportTests: XCTestCase {
-    /// The headline: the entire Scenario DSL + macros + verdict types are reachable through one import,
+    /// The headline: the entire Spec DSL + macros + verdict types are reachable through one import,
     /// end-to-end. Also exercises the seam-value and ordering variation builders.
-    func testSingleImportSurfacesScenarioDSL() {
-        let scenario = Scenario<Cart>("umbrella-cart")
+    func testSingleImportSurfacesSpecDSL() {
+        let spec = Spec<Cart>("umbrella-cart")
             .system(makeGood)
             .operations {
                 Op("add") { cart, seams in cart.add(cents: 999, qty: Int(seams.int("qty", default: 2))) }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
-            .tolerate(.strict) // ← ToleranceSpec (HaruspecCore)
+            .tolerate(.strict) // ← Tolerance (HaruspecCore)
             .vary { Ordering(max: 10); Seam("qty", .int(1 ... 5)) } // ← Ordering / Seam / SeamDomain
 
-        let verdict: ScenarioVerdict = scenario.verify(against: makeRefactor)
+        let verdict: SpecVerdict = spec.verify(against: makeRefactor)
         let outcome: TraceDiff.Verdict = verdict.verdict // ← TraceDiff.Verdict (HaruspecCore)
         XCTAssertEqual(outcome, .equivalent, "a behavior-preserving refactor is EQUIVALENT")
         XCTAssertTrue(verdict.diff.divergences.isEmpty) // ← TraceDiff (HaruspecCore)
@@ -113,13 +113,13 @@ final class UmbrellaImportTests: XCTestCase {
     /// `htmlReport()` on all three verdict carriers is reachable through the single umbrella import —
     /// the visual companion to `report()`, self-contained enough to open over `file://`.
     func testHTMLReportIsReExported() throws {
-        let verdict = Scenario<Cart>("umbrella-html")
+        let verdict = Spec<Cart>("umbrella-html")
             .system(makeGood)
             .operations { Op("checkout") { _ = $0.checkout() } }
             .observe(notifications: ["CheckoutCompleted"])
             .verify(against: makeRefactor)
 
-        let scenarioHTML: String = verdict.htmlReport() // ← ScenarioVerdict.htmlReport (HaruspecScenario)
+        let scenarioHTML: String = verdict.htmlReport() // ← SpecVerdict.htmlReport (HaruspecSpec)
         let diffHTML: String = verdict.diff.htmlReport() // ← TraceDiff.htmlReport (HaruspecCore)
         let coverageHTML: String = VerificationResult(diff: verdict.diff, coverage: Coverage()).htmlReport()
 

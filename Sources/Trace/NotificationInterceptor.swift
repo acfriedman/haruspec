@@ -11,11 +11,11 @@ import HaruspecCore
 /// The default (`names == nil`) captures **everything** — a behavioral oracle watches all behavior,
 /// so nothing on an un-listed channel becomes a silent blind spot. Pass a non-nil `names` set only to
 /// narrow to an explicit allowlist (e.g. when a SUT shares a noisy center). Diff-time channel filtering
-/// (`ToleranceSpec.ignoredNotificationNames`) is the preferred way to drop a single noisy channel while
+/// (`Tolerance.ignoredNotificationNames`) is the preferred way to drop a single noisy channel while
 /// keeping the rest, since it leaves the raw trace faithful.
 ///
 /// **Isolation is structural, not filtered.** A capture window observes the `center` it is handed. The
-/// scenario runner hands each window a *fresh* `NotificationCenter()` (surfaced to the SUT as
+/// spec runner hands each window a *fresh* `NotificationCenter()` (surfaced to the SUT as
 /// `SeamContext.notifications`), so posts from one window never reach another — no shared global to
 /// cross-pollinate. If a caller deliberately points a window at a process-wide center (`.observing(on:
 /// .default)`), isolation becomes their responsibility (serialize the suite, or don't share the center

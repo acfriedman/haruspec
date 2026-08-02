@@ -29,7 +29,7 @@ enum Gzip {
         }
     }
 
-    /// The two-byte gzip signature — how `ScenarioPlan.init(contentsOf:)` decides to decompress.
+    /// The two-byte gzip signature — how `SpecPlan.init(contentsOf:)` decides to decompress.
     static func isGzip(_ data: Data) -> Bool {
         data.prefix(2).elementsEqual([0x1F, 0x8B])
     }

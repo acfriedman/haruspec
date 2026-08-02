@@ -65,9 +65,9 @@ final class CartPort {
 }
 
 // A stand-in for an injected singleton collaborator: a `shared()` accessor plus a `reserve` command.
-// `shared:` lets the generated forwarder self-wire to it, so the scenario writes `TracedInventorySeam()`
+// `shared:` lets the generated forwarder self-wire to it, so the spec writes `TracedInventorySeam()`
 // with no hand-wiring — the forwarder itself stays role-neutral (whether it's observed as a durable
-// collaborator boundary is the scenario's call, not this declaration's).
+// collaborator boundary is the spec's call, not this declaration's).
 final class Ledger {
     nonisolated(unsafe) static let instance = Ledger() // test singleton; serial tests, no real sharing
     static func shared() -> Ledger {

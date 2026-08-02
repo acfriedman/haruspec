@@ -3,12 +3,12 @@ import HaruspecCore
 import HaruspecSeams
 import HaruspecTrace
 
-/// The outcome of a scenario run: the three-tier verdict *with the coverage it was measured over*, how
+/// The outcome of a spec run: the three-tier verdict *with the coverage it was measured over*, how
 /// much was explored, and — for an order-dependent divergence — the failing call sequence: shrunk to
 /// minimal by `verify(against:)`, but the *raw recorded ordering* on `verify(replaying:)`, which never
 /// shrinks (a shrunk variant has no recorded golden to diff against).
 /// `Codable`, so a verify run is writable as a `result.json` artifact a reviewer can read and reproduce.
-public struct ScenarioVerdict: Codable, Sendable {
+public struct SpecVerdict: Codable, Sendable {
     /// The diff + coverage pair carrying the *resolved* verdict (see `VerificationResult`): an
     /// EQUIVALENT the replay can't stand behind (an op or seam fell back to live) downgrades to
     /// CANNOT-VERIFY; a DIVERGED always stands.
@@ -90,16 +90,16 @@ public struct ScenarioVerdict: Codable, Sendable {
 
 /// The generation constants shared by the live differential (`verify(against:)`) and the recorded plan
 /// (`record()` / `verify(replaying:)`) — one surface, whichever side of a build boundary it runs on.
-enum ScenarioDefaults {
+enum SpecDefaults {
     static let seed: UInt64 = 0x9E37_79B9_7F4A_7C15
     static let variantCount = 64
 }
 
-public extension Scenario {
-    /// Differentially verify a candidate implementation against this scenario's baseline: run both
+public extension Spec {
+    /// Differentially verify a candidate implementation against this spec's baseline: run both
     /// against the *same* generated inputs (call orderings × seam values) and diff. The baseline branch
     /// is the oracle, so no expected output is needed. Stops at (and shrinks) the first divergence.
-    func verify(against candidate: @escaping (SeamContext) -> S) -> ScenarioVerdict {
+    func verify(against candidate: @escaping (SeamContext) -> S) -> SpecVerdict {
         // Golden: the declared order under live seams — the template every variation is derived from.
         let recording = Cassette()
         _ = capture(make: makeSystem, order: operations, cassette: recording)
@@ -111,16 +111,16 @@ public extension Scenario {
             let cassettes = seamDomains.isEmpty
                 ? [golden]
                 : golden.generatedVariants(
-                    count: ScenarioDefaults.variantCount,
+                    count: SpecDefaults.variantCount,
                     varying: seamDomains,
-                    seed: ScenarioDefaults.seed
+                    seed: SpecDefaults.seed
                 )
             for cassette in cassettes {
                 let run = compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette)
                 guard run.diff.isEquivalent else {
                     let shrunk = shrink(candidate: candidate, failing: order, cassette: cassette)
                     let coverage = coverage(replays: [run.candidateReplay], domainHeld: false)
-                    return ScenarioVerdict(
+                    return SpecVerdict(
                         result: VerificationResult(diff: run.diff, coverage: coverage),
                         orderingsExplored: orderings.count,
                         failingOrder: exploreOrdering ? shrunk.map(\.label) : nil,
@@ -132,7 +132,7 @@ public extension Scenario {
         // Held across the whole explored surface: the swept seams earn domain-coverage credit.
         let representative = compare(make: makeSystem, candidate: candidate, order: operations, cassette: golden)
         let coverage = coverage(replays: [representative.candidateReplay], domainHeld: true)
-        return ScenarioVerdict(
+        return SpecVerdict(
             result: VerificationResult(diff: representative.diff, coverage: coverage),
             orderingsExplored: orderings.count,
             failingOrder: nil,
@@ -182,7 +182,7 @@ public extension Scenario {
         return diff.isEquivalent ? nil : diff
     }
 
-    /// Assemble the scenario's coverage: the declared surface is the *interrogation* surface — every op
+    /// Assemble the spec's coverage: the declared surface is the *interrogation* surface — every op
     /// (as an `op:<label>` boundary) plus every seam the replays declared. Ops all ran by construction
     /// here (the replay path is where an op can go unrecorded); seams merge across the given replays,
     /// and a seam missed anywhere is never counted exercised. `domainHeld` awards the swept seams

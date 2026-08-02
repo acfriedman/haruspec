@@ -81,7 +81,7 @@ public struct VolatileField: Sendable, Equatable, Hashable {
     }
 }
 
-public struct ToleranceSpec: Sendable, Equatable {
+public struct Tolerance: Sendable, Equatable {
     /// Payload fields whose values are non-deterministic and must be ignored — e.g.
     /// `.key("orderID")`. Redacted to a placeholder before comparison. See `VolatileField` for the
     /// scoping options (`inEvent:`, `.path`).
@@ -101,7 +101,7 @@ public struct ToleranceSpec: Sendable, Equatable {
     /// Event kinds to drop entirely before diffing (e.g. noisy internal `.custom` telemetry).
     public var ignoredKinds: [EventKind]
 
-    /// Notification names to drop before diffing. Since scenarios capture *all* notifications by
+    /// Notification names to drop before diffing. Since specs capture *all* notifications by
     /// default, this is the opt-out for a specific noisy channel: it removes matching `.notification`
     /// events from both sides at diff time, leaving the raw trace faithful. Mirrors `ignoredKinds` but
     /// scoped by name rather than kind.
@@ -130,7 +130,7 @@ public struct ToleranceSpec: Sendable, Equatable {
 
     /// The default: exact match on everything (nondeterminism already removed by canonicalization of
     /// timestamps/addresses/threads, but volatile *values* like UUIDs are NOT tolerated here).
-    public static let strict = ToleranceSpec()
+    public static let strict = Tolerance()
 }
 
 extension VolatileField: Codable {
@@ -189,7 +189,7 @@ extension VolatileField: Codable {
     }
 }
 
-extension ToleranceSpec: Codable {
+extension Tolerance: Codable {
     enum CodingKeys: String, CodingKey {
         case volatileFields, numericEpsilon, timingBudgets, unorderedGroups, ignoredKinds
         case ignoredNotificationNames, structuralComparison
@@ -209,9 +209,9 @@ extension ToleranceSpec: Codable {
     }
 }
 
-public extension ToleranceSpec {
+public extension Tolerance {
     init(contentsOf url: URL) throws {
-        self = try JSONDecoder().decode(ToleranceSpec.self, from: Data(contentsOf: url))
+        self = try JSONDecoder().decode(Tolerance.self, from: Data(contentsOf: url))
     }
 
     func isVolatile(key: String, label: String, path: [String]) -> Bool {

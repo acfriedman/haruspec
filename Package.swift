@@ -13,7 +13,7 @@ import PackageDescription
 ///   HaruspecMacros      — the `@Traced` / `@TracedMethod` declarations (opt-in zero-code method capture).
 ///   HaruspecMacroPlugin — the compiler-plugin implementation of those macros (the only SwiftSyntax user).
 ///   HaruspecSeams       — the record-once/replay-into-both seam harness (Cassette + injected value seams).
-///   HaruspecScenario    — the developer-facing `Scenario { … }.verify(against:)` DSL.
+///   HaruspecSpec    — the developer-facing `Spec { … }.verify(against:)` DSL.
 ///   Haruspec            — the umbrella: one `import Haruspec` re-exports the whole consumer surface above.
 ///   HaruspecDemo        — a sample application (a checkout module) that exercises the engine end-to-end.
 ///   haruspec            — a thin CLI over the engine (diff / demo / canonicalize).
@@ -26,7 +26,7 @@ let package = Package(
     name: "Haruspec",
     platforms: [.macOS(.v13), .iOS(.v16)],
     products: [
-        // The umbrella: a single `import Haruspec` surfaces macros + capture + seams + Scenario DSL.
+        // The umbrella: a single `import Haruspec` surfaces macros + capture + seams + Spec DSL.
         .library(name: "Haruspec", targets: ["Haruspec"]),
         .library(name: "HaruspecCore", targets: ["HaruspecCore"]),
         .library(name: "HaruspecTrace", targets: ["HaruspecTrace"]),
@@ -68,33 +68,33 @@ let package = Package(
         // The CLI target is `HaruspecCLI` (its product/binary is `haruspec`): a target literally
         // named `haruspec` would differ only in case from the `Haruspec` umbrella module, which collides
         // at the build-artifact layer on case-insensitive filesystems (macOS/Windows).
-        // HaruspecScenario is an internal target dep here (not a product): the `report` subcommand
-        // decodes and renders `ScenarioVerdict` artifacts, which live in the Scenario module.
+        // HaruspecSpec is an internal target dep here (not a product): the `report` subcommand
+        // decodes and renders `SpecVerdict` artifacts, which live in the Spec module.
         .executableTarget(name: "HaruspecCLI", dependencies: [
             "HaruspecCore",
             "HaruspecTrace",
             "HaruspecDemo",
             "HaruspecMCP",
-            "HaruspecScenario"
+            "HaruspecSpec"
         ], path: "Sources/CLI"),
 
-        // The developer-facing Scenario DSL (result-builder + Haruspec.verify). Prototype.
-        .target(name: "HaruspecScenario", dependencies: [
+        // The developer-facing Spec DSL (result-builder + Haruspec.verify). Prototype.
+        .target(name: "HaruspecSpec", dependencies: [
             "HaruspecCore",
             "HaruspecTrace",
             "HaruspecSeams"
-        ], path: "Sources/Scenario"),
+        ], path: "Sources/Spec"),
 
         // The consumer umbrella. Re-export only (`@_exported import` of the five consumer modules) —
         // no logic lives here, so the dependency-free-core / SwiftSyntax-confined-to-macros layering
-        // holds. Depending on HaruspecScenario here is also what makes it reachable to consumers (it is
+        // holds. Depending on HaruspecSpec here is also what makes it reachable to consumers (it is
         // deliberately not its own product; the umbrella is the single supported import).
         .target(name: "Haruspec", dependencies: [
             "HaruspecCore",
             "HaruspecTrace",
             "HaruspecMacros",
             "HaruspecSeams",
-            "HaruspecScenario"
+            "HaruspecSpec"
         ]),
 
         .testTarget(name: "HaruspecCoreTests", dependencies: ["HaruspecCore"], path: "Tests/CoreTests"),
@@ -120,14 +120,14 @@ let package = Package(
             "HaruspecDemo",
             "HaruspecSeams"
         ], path: "Tests/DemoTests"),
-        .testTarget(name: "HaruspecScenarioTests", dependencies: [
-            "HaruspecScenario",
+        .testTarget(name: "HaruspecSpecTests", dependencies: [
+            "HaruspecSpec",
             "HaruspecCore",
             "HaruspecTrace",
             "HaruspecMacros",
             "HaruspecSeams",
             "LegacyObjC"
-        ], path: "Tests/ScenarioTests", resources: [
+        ], path: "Tests/SpecTests", resources: [
             // The committed result.json the decode-compat test and the CLI smoke run render.
             .copy("Fixtures")
         ]),
@@ -135,7 +135,7 @@ let package = Package(
         .testTarget(name: "HaruspecMCPTests", dependencies: ["HaruspecMCP", "HaruspecCore"], path: "Tests/MCPTests"),
 
         // Consumer's-eye view: depends on ONLY the umbrella, so it fails to compile if a single
-        // `import Haruspec` doesn't surface the macros, capture, seams, and Scenario DSL.
+        // `import Haruspec` doesn't surface the macros, capture, seams, and Spec DSL.
         .testTarget(name: "HaruspecTests", dependencies: ["Haruspec"])
     ]
 )

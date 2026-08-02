@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
-import HaruspecScenario
 import HaruspecSeams
+import HaruspecSpec
 import XCTest
 
 // The CI harness over record/replay: that the environment contract is honored exactly (a selected mode
@@ -17,8 +17,8 @@ private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
 }
 
 final class ContinuousRunTests: XCTestCase {
-    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Scenario<PromoCart> {
-        Scenario<PromoCart>("promo-cart.continuous")
+    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Spec<PromoCart> {
+        Spec<PromoCart>("promo-cart.continuous")
             .system(system)
             .operations {
                 Op("addCoffee") { cart, seams in
@@ -92,7 +92,7 @@ final class ContinuousRunTests: XCTestCase {
         XCTAssertEqual(outcome.artifactPath, planURL.path)
         XCTAssertNil(outcome.htmlReportPath)
         XCTAssertTrue(FileManager.default.fileExists(atPath: planURL.path))
-        XCTAssertNoThrow(try ScenarioPlan(contentsOf: planURL))
+        XCTAssertNoThrow(try SpecPlan(contentsOf: planURL))
     }
 
     // MARK: Replay
@@ -108,8 +108,8 @@ final class ContinuousRunTests: XCTestCase {
         XCTAssertTrue(outcome.succeeded, outcome.summary)
         let resultURL = resultsDir.appendingPathComponent("result.json")
         XCTAssertEqual(outcome.artifactPath, resultURL.path)
-        XCTAssertEqual(try ScenarioVerdict(contentsOf: resultURL).verdict, .equivalent)
-        // The visual report is named for the scenario, alongside the verdict CI gates on.
+        XCTAssertEqual(try SpecVerdict(contentsOf: resultURL).verdict, .equivalent)
+        // The visual report is named for the spec, alongside the verdict CI gates on.
         XCTAssertEqual(
             outcome.htmlReportPath,
             resultsDir.appendingPathComponent("promo-cart.continuous.html").path
@@ -125,7 +125,7 @@ final class ContinuousRunTests: XCTestCase {
             .runContinuous(.replay(planURL: planURL, resultsDirectory: resultsDir))
 
         XCTAssertFalse(outcome.succeeded)
-        let verdict = try ScenarioVerdict(contentsOf: resultsDir.appendingPathComponent("result.json"))
+        let verdict = try SpecVerdict(contentsOf: resultsDir.appendingPathComponent("result.json"))
         XCTAssertEqual(verdict.verdict, .diverged)
     }
 

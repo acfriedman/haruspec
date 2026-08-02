@@ -17,7 +17,7 @@ import HaruspecTrace
 
 /// One recorded interrogation: a call ordering, the seam inputs replayed into it, and the golden trace
 /// the base build produced under exactly those inputs.
-public struct ScenarioProbe: Codable, Sendable, Equatable {
+public struct SpecProbe: Codable, Sendable, Equatable {
     /// Op labels in execution order — the replay contract. Labels are the cross-build identity of an
     /// operation (the analog of `@Traced`'s stable labels), so renaming an op orphans recorded input.
     public var ordering: [String]
@@ -33,36 +33,39 @@ public struct ScenarioProbe: Codable, Sendable, Equatable {
     }
 }
 
-/// The serializable golden-master of one scenario's explored surface — inputs *and* expected behavior,
+/// The serializable golden-master of one spec's explored surface — inputs *and* expected behavior,
 /// in one reproducible artifact (same JSON-bundle discipline as `Trace` / `CassetteData`).
-public struct ScenarioPlan: Codable, Sendable, Equatable {
+public struct SpecPlan: Codable, Sendable, Equatable {
     /// The one plan schema this engine writes and replays. `init(jsonData:)` rejects anything else —
     /// a stale shape whose field names happen to still decode would replay garbage with confidence.
-    public static let supportedSchemaVersion = 1
+    ///
+    /// Bumped to 2 when `Scenario` became `Spec`: the plan's `scenarioName` key is now `specName`,
+    /// so a version-1 artifact must be re-recorded rather than coerced.
+    public static let supportedSchemaVersion = 2
 
     public var schemaVersion: Int
-    public var scenarioName: String
+    public var specName: String
     /// Provenance only: the seed the recorded variants were generated with. Replay reads the stored
     /// cassettes verbatim — inputs are never re-derived, so a generator change can't skew a verdict.
     public var seed: UInt64
     /// Seams that were property-varied at record time — the domain-coverage credit a held verify earns.
     public var variedSeams: [String]
-    public var probes: [ScenarioProbe]
+    public var probes: [SpecProbe]
     /// The trace-derived coverage index: class labels the golden traces exercise, extracted from the
     /// structural tier (`PromoCart.checkout` → `PromoCart`). Includes classes reached *transitively*,
-    /// which is the payoff of keeping `@Traced` on — a semantic-tier-only scenario can't be scoped.
+    /// which is the payoff of keeping `@Traced` on — a semantic-tier-only spec can't be scoped.
     public var coveredClasses: [String]
 
     public init(
-        schemaVersion: Int = ScenarioPlan.supportedSchemaVersion,
-        scenarioName: String,
+        schemaVersion: Int = SpecPlan.supportedSchemaVersion,
+        specName: String,
         seed: UInt64,
         variedSeams: [String],
-        probes: [ScenarioProbe],
+        probes: [SpecProbe],
         coveredClasses: [String]
     ) {
         self.schemaVersion = schemaVersion
-        self.scenarioName = scenarioName
+        self.specName = specName
         self.seed = seed
         self.variedSeams = variedSeams
         self.probes = probes
@@ -70,9 +73,14 @@ public struct ScenarioPlan: Codable, Sendable, Equatable {
     }
 }
 
+/// Just the version field, so a plan can be gated before anything else about its shape is assumed.
+private struct SchemaStamp: Decodable {
+    let schemaVersion: Int
+}
+
 /// Thrown when a plan artifact can't be trusted for replay. Fail-fast at the decode boundary: the
 /// alternative — replaying whatever fields still line up — is a verdict built on unversioned input.
-public enum ScenarioPlanError: Error, Equatable, CustomStringConvertible {
+public enum SpecPlanError: Error, Equatable, CustomStringConvertible {
     case unsupportedSchemaVersion(found: Int, supported: Int)
 
     public var description: String {
@@ -86,7 +94,7 @@ public enum ScenarioPlanError: Error, Equatable, CustomStringConvertible {
 
 // MARK: - Serialization
 
-public extension ScenarioPlan {
+public extension SpecPlan {
     static func canonicalEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
@@ -108,14 +116,16 @@ public extension ScenarioPlan {
     }
 
     init(jsonData: Data) throws {
-        let plan = try JSONDecoder().decode(ScenarioPlan.self, from: jsonData)
-        guard plan.schemaVersion == Self.supportedSchemaVersion else {
-            throw ScenarioPlanError.unsupportedSchemaVersion(
-                found: plan.schemaVersion,
+        // Version first, on its own: an artifact from an older schema may no longer decode into this
+        // shape at all, and "re-record the plan" is the answer a caller needs — not a keyNotFound.
+        let stamp = try JSONDecoder().decode(SchemaStamp.self, from: jsonData)
+        guard stamp.schemaVersion == Self.supportedSchemaVersion else {
+            throw SpecPlanError.unsupportedSchemaVersion(
+                found: stamp.schemaVersion,
                 supported: Self.supportedSchemaVersion
             )
         }
-        self = plan
+        self = try JSONDecoder().decode(SpecPlan.self, from: jsonData)
     }
 
     /// Reads plain or gzipped plans alike — detection is by content (the gzip magic), not filename,
@@ -128,10 +138,10 @@ public extension ScenarioPlan {
 
 // MARK: - Scope selection
 
-public extension ScenarioPlan {
+public extension SpecPlan {
     /// The `--scope` predicate: does this plan's golden surface touch any of the changed classes?
     /// CI selects the plans worth re-running on a PR by filtering a plan catalog with this — rebuilding
-    /// and replaying only scenarios whose recorded reach intersects the diff.
+    /// and replaying only specs whose recorded reach intersects the diff.
     func covers(anyOf changedClasses: some Sequence<String>) -> Bool {
         let changed = Set(changedClasses)
         return coveredClasses.contains(where: changed.contains)
@@ -140,11 +150,11 @@ public extension ScenarioPlan {
 
 // MARK: - Record / verify across builds
 
-public extension Scenario {
-    /// Run this scenario's system across the whole explored surface (call orderings × seam cassettes)
-    /// and pin every (input, golden trace) pair into a `ScenarioPlan`. Run on the **base** build; the
+public extension Spec {
+    /// Run this spec's system across the whole explored surface (call orderings × seam cassettes)
+    /// and pin every (input, golden trace) pair into a `SpecPlan`. Run on the **base** build; the
     /// first probe is the declared order under the golden cassette — the representative run.
-    func record() -> ScenarioPlan {
+    func record() -> SpecPlan {
         let recording = Cassette()
         _ = capture(make: makeSystem, order: operations, cassette: recording)
         let golden = recording.snapshot()
@@ -153,9 +163,9 @@ public extension Scenario {
         let cassettes = seamDomains.isEmpty
             ? [golden]
             : golden.generatedVariants(
-                count: ScenarioDefaults.variantCount,
+                count: SpecDefaults.variantCount,
                 varying: seamDomains,
-                seed: ScenarioDefaults.seed
+                seed: SpecDefaults.seed
             )
 
         let declaredLabels = operations.map(\.label)
@@ -174,9 +184,9 @@ public extension Scenario {
                 }
             }
         }
-        return ScenarioPlan(
-            scenarioName: name,
-            seed: ScenarioDefaults.seed,
+        return SpecPlan(
+            specName: name,
+            seed: SpecDefaults.seed,
             variedSeams: seamDomains.keys.sorted(),
             probes: probes,
             coveredClasses: classes.sorted()
@@ -185,7 +195,7 @@ public extension Scenario {
 
     /// `record()` and write the plan artifact.
     @discardableResult
-    func record(to url: URL) throws -> ScenarioPlan {
+    func record(to url: URL) throws -> SpecPlan {
         let plan = record()
         try plan.write(to: url)
         return plan
@@ -197,7 +207,7 @@ public extension Scenario {
     /// intent-declared deltas are absorbed and the residual collateral gates. Inputs the current build
     /// can't reproduce (a renamed/removed op, a seam read past the recording) downgrade an otherwise
     /// EQUIVALENT verdict to CANNOT-VERIFY via `.unrecorded` coverage gaps.
-    func verify(replaying plan: ScenarioPlan) -> ScenarioVerdict {
+    func verify(replaying plan: SpecPlan) -> SpecVerdict {
         let opsByLabel = Dictionary(uniqueKeysWithValues: operations.map { ($0.label, $0) })
         let planOps = orderedUnion(plan.probes.map(\.ordering))
         let missingOps = planOps.filter { opsByLabel[$0] == nil }
@@ -233,7 +243,7 @@ public extension Scenario {
                     declaredOps: planOps,
                     missingOps: missingOps
                 )
-                return ScenarioVerdict(
+                return SpecVerdict(
                     result: VerificationResult(diff: diff, coverage: coverage),
                     orderingsExplored: distinctOrderings,
                     failingOrder: distinctOrderings > 1 ? probe.ordering : nil,
@@ -244,7 +254,7 @@ public extension Scenario {
 
         // Every replayable probe held. Coverage decides whether that EQUIVALENT can be trusted:
         // unreplayable ops or seam misses anywhere downgrade it to CANNOT-VERIFY.
-        let diff = representative ?? emptyDiff(golden: plan.scenarioName)
+        let diff = representative ?? emptyDiff(golden: plan.specName)
         let coverage = coverage(
             replays: replays,
             domainHeld: true,
@@ -252,7 +262,7 @@ public extension Scenario {
             missingOps: missingOps,
             sweptSeams: plan.variedSeams
         )
-        return ScenarioVerdict(
+        return SpecVerdict(
             result: VerificationResult(diff: diff, coverage: coverage),
             orderingsExplored: distinctOrderings,
             failingOrder: nil,
@@ -261,16 +271,16 @@ public extension Scenario {
     }
 
     /// `verify(replaying:)` against a plan artifact on disk.
-    func verify(replayingContentsOf url: URL) throws -> ScenarioVerdict {
-        try verify(replaying: ScenarioPlan(contentsOf: url))
+    func verify(replayingContentsOf url: URL) throws -> SpecVerdict {
+        try verify(replaying: SpecPlan(contentsOf: url))
     }
 
     // MARK: - Machinery
 
     /// One golden probe: replay `cassette` into the base system on `order` and pin the trace.
-    private func probe(order: [Op<S>], cassette: CassetteData) -> ScenarioProbe {
+    private func probe(order: [Op<S>], cassette: CassetteData) -> SpecProbe {
         let trace = capture(make: makeSystem, order: order, cassette: Cassette(replaying: cassette))
-        return ScenarioProbe(ordering: order.map(\.label), cassette: cassette, golden: trace)
+        return SpecProbe(ordering: order.map(\.label), cassette: cassette, golden: trace)
     }
 
     /// When *no* probe was replayable there is nothing to diff; an empty comparison stands in so the

@@ -71,7 +71,7 @@ with it its whole edge-list — the entire column collapsed rather than being pa
 What carries over is a property of *capture semantics*, not of any mechanism:
 
 - **Records calls, not accumulated collaborator state.** A real singleton's internal state accumulates
-  across a scenario's many internal runs; the forwarder deliberately records the *call* (label + args),
+  across a spec's many internal runs; the forwarder deliberately records the *call* (label + args),
   which stays deterministic. A test that needs to assert on accumulated state must read it directly.
 
 The residue is the **no-source-binary holdout**: a third-party *binary* framework with no source can't be

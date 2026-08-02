@@ -8,9 +8,9 @@ import XCTest
 final class ExtensionModeTests: XCTestCase {
     private func featureDiff() -> TraceDiff {
         BehavioralDiff.compare(
-            baseline: CheckoutScenario.baseline(),
-            candidate: CheckoutScenario.feature(),
-            tolerances: CheckoutScenario.tolerances
+            baseline: CheckoutSpec.baseline(),
+            candidate: CheckoutSpec.feature(),
+            tolerances: CheckoutSpec.tolerances
         )
     }
 
@@ -40,7 +40,7 @@ final class ExtensionModeTests: XCTestCase {
     /// With the feature's intent declared, the two loyalty additions become `.intended` (non-gating)
     /// while the unintended dropped `CartDidChange` stays `.collateral` and gates — a caught regression.
     func testExtensionModeAbsorbsIntendedAndCatchesCollateral() {
-        let diff = featureDiff().classified(against: CheckoutScenario.intent)
+        let diff = featureDiff().classified(against: CheckoutSpec.intent)
 
         XCTAssertEqual(
             diff.intendedCount,
@@ -59,7 +59,7 @@ final class ExtensionModeTests: XCTestCase {
     /// The happy path / acceptance loop: if the dropped notification were *also* intended and declared,
     /// the change verifies as a clean, safe extension — nothing collateral remains.
     func testFullyDeclaredFeatureVerifiesClean() {
-        var intent = CheckoutScenario.intent
+        var intent = CheckoutSpec.intent
         intent.expectedRemovedEvents = ["CartDidChange"]
         let diff = featureDiff().classified(against: intent)
         XCTAssertTrue(diff.isEquivalent, "every change is now declared — no collateral remains\n\(diff.report())")

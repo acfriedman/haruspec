@@ -10,7 +10,7 @@ import HaruspecCore
 //
 // v1 exposes verification of *artifacts* (trace files), wrapping the same path as
 // `haruspec diff --tolerance --intent --agent`. Recording golden traces is deliberately NOT a tool:
-// capture runs inside the consumer's test target (`Scenario.record(to:)`) — an external process
+// capture runs inside the consumer's test target (`Spec.record(to:)`) — an external process
 // can verify what a run produced, but it can't faithfully run someone else's app.
 
 public struct MCPServer {
@@ -93,14 +93,14 @@ public struct MCPServer {
                 "title": "Verify behavioral parity of a change",
                 "description": """
                 Deterministically diff two captured behavior traces (JSON files written by Haruspec capture — \
-                `Scenario.record(to:)`, `haruspec demo`, or a TraceRecorder run) and return the verdict: \
+                `Spec.record(to:)`, `haruspec demo`, or a TraceRecorder run) and return the verdict: \
                 EQUIVALENT (behavior matches within declared tolerances) or DIVERGED (each divergence listed \
                 and localized: missing/unexpected events, reordering, value mismatches, timing regressions). \
                 Use it to gate a refactor or migration on proof rather than plausibility. Optional tolerance \
                 spec absorbs declared nondeterminism (volatile fields, timing budgets, unordered groups); \
                 optional intent spec runs extension mode — divergences the change was *meant* to make are \
                 labeled intended and don't gate, anything undeclared is collateral and does. This file-level \
-                diff makes no coverage claim (CANNOT-VERIFY arises in scenario/plan flows, where isolation \
+                diff makes no coverage claim (CANNOT-VERIFY arises in spec/plan flows, where isolation \
                 is measured). The response ends with a relay guide: report the verdict to the user faithfully.
                 """,
                 "inputSchema": [
@@ -113,12 +113,12 @@ public struct MCPServer {
                         ],
                         "tolerance": [
                             "type": "string",
-                            "description": "Optional path to a ToleranceSpec JSON (declared acceptable deltas)"
+                            "description": "Optional path to a Tolerance JSON (declared acceptable deltas)"
                         ],
                         "intent": [
                             "type": "string",
                             "description":
-                                "Optional path to an IntentSpec JSON (declared intended changes — extension mode)"
+                                "Optional path to an Intent JSON (declared intended changes — extension mode)"
                         ]
                     ],
                     "required": ["baseline_trace", "candidate_trace"]
@@ -137,7 +137,7 @@ public struct MCPServer {
                     "type": "object",
                     "properties": [
                         "trace": ["type": "string", "description": "Path to the trace JSON"],
-                        "tolerance": ["type": "string", "description": "Optional path to a ToleranceSpec JSON"]
+                        "tolerance": ["type": "string", "description": "Optional path to a Tolerance JSON"]
                     ],
                     "required": ["trace"]
                 ],
@@ -172,7 +172,7 @@ public struct MCPServer {
             let tolerances = try loadTolerance(args)
             var diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: tolerances)
             if let intentPath = args["intent"] as? String, !intentPath.isEmpty {
-                diff = try diff.classified(against: IntentSpec(contentsOf: URL(fileURLWithPath: intentPath)))
+                diff = try diff.classified(against: Intent(contentsOf: URL(fileURLWithPath: intentPath)))
             }
 
             // The same two artifacts the CLI's `--json` / `--agent` split serves: a machine-readable
@@ -215,9 +215,9 @@ public struct MCPServer {
 
     // MARK: - Plumbing
 
-    private func loadTolerance(_ args: [String: Any]) throws -> ToleranceSpec {
+    private func loadTolerance(_ args: [String: Any]) throws -> Tolerance {
         guard let path = args["tolerance"] as? String, !path.isEmpty else { return .strict }
-        return try ToleranceSpec(contentsOf: URL(fileURLWithPath: path))
+        return try Tolerance(contentsOf: URL(fileURLWithPath: path))
     }
 
     private func textContent(_ text: String) -> [String: Any] {

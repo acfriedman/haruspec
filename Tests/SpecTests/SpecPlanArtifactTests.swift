@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
-@testable import HaruspecScenario
 import HaruspecSeams
+@testable import HaruspecSpec
 import XCTest
 
 // The plan artifact's file-layer guarantees: gzip round-trip (a committed multi-MB plan shrinks to
@@ -12,9 +12,9 @@ private func makeGood(_ ctx: SeamContext) -> PromoCart {
     GoodCart(center: ctx.notifications)
 }
 
-final class ScenarioPlanArtifactTests: XCTestCase {
-    private func cart() -> Scenario<PromoCart> {
-        Scenario<PromoCart>("promo-cart.artifact")
+final class SpecPlanArtifactTests: XCTestCase {
+    private func cart() -> Spec<PromoCart> {
+        Spec<PromoCart>("promo-cart.artifact")
             .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
@@ -42,7 +42,7 @@ final class ScenarioPlanArtifactTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
 
         let written = try cart().record(to: url)
-        let reloaded = try ScenarioPlan(contentsOf: url)
+        let reloaded = try SpecPlan(contentsOf: url)
         XCTAssertEqual(reloaded, written, "compression must be invisible to replay")
 
         let archived = try Data(contentsOf: url)
@@ -55,6 +55,31 @@ final class ScenarioPlanArtifactTests: XCTestCase {
         )
     }
 
+    /// The `Scenario` → `Spec` rename moved the plan's name key, which is why schemaVersion went to
+    /// 2. A version-1 artifact no longer decodes into this shape at all, so the version has to gate
+    /// *before* the rest: the caller needs "re-record the plan", not a keyNotFound on `specName`.
+    func testAPreRenamePlanIsRejectedWithTheReRecordError() throws {
+        let legacy = Data("""
+        {"schemaVersion":1,"scenarioName":"promo-cart.artifact","seed":7,
+         "variedSeams":[],"probes":[],"coveredClasses":[]}
+        """.utf8)
+
+        XCTAssertThrowsError(try SpecPlan(jsonData: legacy)) { error in
+            XCTAssertEqual(
+                error as? SpecPlanError,
+                .unsupportedSchemaVersion(found: 1, supported: SpecPlan.supportedSchemaVersion)
+            )
+        }
+    }
+
+    func testThePlanNamesItsSpec() throws {
+        let json = try XCTUnwrap(String(data: cart().record().jsonData(), encoding: .utf8))
+
+        XCTAssertTrue(json.contains("\"specName\""))
+        XCTAssertFalse(json.contains("\"scenarioName\""))
+        XCTAssertEqual(try SpecPlan(jsonData: cart().record().jsonData()).specName, "promo-cart.artifact")
+    }
+
     func testGzipDetectionIsByContentNotFilename() throws {
         // A renamed artifact (plan.json holding gzip bytes) still replays — sniffing the magic, not
         // trusting the extension.
@@ -63,7 +88,7 @@ final class ScenarioPlanArtifactTests: XCTestCase {
 
         let plan = cart().record()
         try Gzip.compress(plan.jsonData()).write(to: url)
-        XCTAssertEqual(try ScenarioPlan(contentsOf: url), plan)
+        XCTAssertEqual(try SpecPlan(contentsOf: url), plan)
     }
 
     func testGzipArchivesAreDeterministic() throws {
@@ -99,10 +124,10 @@ final class ScenarioPlanArtifactTests: XCTestCase {
         plan.schemaVersion = 99
         let bytes = try plan.jsonData()
 
-        XCTAssertThrowsError(try ScenarioPlan(jsonData: bytes)) { error in
+        XCTAssertThrowsError(try SpecPlan(jsonData: bytes)) { error in
             XCTAssertEqual(
-                error as? ScenarioPlanError,
-                .unsupportedSchemaVersion(found: 99, supported: ScenarioPlan.supportedSchemaVersion),
+                error as? SpecPlanError,
+                .unsupportedSchemaVersion(found: 99, supported: SpecPlan.supportedSchemaVersion),
                 "a stale artifact must refuse to replay, loudly, not decode by field-name luck"
             )
         }

@@ -1,8 +1,8 @@
 import Foundation
 import HaruspecCore
 import HaruspecMacros
-import HaruspecScenario
 import HaruspecSeams
+import HaruspecSpec
 import HaruspecTrace
 import XCTest
 
@@ -92,9 +92,9 @@ private func makeGreedy(_ ctx: SeamContext) -> PromoCart {
     GreedyCart(center: ctx.notifications, context: ctx)
 }
 
-final class ScenarioMarkdownReportTests: XCTestCase {
-    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Scenario<PromoCart> {
-        Scenario<PromoCart>("promo-cart.markdown")
+final class SpecMarkdownReportTests: XCTestCase {
+    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Spec<PromoCart> {
+        Spec<PromoCart>("promo-cart.markdown")
             .system(system)
             .operations {
                 Op("addCoffee") { cart, seams in
@@ -119,7 +119,7 @@ final class ScenarioMarkdownReportTests: XCTestCase {
         XCTAssertTrue(markdown.hasPrefix("### ❌ DIVERGED — `promo-cart.markdown`"))
         XCTAssertFalse(
             markdown.components(separatedBy: "\n")[0].contains("→"),
-            "replay verdicts carry one scenario name, not a baseline → candidate arrow"
+            "replay verdicts carry one spec name, not a baseline → candidate arrow"
         )
         XCTAssertTrue(markdown.contains("| Kind | Where | Detail |"), "divergences render as a GFM table")
         XCTAssertTrue(markdown.contains("`valueMismatch`"))
@@ -148,7 +148,7 @@ final class ScenarioMarkdownReportTests: XCTestCase {
 
     func testIntentSplitRendersIntendedAndCollateralSeparately() {
         let plan = cart(system: makeGood).record()
-        let declared = IntentSpec(expectedNewEvents: ["LoyaltyPointsEarned"])
+        let declared = Intent(expectedNewEvents: ["LoyaltyPointsEarned"])
         let verdict = cart(system: makeLoyaltyRoundBug).intend(declared).verify(replaying: plan)
         XCTAssertEqual(verdict.verdict, .diverged, "the riding regression still gates")
         XCTAssertGreaterThan(verdict.diff.intendedCount, 0)
@@ -161,7 +161,7 @@ final class ScenarioMarkdownReportTests: XCTestCase {
 
     func testOpDriftAbstentionNamesTheDrift() {
         let plan = cart(system: makeGood).record()
-        let drifted = Scenario<PromoCart>("promo-cart.markdown")
+        let drifted = Spec<PromoCart>("promo-cart.markdown")
             .system(makeRefactor)
             .operations {
                 Op("addEspresso") { cart, seams in

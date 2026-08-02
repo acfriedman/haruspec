@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
-import HaruspecScenario
 import HaruspecSeams
+import HaruspecSpec
 import XCTest
 
 // The verdict artifact (result.json) is what crosses the process boundary: written inside the test run
@@ -17,9 +17,9 @@ private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
     RoundBugCart(center: ctx.notifications)
 }
 
-final class ScenarioVerdictSerializationTests: XCTestCase {
-    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Scenario<PromoCart> {
-        Scenario<PromoCart>("promo-cart.artifact")
+final class SpecVerdictSerializationTests: XCTestCase {
+    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Spec<PromoCart> {
+        Spec<PromoCart>("promo-cart.artifact")
             .system(system)
             .operations {
                 Op("addCoffee") { cart, seams in
@@ -35,7 +35,7 @@ final class ScenarioVerdictSerializationTests: XCTestCase {
             }
     }
 
-    private func divergedVerdict() -> ScenarioVerdict {
+    private func divergedVerdict() -> SpecVerdict {
         let plan = cart(system: makeGood).record()
         let verdict = cart(system: makeRoundBug).verify(replaying: plan)
         XCTAssertEqual(verdict.verdict, .diverged, "the fixture verdict must be a real caught regression")
@@ -52,9 +52,9 @@ final class ScenarioVerdictSerializationTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
 
         try verdict.write(to: url)
-        let reloaded = try ScenarioVerdict(contentsOf: url)
+        let reloaded = try SpecVerdict(contentsOf: url)
 
-        // No Equatable on ScenarioVerdict — compare the fields the report/gate actually consume.
+        // No Equatable on SpecVerdict — compare the fields the report/gate actually consume.
         XCTAssertEqual(reloaded.verdict, verdict.verdict)
         XCTAssertEqual(reloaded.diff.divergences, verdict.diff.divergences)
         XCTAssertEqual(reloaded.counterexample, verdict.counterexample)
@@ -77,7 +77,7 @@ final class ScenarioVerdictSerializationTests: XCTestCase {
         // artifacts must stay readable — same fields, different formatting.
         let verdict = divergedVerdict()
         let legacy = try JSONEncoder().encode(verdict)
-        let reloaded = try ScenarioVerdict(jsonData: legacy)
+        let reloaded = try SpecVerdict(jsonData: legacy)
         XCTAssertEqual(reloaded.verdict, verdict.verdict)
         XCTAssertEqual(reloaded.diff.divergences, verdict.diff.divergences)
     }
@@ -95,7 +95,7 @@ final class ScenarioVerdictSerializationTests: XCTestCase {
             Bundle.module.url(forResource: "diverged.result", withExtension: "json", subdirectory: "Fixtures"),
             "the committed fixture must ship with the test bundle"
         )
-        let verdict = try ScenarioVerdict(contentsOf: fixture)
+        let verdict = try SpecVerdict(contentsOf: fixture)
         XCTAssertEqual(verdict.verdict, .diverged, "schema drift check: the artifact shape still decodes")
         XCTAssertFalse(verdict.diff.divergences.isEmpty)
         XCTAssertNotNil(verdict.counterexample)

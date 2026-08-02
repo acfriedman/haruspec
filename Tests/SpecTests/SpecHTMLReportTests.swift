@@ -1,12 +1,12 @@
 import HaruspecCore
 import HaruspecMacros
-import HaruspecScenario
 import HaruspecSeams
+import HaruspecSpec
 import HaruspecTrace
 import XCTest
 
-// Drives a real scenario (seam-swept, so a shrunk counterexample exists) and asserts the visual report
-// leads with that counterexample. Uses the DSL rather than a hand-built verdict because ScenarioVerdict's
+// Drives a real spec (seam-swept, so a shrunk counterexample exists) and asserts the visual report
+// leads with that counterexample. Uses the DSL rather than a hand-built verdict because SpecVerdict's
 // counterexample is only produced by an actual failing run.
 
 protocol Till: AnyObject {
@@ -77,9 +77,9 @@ private func makeRoundBug(_ ctx: SeamContext) -> Till {
     RoundBugTill(center: ctx.notifications)
 }
 
-final class ScenarioHTMLReportTests: XCTestCase {
-    private func till() -> Scenario<Till> {
-        Scenario<Till>("promo-till")
+final class SpecHTMLReportTests: XCTestCase {
+    private func till() -> Spec<Till> {
+        Spec<Till>("promo-till")
             .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
@@ -98,7 +98,7 @@ final class ScenarioHTMLReportTests: XCTestCase {
         XCTAssertTrue(html.contains("<!doctype html>"), file: file, line: line)
     }
 
-    func testDivergedScenarioLeadsWithCounterexample() {
+    func testDivergedSpecLeadsWithCounterexample() {
         let swept = till().vary { Seam("coffeeQty", .int(1 ... 20)) }
         let verdict = swept.verify(against: makeRoundBug)
         XCTAssertEqual(verdict.verdict, .diverged)
@@ -113,7 +113,7 @@ final class ScenarioHTMLReportTests: XCTestCase {
         XCTAssertTrue(html.contains("seam values"), "the counterexample hero lists the shrunk seam values")
     }
 
-    func testEquivalentScenarioRendersCleanPanel() {
+    func testEquivalentSpecRendersCleanPanel() {
         let verdict = till().verify(against: makeGood)
         XCTAssertEqual(verdict.verdict, .equivalent)
         let html = verdict.htmlReport()

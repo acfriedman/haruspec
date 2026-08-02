@@ -29,7 +29,7 @@ Everything is a caller of one reusable capability:
 2. **Canonicalize** — remove nondeterminism (pointers → symbolic ids, OS threads → logical threads,
    wall time → a logical clock, volatile values → redacted) so two runs are comparable.
 3. **Transform** — an agent (or a human) changes the code.
-4. **Replay + Diff** — re-run the same scenario, capture the new trace, and diff within declared
+4. **Replay + Diff** — re-run the same spec, capture the new trace, and diff within declared
    tolerances. The pass/fail oracle is *"new behavior matches old,"* not *"compiles."*
 
 ## Architecture (engine first, applications second)
@@ -44,7 +44,7 @@ Everything is a caller of one reusable capability:
 | `haruspec`    | A thin CLI: `diff`, `demo`, `canonicalize`. |
 
 No Swift-6-specific (or migration-specific) logic lives in the core — applications configure the
-engine via a `ToleranceSpec`.
+engine via a `Tolerance`.
 
 ## Capture layers (toward zero-code adoption)
 
@@ -111,11 +111,11 @@ the call graph reshuffles but the temporal coupling of product milestones must n
 
 ## Parity vs. extension mode
 
-The same engine serves two uses, and migration is the special case. A **`ToleranceSpec`** says which
-deltas *don't matter*; an **`IntentSpec`** (its symmetric complement) says which deltas were *meant to
+The same engine serves two uses, and migration is the special case. A **`Tolerance`** says which
+deltas *don't matter*; an **`Intent`** (its symmetric complement) says which deltas were *meant to
 happen*:
 
-- **Parity mode** (migrations, refactors) — `IntentSpec.none`. Any divergence gates. "Prove nothing
+- **Parity mode** (migrations, refactors) — `Intent.none`. Any divergence gates. "Prove nothing
   changed."
 - **Extension mode** (features) — a populated intent spec. Divergences it declared
   (`expectedNewEvents` / `expectedRemovedEvents` / `expectedValueChanges`) are relabeled `intended`
@@ -166,7 +166,7 @@ timing budget — are each caught and localized by the trace, not by tests.
 ### Using it from an Xcode app
 
 Add the package (local path or git) and link the single **`Haruspec`** product — one
-`import Haruspec` surfaces capture, macros, seams, and the Scenario DSL. The macro plugin builds
+`import Haruspec` surfaces capture, macros, seams, and the Spec DSL. The macro plugin builds
 as a macOS *host tool* automatically; SwiftSyntax never enters your app's link. One footgun:
 build with `-destination 'platform=iOS Simulator,…'` and **never pass `-sdk iphonesimulator…`
 to `xcodebuild`** — `-sdk` overrides `SDKROOT` for every target in the graph including the macro

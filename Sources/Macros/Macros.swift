@@ -71,9 +71,9 @@ public macro Timed() =
 /// real instance: `@TracedForwarder(wrapping: InventoryLedger.self, label: "Inventory", shared: "shared()")`
 /// generates an `init` defaulting to `InventoryLedger.shared()`, so `TracedInventorySeam()` needs no
 /// argument. Absent `shared:`, the init defaults to a fresh `wrapping()` (the right choice for a SUT the
-/// scenario constructs itself). The forwarder is *role-neutral* — it records the same `call`/`ret` whether
+/// spec constructs itself). The forwarder is *role-neutral* — it records the same `call`/`ret` whether
 /// it wraps the system under test or an injected collaborator; classifying a boundary as a durable
-/// collaborator is a scenario concern, not a property of this declaration.
+/// collaborator is a spec concern, not a property of this declaration.
 ///
 /// The generated type is an `NSObject` subclass, so it can back an Obj-C `id<Protocol>` injection point
 /// when the pasted protocol refines an `@objc` seam (Swift forbids conforming to an `<NSObject>`-refining

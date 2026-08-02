@@ -1,13 +1,13 @@
 import Foundation
 import HaruspecCore
 import HaruspecMacros
-import HaruspecScenario
 import HaruspecSeams
+import HaruspecSpec
 import HaruspecTrace
 import XCTest
 
 // The Continuous (PR) shape, end to end: record a golden plan from the "base build" (the good cart),
-// serialize it, replay it into a "changed build" (the same scenario source over a different factory —
+// serialize it, replay it into a "changed build" (the same spec source over a different factory —
 // exactly what checking out a branch does to `makeSystem`), and prove the four verdict behaviors:
 // EQUIVALENT on a faithful change, DIVERGED (localized, reproducible) on a regression, intent-declared
 // deltas absorbed with collateral still gating, and CANNOT-VERIFY when the plan's inputs can't be
@@ -96,11 +96,11 @@ private func makeGreedy(_ ctx: SeamContext) -> PromoCart {
     GreedySeamCart(center: ctx.notifications, context: ctx)
 }
 
-final class ScenarioPlanTests: XCTestCase {
-    /// The authored scenario — identical source on the "base" and "branch" side, as it would be in git.
+final class SpecPlanTests: XCTestCase {
+    /// The authored spec — identical source on the "base" and "branch" side, as it would be in git.
     /// Only the factory differs per test, standing in for what a checkout does to the code under it.
-    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Scenario<PromoCart> {
-        Scenario<PromoCart>("promo-cart.plan")
+    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Spec<PromoCart> {
+        Spec<PromoCart>("promo-cart.plan")
             .system(system)
             .operations {
                 Op("addCoffee") { cart, seams in
@@ -125,7 +125,7 @@ final class ScenarioPlanTests: XCTestCase {
     func testRecordPinsTheExploredSurfaceAndRoundTrips() throws {
         let plan = cart(system: makeGood).record()
 
-        XCTAssertEqual(plan.scenarioName, "promo-cart.plan")
+        XCTAssertEqual(plan.specName, "promo-cart.plan")
         XCTAssertGreaterThan(plan.probes.count, 1, "orderings × variants explored, not just the declared run")
         XCTAssertEqual(
             plan.probes.first?.ordering,
@@ -139,7 +139,7 @@ final class ScenarioPlanTests: XCTestCase {
         let url = planURL("roundtrip")
         defer { try? FileManager.default.removeItem(at: url) }
         let written = try cart(system: makeGood).record(to: url)
-        let reloaded = try ScenarioPlan(contentsOf: url)
+        let reloaded = try SpecPlan(contentsOf: url)
         XCTAssertEqual(reloaded, written)
     }
 
@@ -174,7 +174,7 @@ final class ScenarioPlanTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         try cart(system: makeGood).record(to: url)
 
-        // "On the branch": same scenario source, changed code under it.
+        // "On the branch": same spec source, changed code under it.
         let verdict = try cart(system: makeRoundBug).verify(replayingContentsOf: url)
 
         XCTAssertEqual(verdict.verdict, .diverged, "the truncation bug is caught across the build boundary")
@@ -188,7 +188,7 @@ final class ScenarioPlanTests: XCTestCase {
         let resultURL = planURL("result")
         defer { try? FileManager.default.removeItem(at: resultURL) }
         try JSONEncoder().encode(verdict).write(to: resultURL)
-        let reloaded = try JSONDecoder().decode(ScenarioVerdict.self, from: Data(contentsOf: resultURL))
+        let reloaded = try JSONDecoder().decode(SpecVerdict.self, from: Data(contentsOf: resultURL))
         XCTAssertEqual(reloaded.verdict, .diverged)
         XCTAssertEqual(reloaded.diff.divergences, verdict.diff.divergences)
 
@@ -209,7 +209,7 @@ final class ScenarioPlanTests: XCTestCase {
         XCTAssertEqual(parity.verdict, .diverged, "parity mode gates on any divergence")
 
         // Declared: the same delta under an intent spec is absorbed…
-        let declared = IntentSpec(expectedNewEvents: ["LoyaltyPointsEarned"])
+        let declared = Intent(expectedNewEvents: ["LoyaltyPointsEarned"])
         let extended = cart(system: makeLoyalty).intend(declared).verify(replaying: plan)
         XCTAssertEqual(extended.verdict, .equivalent, "the declared feature delta doesn't gate")
         XCTAssertGreaterThan(extended.diff.intendedCount, 0, "…but is still reported, labeled intended")
@@ -225,7 +225,7 @@ final class ScenarioPlanTests: XCTestCase {
         let plan = cart(system: makeGood).record()
 
         // The branch renamed an op: its recorded probes are unreplayable input, not skippable noise.
-        let drifted = Scenario<PromoCart>("promo-cart.plan")
+        let drifted = Spec<PromoCart>("promo-cart.plan")
             .system(makeRefactor)
             .operations {
                 Op("addEspresso") { cart, seams in
@@ -266,7 +266,7 @@ final class ScenarioPlanTests: XCTestCase {
 
         XCTAssertTrue(
             plan.coveredClasses.contains("PromoCart"),
-            "the structural tier names the classes the scenario exercises"
+            "the structural tier names the classes the spec exercises"
         )
         XCTAssertTrue(plan.covers(anyOf: ["PromoCart", "Unrelated"]))
         XCTAssertFalse(

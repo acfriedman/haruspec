@@ -42,7 +42,7 @@ public struct VerificationResult: Codable, Sendable, Equatable {
 
     /// Extension mode over the wrapped diff: reclassify the intent-declared divergences, then re-resolve
     /// against the same coverage. Symmetric to `TraceDiff.classified(against:)`.
-    public func classified(against intent: IntentSpec) -> VerificationResult {
+    public func classified(against intent: Intent) -> VerificationResult {
         VerificationResult(diff: diff.classified(against: intent), coverage: coverage)
     }
 }

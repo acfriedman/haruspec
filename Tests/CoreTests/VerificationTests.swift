@@ -87,12 +87,12 @@ final class VerificationTests: XCTestCase {
 
         // Declaring the delta as intended clears the gate; over complete coverage the verdict is a
         // trustworthy EQUIVALENT.
-        let declared = raw.classified(against: IntentSpec(expectedNewEvents: ["Loyalty"]))
+        let declared = raw.classified(against: Intent(expectedNewEvents: ["Loyalty"]))
         XCTAssertTrue(declared.isEquivalent)
 
         // But the same intent over a live-fallback gap can't be certified — coverage still downgrades.
         let overGap = VerificationResult(diff: diff(.diverged, [loyalty]), coverage: missGap)
-            .classified(against: IntentSpec(expectedNewEvents: ["Loyalty"]))
+            .classified(against: Intent(expectedNewEvents: ["Loyalty"]))
         XCTAssertEqual(overGap.verdict, .cannotVerify)
     }
 

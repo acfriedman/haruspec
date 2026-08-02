@@ -5,8 +5,8 @@ import HaruspecTrace
 
 // A typed, result-builder API for describing *how to interrogate* a system under test — the one thing a
 // developer authors. The SUT stays oracle-agnostic (plain notifications / KVO + optional deliberate
-// markers); the Scenario, and only the Scenario, knows the oracle. Machinery (recorder, interceptor,
-// context, replay, diff) is hidden behind `scenario.verify(against:)`.
+// markers); the Spec, and only the Spec, knows the oracle. Machinery (recorder, interceptor,
+// context, replay, diff) is hidden behind `spec.verify(against:)`.
 //
 // Prototype: proves the ergonomics on a decoupled checkout, with call-ordering variation as the headline
 // (stateful/model-based differential testing — the baseline branch *is* the model).
@@ -89,21 +89,21 @@ public func Ordering(max: Int = 100) -> Variation {
     }
 }
 
-/// The scenario. Built fluently; the nested `operations`/`vary` use result-builders so the call site
+/// The spec. Built fluently; the nested `operations`/`vary` use result-builders so the call site
 /// reads declaratively without losing Swift's type-checking, autocomplete, or rename-safety.
-public struct Scenario<S> {
+public struct Spec<S> {
     public let name: String
-    var makeSystem: (SeamContext) -> S = { _ in fatalError("Scenario.system(_:) was not set") }
+    var makeSystem: (SeamContext) -> S = { _ in fatalError("Spec.system(_:) was not set") }
     var operations: [Op<S>] = []
     /// Which notification names to capture. `nil` (the default) captures *everything* — a behavioral
     /// oracle watches all behavior by default. A non-nil set is an explicit allowlist override set via
     /// `.observe(notifications:)`, for callers who want to narrow to a few product channels.
     var notificationNames: Set<String>?
     var observationCenter: NotificationCenter?
-    var tolerances: ToleranceSpec = .strict
-    var intent: IntentSpec = .none
+    var tolerances: Tolerance = .strict
+    var intent: Intent = .none
     var seamDomains: [String: SeamDomain] = [:]
-    /// The builds to verify against this scenario's baseline, declared via `.candidates { }`.
+    /// The builds to verify against this spec's baseline, declared via `.candidates { }`.
     var candidates: [Candidate<S>] = []
     var exploreOrdering = false
     var maxOrderings = 100
@@ -116,20 +116,20 @@ public struct Scenario<S> {
     /// `NotificationCenter` (`SeamContext.notifications`) and any recording collaborator doubles a
     /// legacy singleton was made injectable to accept. A boundary the SUT reaches without a declared,
     /// injected seam is unobserved by construction (there is no runtime interception to fall back on).
-    public func system(_ make: @escaping (SeamContext) -> S) -> Scenario<S> {
+    public func system(_ make: @escaping (SeamContext) -> S) -> Spec<S> {
         var copy = self; copy.makeSystem = make; return copy
     }
 
     /// The interactions to drive, as labeled ops with optional ordering constraints.
-    public func operations(@OperationsBuilder<S> _ build: () -> [Op<S>]) -> Scenario<S> {
+    public func operations(@OperationsBuilder<S> _ build: () -> [Op<S>]) -> Spec<S> {
         var copy = self; copy.operations = build(); return copy
     }
 
-    /// Narrow observation to an explicit allowlist of notification names. **Optional** — scenarios
+    /// Narrow observation to an explicit allowlist of notification names. **Optional** — specs
     /// capture *all* notifications by default (a behavioral oracle watches everything), so this is an
     /// opt-in narrowing for callers who genuinely want to ignore every channel except the ones listed.
     /// To silence a specific noisy channel while keeping the rest, prefer `.ignore(notifications:)`.
-    public func observe(notifications: [String]) -> Scenario<S> {
+    public func observe(notifications: [String]) -> Spec<S> {
         var copy = self; copy.notificationNames = Set(notifications); return copy
     }
 
@@ -137,7 +137,7 @@ public struct Scenario<S> {
     /// raw trace stays faithful (reports show every post); the named channels are dropped from both
     /// sides at diff time, so a channel whose count varies run-to-run stops causing spurious
     /// divergences. Symmetric with `.observe(notifications:)`; writes into the tolerance spec.
-    public func ignore(notifications names: [String]) -> Scenario<S> {
+    public func ignore(notifications names: [String]) -> Spec<S> {
         var copy = self
         copy.tolerances.ignoredNotificationNames += names
         return copy
@@ -149,24 +149,24 @@ public struct Scenario<S> {
     /// default (a fresh per-window `NotificationCenter()` handed through `SeamContext.notifications`) is
     /// inherently isolated; pointing this at a process-wide center under a *parallel* test runner can let a
     /// sibling capture's posts leak in (prefer injecting the context center, or serialize the suite).
-    public func observing(on center: NotificationCenter) -> Scenario<S> {
+    public func observing(on center: NotificationCenter) -> Spec<S> {
         var copy = self; copy.observationCenter = center; return copy
     }
 
     /// Declared acceptable deltas.
-    public func tolerate(_ spec: ToleranceSpec) -> Scenario<S> {
+    public func tolerate(_ spec: Tolerance) -> Spec<S> {
         var copy = self; copy.tolerances = spec; return copy
     }
 
     /// Extension mode: declare the deltas the change was *meant* to make. Declared divergences are
     /// reported as `intended` and don't gate; the verdict gates on the residual collateral. The default
-    /// (`IntentSpec.none`) is parity mode — every divergence gates. See `IntentSpec`.
-    public func intend(_ spec: IntentSpec) -> Scenario<S> {
+    /// (`Intent.none`) is parity mode — every divergence gates. See `Intent`.
+    public func intend(_ spec: Intent) -> Spec<S> {
         var copy = self; copy.intent = spec; return copy
     }
 
     /// What to vary — seam domains and/or call ordering.
-    public func vary(@VariationsBuilder _ build: () -> [Variation]) -> Scenario<S> {
+    public func vary(@VariationsBuilder _ build: () -> [Variation]) -> Spec<S> {
         var copy = self
         for variation in build() {
             switch variation {

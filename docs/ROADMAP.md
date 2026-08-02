@@ -41,35 +41,35 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   exit code `4 = cannot-verify` (CI treats 3 and 4 as non-pass; only 0 is green). Deferred by decision:
   a numeric coverage *threshold* (declared `CoveragePolicy`) and **static seam-crossing analysis** to
   see boundaries no one recorded — today's denominator is honest but partial.
-- ✅ **Expected-change (intent) spec** — `IntentSpec`, symmetric to `ToleranceSpec`: tolerances declare
+- ✅ **Expected-change (intent) spec** — `Intent`, symmetric to `Tolerance`: tolerances declare
   deltas that *don't matter*, the intent spec declares deltas that were *meant to happen*
   (`expectedNewEvents` / `expectedRemovedEvents` / `expectedValueChanges`). `TraceDiff.classified(against:)`
   reclassifies declared divergences `intended` and re-derives the verdict from the residual collateral —
   so extension mode (features) and parity mode (migrations) are the same engine, with migration the
-  special case where intent = ∅ (`IntentSpec.none`). Field-specific: declaring one field of an event
+  special case where intent = ∅ (`Intent.none`). Field-specific: declaring one field of an event
   doesn't excuse a change to another.
 - ✅ **Per-divergence labeling + agent relay** — each divergence tagged `intended` / `collateral`
   (`tolerated` deltas never become divergences); `haruspec diff --intent` gates only on collateral, and
   `--agent` prints a prompt-injected guide teaching a consuming agent how to relay the verdict.
   Demonstrated end-to-end by `CartServiceV3` (a loyalty feature carrying a collateral dropped
   notification).
-- ✅ **Continuous (PR) shape — cross-build golden-master** — the two-*builds* analog of the Scenario
+- ✅ **Continuous (PR) shape — cross-build golden-master** — the two-*builds* analog of the Spec
   DSL's two-*types* `verify(against:)`: `record()` on the base build pins the whole explored surface
-  (call orderings × seam cassettes, each with its golden trace) into a serializable `ScenarioPlan`;
+  (call orderings × seam cassettes, each with its golden trace) into a serializable `SpecPlan`;
   `verify(replaying:)` on the changed build replays the *identical* inputs into current code and diffs
-  against the stored goldens. `ScenarioVerdict` now routes through `VerificationResult` (coverage-aware,
-  `Codable` — it *is* the `result.json` PR artifact a reviewer re-runs to reproduce), and `IntentSpec`
-  wires in via `Scenario.intend(_:)` so extension-mode PRs gate only on collateral. Sound across the
+  against the stored goldens. `SpecVerdict` now routes through `VerificationResult` (coverage-aware,
+  `Codable` — it *is* the `result.json` PR artifact a reviewer re-runs to reproduce), and `Intent`
+  wires in via `Spec.intend(_:)` so extension-mode PRs gate only on collateral. Sound across the
   boundary: an op the current build can't replay (rename drift) or a seam read past the recording is an
   `.unrecorded` coverage gap → CANNOT-VERIFY, never a silent skip. `--scope` selection rides the
   trace-derived `coveredClasses` index (`covers(anyOf:)`), so CI re-runs only plans whose recorded reach
   intersects the diff. *Automation layer landed 2026-08-01:* committed gzip plan artifacts
-  (deterministic framing + a validated `schemaVersion` gate), `ScenarioVerdict` file helpers +
+  (deterministic framing + a validated `schemaVersion` gate), `SpecVerdict` file helpers +
   `markdownReport()`, the `haruspec report` subcommand (render + exit-code gate), and the example
   app's per-PR replay workflow with sticky verdict comments and a push-to-main freshness guard —
   first live catch: a one-cent "behavior-neutral" refactor
   ([example-xcode-migration PR #5](https://github.com/acfriedman/example-xcode-migration/pull/5)).
-  *Still deferred:* `git diff` → scope derivation and a scenario catalog/discovery subcommand.
+  *Still deferred:* `git diff` → scope derivation and a spec catalog/discovery subcommand.
 - ⏳ **Richer narration + surprise score** — LLM-authored per-divergence explanations (what changed,
   where it originates, whether it's plausibly the feature) and a ranked surprise score, beyond the
   current deterministic labels + relay guide.
@@ -195,7 +195,7 @@ the golden branch, replay the *same* transcript into both branches, and diff. Se
   + intended/collateral counts + full diff JSON — and `canonicalize_trace` exposes the canonical form
   for debugging. Tool-execution failures ride `isError` (visible to the model), never protocol errors.
   Recording golden traces is deliberately *not* a tool: capture runs inside the consumer's test target
-  (`Scenario.record(to:)`) — an external process verifies artifacts, it can't faithfully run someone
+  (`Spec.record(to:)`) — an external process verifies artifacts, it can't faithfully run someone
   else's app. Proven over stdio against the demo (EQUIVALENT refactor / DIVERGED regression);
   `.mcp.json` registers the server for agent sessions in this repo.
 

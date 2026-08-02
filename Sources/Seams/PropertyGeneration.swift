@@ -124,11 +124,11 @@ public struct DifferentialProperty {
     /// Runs the code for a branch against a replay cassette, returning its behavior trace.
     public let run: (Cassette, Branch) -> Trace
     /// Tolerances for the branch-vs-branch diff (default: strict parity).
-    public let tolerances: ToleranceSpec
+    public let tolerances: Tolerance
 
     public init(
         golden: CassetteData,
-        tolerances: ToleranceSpec = .strict,
+        tolerances: Tolerance = .strict,
         run: @escaping (Cassette, Branch) -> Trace
     ) {
         self.golden = golden

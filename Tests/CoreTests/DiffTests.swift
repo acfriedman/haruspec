@@ -71,7 +71,7 @@ final class DiffTests: XCTestCase {
         let tolerant = BehavioralDiff.compare(
             baseline: base,
             candidate: cand,
-            tolerances: ToleranceSpec(unorderedGroups: [["A", "B"]])
+            tolerances: Tolerance(unorderedGroups: [["A", "B"]])
         )
         XCTAssertTrue(tolerant.isEquivalent)
     }
@@ -84,7 +84,7 @@ final class DiffTests: XCTestCase {
         let withinBudget = BehavioralDiff.compare(
             baseline: base,
             candidate: slow,
-            tolerances: ToleranceSpec(timingBudgets: ["work": 150])
+            tolerances: Tolerance(timingBudgets: ["work": 150])
         )
         XCTAssertTrue(withinBudget.isEquivalent)
 
@@ -92,7 +92,7 @@ final class DiffTests: XCTestCase {
         let bad = BehavioralDiff.compare(
             baseline: base,
             candidate: slow,
-            tolerances: ToleranceSpec(timingBudgets: ["work": 50])
+            tolerances: Tolerance(timingBudgets: ["work": 50])
         )
         XCTAssertEqual(bad.divergences.map(\.kind), [.timingRegression])
     }
@@ -105,7 +105,7 @@ final class DiffTests: XCTestCase {
         let tolerant = BehavioralDiff.compare(
             baseline: base,
             candidate: cand,
-            tolerances: ToleranceSpec(numericEpsilon: 0.001)
+            tolerances: Tolerance(numericEpsilon: 0.001)
         )
         XCTAssertTrue(tolerant.isEquivalent)
     }
@@ -130,7 +130,7 @@ final class DiffTests: XCTestCase {
         let tolerant = BehavioralDiff.compare(
             baseline: base,
             candidate: cand,
-            tolerances: ToleranceSpec(volatileFields: [.key("id")])
+            tolerances: Tolerance(volatileFields: [.key("id")])
         )
         XCTAssertTrue(tolerant.isEquivalent) // id redacted, amount matches
     }
@@ -143,7 +143,7 @@ final class DiffTests: XCTestCase {
         let cand = trace("cand", [call(0, "addItem", ["id": "SKU-9"]),
                                   call(1, "checkout", ["id": "UUID-2"])])
 
-        let scoped = ToleranceSpec(volatileFields: [.key("id", inEvent: "checkout")])
+        let scoped = Tolerance(volatileFields: [.key("id", inEvent: "checkout")])
         let diff = BehavioralDiff.compare(baseline: base, candidate: cand, tolerances: scoped)
         XCTAssertEqual(diff.divergences.map(\.kind), [.valueMismatch]) // addItem's id still compared
         XCTAssertEqual(diff.divergences[0].label, "addItem")
@@ -152,7 +152,7 @@ final class DiffTests: XCTestCase {
         let unscoped = BehavioralDiff.compare(
             baseline: base,
             candidate: cand,
-            tolerances: ToleranceSpec(volatileFields: [.key("id")])
+            tolerances: Tolerance(volatileFields: [.key("id")])
         )
         XCTAssertTrue(unscoped.isEquivalent)
     }
@@ -164,7 +164,7 @@ final class DiffTests: XCTestCase {
         let cand = trace("cand", [call(0, "checkout", ["receipt": ["issuedAt": "t2"],
                                                        "promotion": ["issuedAt": "July"]])])
 
-        let scoped = ToleranceSpec(volatileFields: [.path("receipt.issuedAt")])
+        let scoped = Tolerance(volatileFields: [.path("receipt.issuedAt")])
         let diff = BehavioralDiff.compare(baseline: base, candidate: cand, tolerances: scoped)
         XCTAssertEqual(diff.divergences.map(\.kind), [.valueMismatch]) // promotion.issuedAt still compared
 
@@ -172,7 +172,7 @@ final class DiffTests: XCTestCase {
         let unscoped = BehavioralDiff.compare(
             baseline: base,
             candidate: cand,
-            tolerances: ToleranceSpec(volatileFields: [.key("issuedAt")])
+            tolerances: Tolerance(volatileFields: [.key("issuedAt")])
         )
         XCTAssertTrue(unscoped.isEquivalent)
     }
@@ -185,7 +185,7 @@ final class DiffTests: XCTestCase {
         let tolerant = BehavioralDiff.compare(
             baseline: base,
             candidate: cand,
-            tolerances: ToleranceSpec(ignoredKinds: [.custom])
+            tolerances: Tolerance(ignoredKinds: [.custom])
         )
         XCTAssertTrue(tolerant.isEquivalent)
     }

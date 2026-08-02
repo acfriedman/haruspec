@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
-import HaruspecScenario
 import HaruspecSeams
+import HaruspecSpec
 import XCTest
 
 // Declaring candidates alongside the ops: that each is verified against the same baseline, that the
@@ -33,8 +33,8 @@ final class CandidatesTests: XCTestCase {
             .appendingPathComponent("candidates-\(UUID().uuidString)", isDirectory: true)
     }
 
-    private func cart() -> Scenario<PromoCart> {
-        Scenario<PromoCart>("promo-cart.candidates")
+    private func cart() -> Spec<PromoCart> {
+        Spec<PromoCart>("promo-cart.candidates")
             .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
@@ -78,12 +78,12 @@ final class CandidatesTests: XCTestCase {
     }
 
     func testAnUnmetExpectationSaysWhichWayItWasSupposedToGo() throws {
-        let scenario = cart().candidates {
+        let spec = cart().candidates {
             // Declared as a counterexample, but it is in fact a faithful port.
             Candidate("RefactorCart", expecting: .diverged, makeRefactor)
         }
 
-        let verdict = try XCTUnwrap(scenario.verify(candidateNamed: "RefactorCart"))
+        let verdict = try XCTUnwrap(spec.verify(candidateNamed: "RefactorCart"))
 
         XCTAssertEqual(verdict.actual, .equivalent)
         XCTAssertFalse(verdict.metExpectation)
