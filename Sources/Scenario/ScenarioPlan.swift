@@ -36,6 +36,10 @@ public struct ScenarioProbe: Codable, Sendable, Equatable {
 /// The serializable golden-master of one scenario's explored surface — inputs *and* expected behavior,
 /// in one reproducible artifact (same JSON-bundle discipline as `Trace` / `CassetteData`).
 public struct ScenarioPlan: Codable, Sendable, Equatable {
+    /// The one plan schema this engine writes and replays. `init(jsonData:)` rejects anything else —
+    /// a stale shape whose field names happen to still decode would replay garbage with confidence.
+    public static let supportedSchemaVersion = 1
+
     public var schemaVersion: Int
     public var scenarioName: String
     /// Provenance only: the seed the recorded variants were generated with. Replay reads the stored
@@ -50,7 +54,7 @@ public struct ScenarioPlan: Codable, Sendable, Equatable {
     public var coveredClasses: [String]
 
     public init(
-        schemaVersion: Int = 1,
+        schemaVersion: Int = ScenarioPlan.supportedSchemaVersion,
         scenarioName: String,
         seed: UInt64,
         variedSeams: [String],
@@ -63,6 +67,20 @@ public struct ScenarioPlan: Codable, Sendable, Equatable {
         self.variedSeams = variedSeams
         self.probes = probes
         self.coveredClasses = coveredClasses
+    }
+}
+
+/// Thrown when a plan artifact can't be trusted for replay. Fail-fast at the decode boundary: the
+/// alternative — replaying whatever fields still line up — is a verdict built on unversioned input.
+public enum ScenarioPlanError: Error, Equatable, CustomStringConvertible {
+    case unsupportedSchemaVersion(found: Int, supported: Int)
+
+    public var description: String {
+        switch self {
+        case let .unsupportedSchemaVersion(found, supported):
+            "unsupported plan schemaVersion \(found) (this engine replays \(supported)) — "
+                + "re-record the plan with the current engine"
+        }
     }
 }
 
@@ -79,16 +97,32 @@ public extension ScenarioPlan {
         try Self.canonicalEncoder().encode(self)
     }
 
+    /// A `.gz` destination opts into deterministic gzip (canonical pretty JSON inside), turning the
+    /// multi-megabyte plan into a few hundred committed kilobytes. Anything else writes plain JSON.
     func write(to url: URL) throws {
-        try jsonData().write(to: url)
+        if url.pathExtension == "gz" {
+            try Gzip.compress(jsonData()).write(to: url)
+        } else {
+            try jsonData().write(to: url)
+        }
     }
 
     init(jsonData: Data) throws {
-        self = try JSONDecoder().decode(ScenarioPlan.self, from: jsonData)
+        let plan = try JSONDecoder().decode(ScenarioPlan.self, from: jsonData)
+        guard plan.schemaVersion == Self.supportedSchemaVersion else {
+            throw ScenarioPlanError.unsupportedSchemaVersion(
+                found: plan.schemaVersion,
+                supported: Self.supportedSchemaVersion
+            )
+        }
+        self = plan
     }
 
+    /// Reads plain or gzipped plans alike — detection is by content (the gzip magic), not filename,
+    /// so a renamed artifact still replays.
     init(contentsOf url: URL) throws {
-        try self.init(jsonData: Data(contentsOf: url))
+        let raw = try Data(contentsOf: url)
+        try self.init(jsonData: Gzip.isGzip(raw) ? Gzip.decompress(raw) : raw)
     }
 }
 
