@@ -6,11 +6,11 @@ import HaruspecCore
 // tooling actually needs — a name, the candidates it declares, and how to run them — which is what
 // lets an app hold a *catalog* of specs and drive them all from one place.
 //
-// Two shapes, and the second is the one that scales. `SpecProviding`'s own `check` / `candidateNames`
-// let a spec carry its *own* suite in its own file, so a project with fifty specs keeps no central
-// list — a new spec is a new file and nothing else. `SpecCatalog` is the alternative for a project
-// that would rather drive everything from one place: it flattens differently-typed specs into plain
-// `spec/candidate` strings, at the cost of a line to remember per spec.
+// Two shapes, and the first is the one that scales. `SpecProviding`'s own `check(_:expecting:_:)` lets
+// a spec carry its *own* suite in its own file, so a project with fifty specs keeps no central list — a
+// new spec is a new file and nothing else. `SpecCatalog` is the alternative for a project that would
+// rather drive everything from one place: it flattens differently-typed specs into plain
+// `spec/candidate` strings, at the cost of declaring `.candidates` and a line to remember per spec.
 
 /// Declare one spec by conforming to this — the same shape SwiftUI asks of a `View`: a type whose
 /// whole job is to answer one property. `System` is inferred from the return type, so an author
@@ -32,27 +32,6 @@ public extension SpecProviding {
     /// mentions no associated type, so it stays callable on `any SpecProviding`.
     func entry() -> SpecEntry {
         spec.entry()
-    }
-
-    /// The ports this spec declares — the arguments of its migration test case.
-    var candidateNames: [String] {
-        spec.candidateNames
-    }
-
-    /// Run one declared port, print its report, and throw unless it earned the verdict its
-    /// `Candidate` declared. The whole body of a migration test case.
-    func check(candidate: String, reportsIn directory: URL? = nil) throws {
-        guard let verdict = spec.verify(candidateNamed: candidate, reportsIn: directory) else {
-            throw SpecCatalog.CheckFailure(description: "\(candidate) is no longer a declared candidate")
-        }
-        SpecCatalog.report(
-            "\(spec.name)/\(candidate)",
-            verdict.report(),
-            htmlReportPath: verdict.htmlReportPath
-        )
-        guard verdict.metExpectation else {
-            throw SpecCatalog.CheckFailure(description: verdict.report())
-        }
     }
 
     /// The continuous side to run, or empty — which is what keeps an ordinary test run untouched.
@@ -185,10 +164,8 @@ public struct SpecCatalog {
         guard let verdict = verify(migrationCase: migrationCase, reportsIn: directory) else {
             throw CheckFailure(description: "\(migrationCase) is no longer declared")
         }
-        Self.report(migrationCase, verdict.report(), htmlReportPath: verdict.htmlReportPath)
-        guard verdict.metExpectation else {
-            throw CheckFailure(description: verdict.report())
-        }
+        // `migrationCase` is already `spec/candidate`, the title every check reports under.
+        try verdict.check(in: String(migrationCase.prefix { $0 != "/" }))
     }
 
     /// The continuous twin of `check(migrationCase:)`: run the side the environment selects, print

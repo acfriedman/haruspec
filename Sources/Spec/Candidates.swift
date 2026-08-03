@@ -2,12 +2,11 @@ import Foundation
 import HaruspecCore
 import HaruspecSeams
 
-// A migration is rarely one candidate. The ports land incrementally, and a spec is re-run against
-// each of them — historically as one hand-written `verify(against:)` wrapper per port, all identical
-// but for a type name. Declaring them alongside the ops turns that into a list, and the expected
-// verdict travels with the declaration: a port being *replaced* is expected EQUIVALENT, while a port
-// kept as a deliberate counterexample (a seeded bug, a known-divergent prototype) is expected to
-// diverge, and asserting that is what proves the oracle still bites.
+// The optional bulk path, for a project that wants its ports *enumerable* — driven from a
+// `SpecCatalog`, or swept in one call — rather than one `@Test` per build (`Spec.check(_:expecting:_:)`,
+// which is the first-class spelling and what a migration suite should reach for). Declaring the list on
+// the spec is what lets tooling name the ports without constructing any of them; the price is that a
+// rename is caught by a failed lookup instead of by the compiler.
 //
 // The declaration stays a typed Swift block rather than a data file because a candidate *is* a
 // constructor — `(SeamContext) -> S`, the same shape `.system` takes. Nothing about it survives a
@@ -42,37 +41,11 @@ public struct Candidate<S> {
     }
 }
 
-/// A candidate's verdict together with the expectation it was declared against, so a caller can assert
-/// on `metExpectation` without re-stating per candidate which way it was supposed to go.
-public struct CandidateVerdict: Sendable {
-    public let name: String
-    public let expected: TraceDiff.Verdict
-    public let verdict: SpecVerdict
-    /// Where the rendered HTML report was written, if it was.
-    public let htmlReportPath: String?
-
-    public var actual: TraceDiff.Verdict {
-        verdict.verdict
-    }
-
-    public var metExpectation: Bool {
-        actual == expected
-    }
-
-    /// `verdict.report()` prefixed with the expectation when it was *not* met — the line a failing
-    /// test prints, where "DIVERGED" alone doesn't say whether that was the point.
-    public func report() -> String {
-        guard !metExpectation else {
-            return verdict.report()
-        }
-        return "expected \(expected.rawValue), got \(actual.rawValue)\n\(verdict.report())"
-    }
-}
-
 // MARK: - Declaring and running candidates
 
 public extension Spec {
-    /// The builds to verify against this spec's baseline.
+    /// The builds to verify against this spec's baseline, when they should be enumerable. Optional:
+    /// a suite that runs one `@Test` per build calls `check(_:expecting:_:)` and declares nothing here.
     func candidates(@CandidatesBuilder<S> _ build: () -> [Candidate<S>]) -> Spec<S> {
         var copy = self
         copy.candidates = build()
@@ -98,12 +71,22 @@ public extension Spec {
     }
 
     private func run(_ candidate: Candidate<S>, reportsIn directory: URL?) -> CandidateVerdict {
-        let verdict = verify(against: candidate.make)
-        return CandidateVerdict(
-            name: candidate.name,
-            expected: candidate.expected,
-            verdict: verdict,
-            htmlReportPath: verdict.writeHTMLReport(named: candidate.name, in: directory)?.path
-        )
+        verify(candidate.name, expecting: candidate.expected, reportsIn: directory, candidate.make)
+    }
+}
+
+public extension SpecProviding {
+    /// The ports this spec declares — the arguments of a parameterized migration test case.
+    var candidateNames: [String] {
+        spec.candidateNames
+    }
+
+    /// Run one declared port, print its report, and throw unless it earned the verdict its
+    /// `Candidate` declared. The declared-list twin of `check(_:expecting:_:)`.
+    func check(candidate: String, reportsIn directory: URL? = nil) throws {
+        guard let verdict = spec.verify(candidateNamed: candidate, reportsIn: directory) else {
+            throw SpecCatalog.CheckFailure(description: "\(candidate) is no longer a declared candidate")
+        }
+        try verdict.check(in: spec.name)
     }
 }

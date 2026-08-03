@@ -124,7 +124,8 @@ public struct Spec<S> {
     var tolerances: Tolerance = .strict
     var intent: Intent = .none
     var seamDomains: [String: SeamDomain] = [:]
-    /// The builds to verify against this spec's baseline, declared via `.candidates { }`.
+    /// The builds a catalog can enumerate, declared via `.candidates { }`. Empty for a spec whose
+    /// suite checks each build inline (`check(_:expecting:_:)`), which is the ordinary case.
     var candidates: [Candidate<S>] = []
     var exploreOrdering = false
     var maxOrderings = 100
