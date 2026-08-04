@@ -115,6 +115,10 @@ struct ExplorationPlan<S> {
     /// The seam cassettes to drive ordering `index` with — an *independent* sample per ordering, which
     /// is what makes the sweep two-dimensional. Ordering 0 keeps the base seed, so a single-ordering
     /// spec generates exactly what it always did.
+    ///
+    /// Only the random tail moves: the generator's leading boundary variants are the same under every
+    /// ordering, deliberately. Every edge tried under every ordering is where an order-dependent edge
+    /// bug lives, and it is the cross-product worth spending the budget on.
     func cassettes(forOrdering index: Int) -> [CassetteData] {
         guard !domains.isEmpty else {
             return [golden]

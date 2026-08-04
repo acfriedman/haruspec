@@ -1,7 +1,9 @@
 import Foundation
 import HaruspecCore
+import HaruspecMacros
 import HaruspecSeams
 @testable import HaruspecSpec
+import HaruspecTrace
 import XCTest
 
 // What a run spends and what it covers. The defects these pin: the seam sample used to be the *same*
@@ -15,6 +17,35 @@ private func makeGood(_ ctx: SeamContext) -> PromoCart {
 
 private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
     RefactorCart(center: ctx.notifications)
+}
+
+/// The baseline's behavior everywhere except the very top of the declared quantity domain — the shape
+/// of bug a uniform sample finds by luck and a boundary-first one finds by construction.
+@Traced("PromoCart")
+private final class TopOfRangeBugCart: PromoCart {
+    private let center: NotificationCenter
+    private var subtotal = 0
+    private var promo = false
+    init(center: NotificationCenter) {
+        self.center = center
+    }
+
+    func addItem(priceCents: Int, qty: Int) {
+        subtotal += priceCents * qty + (qty == 20 ? 1 : 0)
+        center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
+    }
+
+    func applyPromo() {
+        promo = true
+    }
+
+    func checkout() -> Int {
+        let discount = promo ? Int((Double(subtotal) * 0.10).rounded()) : 0
+        let total = subtotal - discount
+        center.post(name: .init("CheckoutCompleted"), object: nil, userInfo: ["total": total])
+        Haruspec.marker("checkout_completed")
+        return total
+    }
 }
 
 final class ExplorationTests: XCTestCase {
@@ -106,6 +137,35 @@ final class ExplorationTests: XCTestCase {
 
         XCTAssertEqual(exploration.orderingsExplored, 2)
         XCTAssertEqual(exploration.runs, 200)
+    }
+
+    // MARK: - Boundary-first generation, end to end
+
+    func testATinyBudgetStillCatchesABugThatOnlyBitesAtTheEdgeOfADomain() {
+        // Four runs over `.int(1 ... 20)`. Uniform sampling would hit 20 about a fifth of the time;
+        // boundary-first reaches it on the second variant, by construction.
+        let spec = Spec<PromoCart>("promo-cart.edge")
+            .system(makeGood)
+            .operations {
+                Op("addCoffee") { cart, seams in
+                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
+                }
+                Op("checkout") { _ = $0.checkout() }.last()
+            }
+            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
+            .vary {
+                Seam("coffeeQty", .int(1 ... 20))
+                Budget(runs: 4)
+            }
+
+        let verdict = spec.verify(against: { context in TopOfRangeBugCart(center: context.notifications) })
+
+        XCTAssertEqual(verdict.verdict, .diverged)
+        XCTAssertEqual(
+            verdict.counterexampleSeamPairs.first(where: { $0.key == "coffeeQty" })?.value,
+            "20",
+            "the counterexample must be the edge, reached deterministically\n\(verdict.report())"
+        )
     }
 
     // MARK: - Independent samples

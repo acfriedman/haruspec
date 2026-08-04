@@ -23,6 +23,14 @@ public protocol SeamValueGenerator {
     /// The seams this generator varies — the declared *domain surface*, reported into `Coverage`.
     var variedSeams: Set<String> { get }
     mutating func generate(seam: String, like recorded: CanonicalValue) -> CanonicalValue
+    /// Called before each variant's track positions, so a generator can make *which* variant this is
+    /// mean something — the hook boundary-first generation hangs on. Optional: the default does
+    /// nothing, and a purely random generator needs nothing.
+    mutating func beginVariant(_ index: Int)
+}
+
+public extension SeamValueGenerator {
+    mutating func beginVariant(_: Int) {}
 }
 
 /// A deterministic PRNG (SplitMix64) so a property run — and any counterexample it finds — is
@@ -65,6 +73,40 @@ public enum SeamDomain: Sendable {
 }
 
 public extension SeamDomain {
+    /// The values worth trying *first*, in priority order — bugs cluster at the ends of a domain, and
+    /// uniform sampling reaches them only by luck: over `.int(0 ... 20)`, 64 draws find a given edge
+    /// 95% of the time but 5 draws find it 21% of the time, and a `.double` range never lands on its
+    /// bounds at all. Enumerating them makes edge coverage a property of the design rather than of the
+    /// budget, so trimming a budget drops random middles instead of the ends.
+    ///
+    /// A categorical domain is *all* edges: the author named every value because each one is
+    /// interesting.
+    var boundaryValues: [CanonicalValue] {
+        switch self {
+        case let .int(range):
+            var values: [Int64] = [range.lowerBound, range.upperBound]
+            if range.contains(0) {
+                values.append(0)
+            }
+            // One step inside each end: off-by-one lives next to the boundary, not on it.
+            values.append(contentsOf: [range.lowerBound + 1, range.upperBound - 1].filter(range.contains))
+            return orderedUnique(values.map(CanonicalValue.int))
+        case let .double(range):
+            var values: [Double] = [range.lowerBound, range.upperBound]
+            if range.contains(0) {
+                values.append(0)
+            }
+            return orderedUnique(values.map(CanonicalValue.double))
+        case let .anyOf(values):
+            return orderedUnique(values)
+        }
+    }
+
+    private func orderedUnique(_ values: [CanonicalValue]) -> [CanonicalValue] {
+        var seen = Set<String>()
+        return values.filter { seen.insert($0.canonicalString).inserted }
+    }
+
     /// Vary over a named set. Empty traps at construction rather than silently varying nothing —
     /// a seam declared with no values would report domain coverage it never had.
     static func oneOf(_ values: [String]) -> SeamDomain {
@@ -86,26 +128,56 @@ public extension SeamDomain {
     }
 }
 
-/// The built-in, dependency-free generator: uniform sampling over a declared per-seam `SeamDomain`,
-/// seeded by SplitMix64. A seam with no declared domain replays its recorded value unchanged, so the
-/// generated surface is exactly the declared seams. This is the default `SeamValueGenerator`; swapping
-/// in a library-backed one is a one-type change.
+/// The built-in, dependency-free generator: **boundary values first, then uniform sampling** over a
+/// declared per-seam `SeamDomain`, seeded by SplitMix64. A seam with no declared domain replays its
+/// recorded value unchanged, so the generated surface is exactly the declared seams. This is the
+/// default `SeamValueGenerator`; swapping in a library-backed one is a one-type change.
+///
+/// The boundary pass is one-factor-at-a-time: each scheduled variant pins *one* seam to *one* of its
+/// edges and leaves every other seam on its recorded value, so a divergence names the seam that caused
+/// it instead of arriving as a vector of simultaneous extremes. The schedule is round-robin across
+/// seams (every seam's first edge before any seam's second), which is what makes a truncated budget
+/// still cover every seam.
 public struct DomainSeamGenerator: SeamValueGenerator {
     public var domains: [String: SeamDomain]
     private var rng: SplitMix64
+    /// `(seam, edge)` pairs in the order variants claim them.
+    private let schedule: [(seam: String, value: CanonicalValue)]
+    /// The pair this variant pins, or `nil` once the schedule is spent and generation goes random.
+    private var pinned: (seam: String, value: CanonicalValue)?
 
     public init(domains: [String: SeamDomain], seed: UInt64) {
         self.domains = domains
         rng = SplitMix64(seed: seed)
+        schedule = Self.boundarySchedule(domains)
+        pinned = schedule.first
+    }
+
+    /// Round-robin over sorted seams — sorted so the schedule doesn't ride on dictionary order, which
+    /// would make a run's inputs unreproducible across processes.
+    private static func boundarySchedule(_ domains: [String: SeamDomain]) -> [(seam: String, value: CanonicalValue)] {
+        let edges = domains.keys.sorted().map { (seam: $0, values: domains[$0]?.boundaryValues ?? []) }
+        var schedule: [(seam: String, value: CanonicalValue)] = []
+        for index in 0 ..< (edges.map(\.values.count).max() ?? 0) {
+            for edge in edges where index < edge.values.count {
+                schedule.append((seam: edge.seam, value: edge.values[index]))
+            }
+        }
+        return schedule
     }
 
     public var variedSeams: Set<String> {
         Set(domains.keys)
     }
 
+    public mutating func beginVariant(_ index: Int) {
+        pinned = index < schedule.count ? schedule[index] : nil
+    }
+
     public mutating func generate(seam: String, like recorded: CanonicalValue) -> CanonicalValue {
         guard let domain = domains[seam] else { return recorded } // undeclared seam → keep golden
-        return domain.sample(using: &rng)
+        guard let pinned else { return domain.sample(using: &rng) }
+        return pinned.seam == seam ? pinned.value : recorded // one factor at a time
     }
 }
 
@@ -118,7 +190,8 @@ public extension CassetteData {
     func generatedVariants(count: Int, using generator: inout some SeamValueGenerator) -> [CassetteData] {
         var variants: [CassetteData] = []
         variants.reserveCapacity(max(0, count))
-        for _ in 0 ..< max(0, count) {
+        for variant in 0 ..< max(0, count) {
+            generator.beginVariant(variant)
             var newTracks = tracks
             for (seam, track) in tracks {
                 var newTrack: [CanonicalValue] = []
