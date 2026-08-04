@@ -211,17 +211,7 @@ public extension Spec {
 
         let distinctOrderings = Set(plan.probes.map(\.ordering)).count
         let variedInputs = plan.probes.contains { $0.cassette != plan.probes.first?.cassette }
-        // The plan pins what was explored; the *available* surface comes from the partial order the
-        // current build declares, so a replay reports the same fraction a live verify would.
-        let available = exploreOrdering
-            ? countLinearExtensions(operations, repeating: orderingRepeats, limit: SpecDefaults.orderingCountLimit)
-            : (count: 1, exact: true)
-        let exploration = Exploration(
-            orderingsExplored: distinctOrderings,
-            orderingsAvailable: Swift.max(available.count, distinctOrderings),
-            orderingsAreExact: available.exact,
-            variantsPerOrdering: Swift.max(1, plan.probes.count / Swift.max(1, distinctOrderings))
-        )
+        let exploration = exploration(recordedIn: plan)
 
         var replays: [Cassette] = []
         var representative: TraceDiff?
@@ -255,7 +245,10 @@ public extension Spec {
                     orderingsExplored: distinctOrderings,
                     failingOrder: distinctOrderings > 1 ? probe.ordering : nil,
                     counterexample: variedInputs ? probe.cassette : nil,
-                    exploration: exploration
+                    exploration: exploration,
+                    violatedPreconditions: distinctOrderings > 1
+                        ? preconditionViolations(in: probe.ordering)
+                        : nil
                 )
             }
         }
@@ -285,6 +278,24 @@ public extension Spec {
     }
 
     // MARK: - Machinery
+
+    /// What the recorded plan covered, read through the surface the *current* build declares: the plan
+    /// pins the orderings that were explored, but the denominator — and whether an ordering counts as
+    /// out-of-order — comes from this build's constraints, so a replay reports the same fraction a live
+    /// verify would, and a spec that softened an `.after` since recording says so.
+    private func exploration(recordedIn plan: SpecPlan) -> Exploration {
+        let orderings = Set(plan.probes.map(\.ordering))
+        let available = exploreOrdering
+            ? countLinearExtensions(operations, repeating: orderingRepeats, limit: SpecDefaults.orderingCountLimit)
+            : (count: 1, exact: true)
+        return Exploration(
+            orderingsExplored: orderings.count,
+            orderingsAvailable: Swift.max(available.count, orderings.count),
+            orderingsAreExact: available.exact,
+            variantsPerOrdering: Swift.max(1, plan.probes.count / Swift.max(1, orderings.count)),
+            outOfOrderExplored: outOfOrderCount(among: Array(orderings))
+        )
+    }
 
     /// One golden probe: replay `cassette` into the base system on `order` and pin the trace.
     private func probe(order: [Op<S>], cassette: CassetteData) -> SpecProbe {

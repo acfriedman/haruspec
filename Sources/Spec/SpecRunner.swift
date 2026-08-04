@@ -15,6 +15,11 @@ public struct SpecVerdict: Codable, Sendable {
     public let result: VerificationResult
     public let orderingsExplored: Int
     public let failingOrder: [String]?
+    /// Declared `.after` preconditions the failing order broke, as `"removeMug after addMug"`. That
+    /// stratum is explored on purpose, so a divergence here is a finding about a defensive path — worth
+    /// separating from one on the surface the author described. Empty on an in-order failure, `nil`
+    /// where no order was reported at all.
+    public let violatedPreconditions: [String]?
     /// The generated input that triggered a divergence (its varied seam values are the counterexample).
     public let counterexample: CassetteData?
     /// The budget spent and the surface it covered. Optional because artifacts written before the
@@ -27,13 +32,15 @@ public struct SpecVerdict: Codable, Sendable {
         orderingsExplored: Int,
         failingOrder: [String]?,
         counterexample: CassetteData?,
-        exploration: Exploration? = nil
+        exploration: Exploration? = nil,
+        violatedPreconditions: [String]? = nil
     ) {
         self.result = result
         self.orderingsExplored = orderingsExplored
         self.failingOrder = failingOrder
         self.counterexample = counterexample
         self.exploration = exploration
+        self.violatedPreconditions = violatedPreconditions
     }
 
     public var verdict: TraceDiff.Verdict {
@@ -78,14 +85,26 @@ public struct SpecVerdict: Codable, Sendable {
                 lines.append("    \(mark)\(divergence.label): \(divergence.detail)")
             }
         }
-        if let failing = failingOrder {
-            lines.append("  ↳ failing order: \(failing.joined(separator: " → "))")
-        }
+        lines += failingOrderLines
         let seams = counterexampleSeamPairs
         if !seams.isEmpty {
             lines.append("  ↳ counterexample: \(seams.map { "\($0.key)=\($0.value)" }.joined(separator: " "))")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// The failing call sequence, and — when it came from the out-of-order stratum — which declared
+    /// precondition it broke. Triage differs: a divergence on a path the author said shouldn't happen
+    /// is a defensive-code finding, not a regression on the described surface.
+    private var failingOrderLines: [String] {
+        guard let failing = failingOrder else {
+            return []
+        }
+        var lines = ["  ↳ failing order: \(failing.joined(separator: " → "))"]
+        if let violated = violatedPreconditions, !violated.isEmpty {
+            lines.append("    ⚠︎ out-of-order: breaks \(violated.joined(separator: ", "))")
+        }
+        return lines
     }
 
     /// The varied integer seam values of the counterexample as `(key, value)` pairs, e.g.
@@ -115,6 +134,11 @@ enum SpecDefaults {
     /// Where counting valid orderings gives up and reports a lower bound. A denominator is worth a few
     /// milliseconds, not a factorial walk.
     static let orderingCountLimit = 100_000
+    /// The share of a sampled ordering budget spent on sequences that break a declared `.after`
+    /// precondition. A quarter is enough that every declared precondition is broken several times over
+    /// at a typical `Ordering(max: 50)`, while the bulk of the sweep stays on the surface the author
+    /// described. Zero when a spec declares no preconditions — there is no such stratum to draw from.
+    static let outOfOrderShare = 0.25
 }
 
 public extension Spec {
@@ -135,12 +159,14 @@ public extension Spec {
                 guard run.diff.isEquivalent else {
                     let shrunk = shrink(candidate: candidate, failing: order, cassette: cassette)
                     let coverage = coverage(replays: [run.candidateReplay], domainHeld: false)
+                    let failing = exploreOrdering ? shrunk.map(\.label) : nil
                     return SpecVerdict(
                         result: VerificationResult(diff: run.diff, coverage: coverage),
                         orderingsExplored: plan.orderings.count,
-                        failingOrder: exploreOrdering ? shrunk.map(\.label) : nil,
+                        failingOrder: failing,
                         counterexample: seamDomains.isEmpty ? nil : cassette,
-                        exploration: plan.exploration
+                        exploration: plan.exploration,
+                        violatedPreconditions: failing.map(preconditionViolations(in:))
                     )
                 }
             }

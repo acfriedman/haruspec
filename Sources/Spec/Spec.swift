@@ -37,7 +37,13 @@ public struct Op<S> {
     public let label: String
     let action: (S, SeamContext) -> Void
     var mustBeLast = false
+    /// Soft preconditions: labels this op is *expected* to follow, declared with `.after(_:)`.
+    /// Exploration deliberately breaks them in part of its sample rather than filtering them out.
     var afters: [String] = []
+    /// Hard ordering gates: labels that must have run before this op, declared with `.requires(_:)`.
+    /// Enforced while an ordering is built, so no sampled ordering ever violates one. The in-order
+    /// stratum folds `afters` in here temporarily (see `gated`); the declared arrays stay untouched.
+    var gates: [String] = []
     /// Whether ordering exploration may place this op more than once. `.last()` ops are pinned to a
     /// single occurrence by construction — a second one could not also be last.
     var repeatable = true
@@ -66,9 +72,26 @@ public struct Op<S> {
         var copy = self; copy.repeatable = false; return copy
     }
 
-    /// This op may only run after `label` (a partial-order edge).
+    /// This op is *expected* to run after `label` — a soft precondition, not a filter.
+    ///
+    /// Exploration spends most of its ordering budget on sequences that respect the declaration and a
+    /// deliberate slice on sequences that break it, tagging the latter in the verdict. A differential
+    /// oracle has no expected value to contradict: `removeSku("MUG")` on an empty cart is simply
+    /// another input both branches must agree on, and code that isn't defensive about it is the
+    /// finding. Filtering those orderings out is how a false negative hides.
+    ///
+    /// Use `.requires(_:)` for the rare op that *traps* out of order.
     public func after(_ label: String) -> Op<S> {
         var copy = self; copy.afters.append(label); return copy
+    }
+
+    /// This op may not run before `label` — a hard gate no sampled ordering will ever violate.
+    ///
+    /// For the op that would *trap* out of order (a force-unwrap on legacy state), where a violation
+    /// aborts the process and costs the whole run its verdict rather than producing a finding. Prefer
+    /// `.after(_:)`: it says the same thing about intent while leaving the defensive path reachable.
+    public func requires(_ label: String) -> Op<S> {
+        var copy = self; copy.gates.append(label); return copy
     }
 }
 

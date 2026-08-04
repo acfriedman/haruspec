@@ -261,24 +261,6 @@ final class ExplorationTests: XCTestCase {
         XCTAssertGreaterThan(Set(picks).count, 1, "the fallback still has to be a sample")
     }
 
-    func testSamplingRespectsTheDeclaredPartialOrder() {
-        let ops = [
-            Op<PromoCart>("add") { _ in },
-            Op<PromoCart>("remove") { _ in }.after("add"),
-            Op<PromoCart>("promo") { _ in },
-            Op<PromoCart>("checkout") { _ in }.last()
-        ]
-        for ordering in linearExtensions(ops, max: 20, repeating: 2) {
-            let labels = ordering.map(\.label)
-            XCTAssertEqual(labels.last, "checkout", "`.last()` must stay last in every sample")
-            XCTAssertLessThan(
-                labels.firstIndex(of: "add") ?? .max,
-                labels.firstIndex(of: "remove") ?? .max,
-                "`.after` must hold in every sample"
-            )
-        }
-    }
-
     // MARK: - Counting the denominator
 
     func testTheDenominatorIsExactWellPastWhatTheWalkCouldCount() {
@@ -319,26 +301,6 @@ final class ExplorationTests: XCTestCase {
 
         XCTAssertEqual(counted.count, 500)
         XCTAssertFalse(counted.exact, "a capped count is a lower bound and must not read as the truth")
-    }
-
-    func testConstraintsShrinkTheCountedSpace() {
-        let free = countLinearExtensions(
-            [Op<PromoCart>("a") { _ in }, Op<PromoCart>("b") { _ in }, Op<PromoCart>("c") { _ in }],
-            repeating: 1,
-            limit: 100_000
-        )
-        let constrained = countLinearExtensions(
-            [
-                Op<PromoCart>("a") { _ in },
-                Op<PromoCart>("b") { _ in }.after("a"),
-                Op<PromoCart>("c") { _ in }.last()
-            ],
-            repeating: 1,
-            limit: 100_000
-        )
-
-        XCTAssertEqual(free.count, 6)
-        XCTAssertEqual(constrained.count, 1, "a total order admits exactly one extension")
     }
 
     // MARK: - Reporting

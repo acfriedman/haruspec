@@ -24,17 +24,22 @@ public struct Exploration: Codable, Sendable, Equatable {
     public let orderingsAreExact: Bool
     /// Seam cassettes generated per ordering — 1 when the spec declares no seam domain.
     public let variantsPerOrdering: Int
+    /// How many of `orderingsExplored` deliberately break a declared `.after` precondition — the
+    /// defensive stratum. `nil` in artifacts written before the sample was stratified.
+    public let outOfOrderExplored: Int?
 
     public init(
         orderingsExplored: Int,
         orderingsAvailable: Int,
         orderingsAreExact: Bool,
-        variantsPerOrdering: Int
+        variantsPerOrdering: Int,
+        outOfOrderExplored: Int? = nil
     ) {
         self.orderingsExplored = orderingsExplored
         self.orderingsAvailable = orderingsAvailable
         self.orderingsAreExact = orderingsAreExact
         self.variantsPerOrdering = variantsPerOrdering
+        self.outOfOrderExplored = outOfOrderExplored
     }
 
     /// Differential runs spent: each drives the baseline and the candidate once.
@@ -57,7 +62,8 @@ public struct Exploration: Codable, Sendable, Equatable {
         orderingsAreExact && orderingsExplored >= orderingsAvailable
     }
 
-    /// One line for the verdict: `3200 runs · 50 of 2520 orderings (2%) × 64 seam variants`.
+    /// One line for the verdict:
+    /// `3200 runs · 50 of 2520 orderings (2%) × 64 seam variants · 12 out-of-order`.
     public var summary: String {
         var text = "\(runs) run\(runs == 1 ? "" : "s") · "
         if isExhaustive {
@@ -71,6 +77,9 @@ public struct Exploration: Codable, Sendable, Equatable {
         }
         if variantsPerOrdering > 1 {
             text += " × \(variantsPerOrdering) seam variants"
+        }
+        if let outOfOrder = outOfOrderExplored, outOfOrder > 0 {
+            text += " · \(outOfOrder) out-of-order"
         }
         return text
     }
@@ -157,7 +166,8 @@ extension Spec {
                 orderingsExplored: orderings.count,
                 orderingsAvailable: Swift.max(available.count, orderings.count),
                 orderingsAreExact: available.exact,
-                variantsPerOrdering: split.variants
+                variantsPerOrdering: split.variants,
+                outOfOrderExplored: outOfOrderCount(among: orderings.map { $0.map(\.label) })
             ),
             golden: golden,
             domains: seamDomains,
@@ -214,14 +224,22 @@ enum ExplorationBudget {
 
 // MARK: - Linear extensions
 
-/// Enumerate the linear extensions of the declared partial order (respecting `.after` and `.last`) when
-/// the space fits in `max`, and *sample* `max` of them when it doesn't.
+/// Enumerate the orderings the declared constraints admit when the space fits in `max`, and *sample*
+/// `max` of them when it doesn't.
 ///
-/// Sampling is the point. Depth-first truncation returned the first `max` extensions in enumeration
-/// order, which all share a long common prefix — the example spec's 50-of-2,520 slice varied only in
-/// its tail. A random walk spreads the same budget across the whole space, and weighting each step by
-/// `ExtensionCounter` makes that walk *uniform over orderings* (see there for why an unweighted walk
-/// isn't). When the state space is too large to count, the walk falls back to unweighted.
+/// Only `.requires` and `.last` bound the space. `.after` is a soft precondition, so the sample is
+/// **stratified** instead of filtered: most of the budget goes to orderings that respect every
+/// declared precondition, and `SpecDefaults.outOfOrderShare` of it to orderings that break one. That
+/// slice is not waste — it is the only way the engine reaches remove-before-add, checkout-on-empty and
+/// the rest of the defensive surface, and a differential oracle can't produce a false positive there
+/// (there is no expected value to contradict, only "did both branches agree"). Filtering those
+/// orderings out is how a spec quietly stops interrogating its own error paths.
+///
+/// Sampling is the point of the rest. Depth-first truncation returned the first `max` extensions in
+/// enumeration order, which all share a long common prefix — the example spec's 50-of-2,520 slice
+/// varied only in its tail. A random walk spreads the same budget across the whole space, and weighting
+/// each step by `ExtensionCounter` makes that walk *uniform over orderings* (see there for why an
+/// unweighted walk isn't). When the state space is too large to count, the walk falls back to unweighted.
 ///
 /// Over a *multiset* of ops: a repeatable op contributes `repeating` occurrences, so orderings explore
 /// applying an operation more than once — which is where merge-into-existing and
@@ -233,15 +251,56 @@ func linearExtensions<S>(
     repeating: Int = 1,
     seed: UInt64 = SpecDefaults.seed
 ) -> [[Op<S>]] {
-    let multiset = ops.flatMap { operation in
-        Array(repeating: operation, count: operation.repeatable ? Swift.max(1, repeating) : 1)
-    }
-    // One past the cap, so a full enumeration is distinguishable from a truncated one.
-    let enumerated = enumerateExtensions(multiset, limit: max + 1)
+    let admitted = multiset(ops, repeating: repeating)
+    // One past the cap, so a full enumeration is distinguishable from a truncated one. An exhaustive
+    // space needs no strata — it already holds every in-order and out-of-order sequence.
+    let enumerated = enumerateExtensions(admitted, limit: max + 1)
     guard enumerated.count > max else {
         return enumerated
     }
-    return sampleExtensions(multiset, count: max, seed: seed)
+
+    let preconditions = preconditions(of: ops)
+    let inOrder = multiset(gated(ops, strict: true), repeating: repeating)
+    let quota = preconditions.isEmpty ? 0 : Int((Double(max) * SpecDefaults.outOfOrderShare).rounded())
+
+    var sample = sampleExtensions(inOrder, count: max - quota, seed: seed)
+    var seen = Set(sample.map { orderingKey($0) })
+    // Rejection sampling over the same admitted space: cheaper than enumerating the violating region,
+    // and it stays uniform within the stratum.
+    let outOfOrder = sampleExtensions(admitted, count: max - sample.count, seed: seed &+ 1, excluding: seen) {
+        !violatedPreconditions(in: $0.map(\.label), declaredBy: preconditions).isEmpty
+    }
+    sample += outOfOrder
+    // A stratum too thin to fill its quota hands the remainder back rather than shrinking the sweep.
+    if sample.count < max {
+        seen.formUnion(outOfOrder.map { orderingKey($0) })
+        sample += sampleExtensions(inOrder, count: max - sample.count, seed: seed &+ 2, excluding: seen)
+    }
+    return sample
+}
+
+/// The ops as one exploration stratum enforces them. `strict` folds the soft `.after` preconditions
+/// into the hard gates, which is how the in-order stratum is built; the out-of-order stratum walks the
+/// declared gates alone and filters for violations afterwards.
+private func gated<S>(_ ops: [Op<S>], strict: Bool) -> [Op<S>] {
+    guard strict else {
+        return ops
+    }
+    return ops.map { operation in
+        var copy = operation; copy.gates += operation.afters; return copy
+    }
+}
+
+/// A repeatable op contributes `repeating` occurrences; `.once()` / `.last()` contribute one.
+private func multiset<S>(_ ops: [Op<S>], repeating: Int) -> [Op<S>] {
+    ops.flatMap { operation in
+        Array(repeating: operation, count: operation.repeatable ? Swift.max(1, repeating) : 1)
+    }
+}
+
+/// Orderings are identified by their label sequence: two occurrences of one label are interchangeable.
+private func orderingKey(_ order: [Op<some Any>]) -> String {
+    order.map(\.label).joined(separator: ">")
 }
 
 /// Depth-first enumeration, stopping at `limit`. Exhaustive when it returns fewer than `limit`.
@@ -259,7 +318,7 @@ private func enumerateExtensions<S>(_ multiset: [Op<S>], limit: Int) -> [[Op<S>]
         // so recursing on both would enumerate the same ordering twice.
         var tried: Set<String> = []
         for (index, operation) in remaining.enumerated() where tried.insert(operation.label).inserted {
-            guard operation.afters.allSatisfy(done.contains) else { continue }
+            guard operation.gates.allSatisfy(done.contains) else { continue }
             if operation.mustBeLast, remaining.count > 1 {
                 continue
             }
@@ -272,12 +331,23 @@ private func enumerateExtensions<S>(_ multiset: [Op<S>], limit: Int) -> [[Op<S>]
     return result
 }
 
-/// `count` distinct extensions built by random walks. Attempts are bounded: dedup can starve near the
-/// end of a space barely larger than the budget, and returning slightly fewer orderings beats spinning.
-private func sampleExtensions<S>(_ multiset: [Op<S>], count: Int, seed: UInt64) -> [[Op<S>]] {
+/// `count` distinct extensions built by random walks, skipping anything already in `excluding` or
+/// rejected by `keeping` (how the out-of-order stratum is drawn). Attempts are bounded: dedup can
+/// starve near the end of a space barely larger than the budget — and a rejection filter can starve
+/// outright — and returning slightly fewer orderings beats spinning.
+private func sampleExtensions<S>(
+    _ multiset: [Op<S>],
+    count: Int,
+    seed: UInt64,
+    excluding taken: Set<String> = [],
+    keeping include: ([Op<S>]) -> Bool = { _ in true }
+) -> [[Op<S>]] {
+    guard count > 0 else {
+        return []
+    }
     var rng = SplitMix64(seed: seed)
     var counter = ExtensionCounter(multiset)
-    var seen = Set<String>()
+    var seen = taken
     var result: [[Op<S>]] = []
     var attempts = 0
     while result.count < count, attempts < count * 20 {
@@ -285,9 +355,8 @@ private func sampleExtensions<S>(_ multiset: [Op<S>], count: Int, seed: UInt64) 
         guard let walk = randomExtension(multiset, using: &rng, weightedBy: &counter) else {
             break // the partial order admits no ordering at all
         }
-        if seen.insert(walk.map(\.label).joined(separator: ">")).inserted {
-            result.append(walk)
-        }
+        guard include(walk), seen.insert(orderingKey(walk)).inserted else { continue }
+        result.append(walk)
     }
     return result
 }
@@ -306,7 +375,7 @@ private func randomExtension<S>(
         var frontier: [Int] = []
         var tried: Set<String> = []
         for (index, operation) in remaining.enumerated() where tried.insert(operation.label).inserted {
-            guard operation.afters.allSatisfy(done.contains) else { continue }
+            guard operation.gates.allSatisfy(done.contains) else { continue }
             if operation.mustBeLast, remaining.count > 1 {
                 continue
             }
@@ -325,158 +394,13 @@ private func randomExtension<S>(
     return placed
 }
 
-// MARK: - Uniform sampling
-
-/// Linear-extension counts per remaining-state, memoized — the weights that make a random walk uniform
-/// over *orderings* rather than over next-op choices.
-///
-/// Why weights are needed at all: picking evenly among the available ops hands equal probability to
-/// branches that hold unequal numbers of orderings. Over `{a, a, b, b}`, choosing `a` twice spends both
-/// copies and forces the tail, so that branch contains one ordering — while the branch through `ab`
-/// still contains two. Splitting evenly gives the first ordering ¼ and the other two ⅛ apiece, against
-/// ⅙ each for a uniform sample. The distortion favours *clustered* runs of one op over interleavings,
-/// which is a lean away from where order-dependence lives.
-///
-/// The fix is to weight each choice by how many orderings lie beneath it. The state that determines
-/// that is just the per-label remaining counts — whether a label's `.after` gate has opened is derivable
-/// from them (a label has been placed iff fewer remain than were declared) — so the whole walk memoizes
-/// on a mixed-radix encoding of those counts. Counts are `Double` because a real space overflows
-/// `Int64` long before it stops being samplable; the values are only ever used as ratios.
-struct ExtensionCounter {
-    private let labels: [String]
-    private let declared: [Int]
-    private let afters: [[Int]]
-    private let mustBeLast: [Bool]
-    private let strides: [Int]
-    private var counts: [Int]
-    private var remaining: Int
-    private var memo: [Int: Double] = [:]
-    /// False when the state space is too large to memoize, which drops the walk back to unweighted.
-    /// A biased sample still beats refusing to sample.
-    private let isWeighted: Bool
-
-    init(_ multiset: [Op<some Any>], stateLimit: Int = 1_000_000) {
-        var labels: [String] = []
-        var declared: [Int] = []
-        var index: [String: Int] = [:]
-        var afters: [[String]] = []
-        var mustBeLast: [Bool] = []
-        for operation in multiset {
-            if let known = index[operation.label] {
-                declared[known] += 1
-            } else {
-                index[operation.label] = labels.count
-                labels.append(operation.label)
-                declared.append(1)
-                afters.append(operation.afters)
-                mustBeLast.append(operation.mustBeLast)
-            }
-        }
-        self.labels = labels
-        self.declared = declared
-        self.afters = afters.map { $0.compactMap { index[$0] } }
-        self.mustBeLast = mustBeLast
-        counts = declared
-        remaining = declared.reduce(0, +)
-
-        var strides: [Int] = []
-        var stride = 1
-        for count in declared {
-            strides.append(stride)
-            stride *= count + 1
-        }
-        self.strides = strides
-        isWeighted = stride <= stateLimit
-    }
-
-    /// Pick one of `labels` (the frontier, by label) with probability proportional to the orderings
-    /// beneath it. Falls back to an even pick when the space is too large to count.
-    mutating func choose(from labels: [String], using rng: inout SplitMix64) -> Int {
-        guard isWeighted, labels.count > 1 else {
-            return Int(rng.next() % UInt64(Swift.max(1, labels.count)))
-        }
-        let weights = labels.map { label -> Double in
-            guard let slot = slot(of: label) else { return 0 }
-            counts[slot] -= 1; remaining -= 1
-            defer { counts[slot] += 1; remaining += 1 }
-            return extensions()
-        }
-        let total = weights.reduce(0, +)
-        guard total > 0 else {
-            return Int(rng.next() % UInt64(labels.count))
-        }
-        var threshold = Double.random(in: 0 ..< total, using: &rng)
-        for (index, weight) in weights.enumerated() {
-            threshold -= weight
-            if threshold < 0 {
-                return index
-            }
-        }
-        return weights.count - 1 // floating-point residue only
-    }
-
-    /// The exact number of orderings the whole partial order admits, or `nil` when the state space was
-    /// too large to count. Far better than the capped walk where it applies: the example spec's 15-item
-    /// multiset is 302,702,400 orderings over only 1,576 reachable states, which the walk would give up
-    /// on at 100,000 and report as a lower bound.
-    mutating func totalExtensions() -> Double? {
-        guard isWeighted else {
-            return nil
-        }
-        reset()
-        return extensions()
-    }
-
-    /// Record that the walk placed `label`, so subsequent weights are conditioned on it.
-    mutating func take(_ label: String) {
-        guard isWeighted, let slot = slot(of: label) else { return }
-        counts[slot] -= 1
-        remaining -= 1
-    }
-
-    /// Back to the full multiset for the next walk. The memo is deliberately kept — it is a property of
-    /// the partial order, not of one walk, which is what makes weighting cheap across a whole sample.
-    mutating func reset() {
-        counts = declared
-        remaining = declared.reduce(0, +)
-    }
-
-    private func slot(of label: String) -> Int? {
-        // Frontier labels are few; a linear scan beats hashing here.
-        labels.firstIndex(of: label)
-    }
-
-    /// Orderings of the current remaining state.
-    private mutating func extensions() -> Double {
-        if remaining == 0 {
-            return 1
-        }
-        let key = zip(counts, strides).reduce(0) { $0 + $1.0 * $1.1 }
-        if let known = memo[key] {
-            return known
-        }
-        var total: Double = 0
-        for slot in counts.indices where counts[slot] > 0 {
-            guard afters[slot].allSatisfy({ counts[$0] < declared[$0] }) else { continue }
-            if mustBeLast[slot], remaining > 1 {
-                continue
-            }
-            counts[slot] -= 1; remaining -= 1
-            total += extensions()
-            counts[slot] += 1; remaining += 1
-        }
-        memo[key] = total
-        return total
-    }
-}
-
 /// How many valid orderings the declared partial order admits, counted without materializing any of
 /// them and stopped at `limit` — the space grows factorially, and "≥100000" is as useful a denominator
 /// as the true number.
 func countLinearExtensions(_ ops: [Op<some Any>], repeating: Int, limit: Int) -> (count: Int, exact: Bool) {
     var counts = ops.map { $0.repeatable ? Swift.max(1, repeating) : 1 }
     let labels = ops.map(\.label)
-    let afters = ops.map(\.afters)
+    let gates = ops.map(\.gates)
     let mustBeLast = ops.map(\.mustBeLast)
     var remaining = counts.reduce(0, +)
     var placed = Set<String>()
@@ -490,7 +414,7 @@ func countLinearExtensions(_ ops: [Op<some Any>], repeating: Int, limit: Int) ->
             return
         }
         for index in counts.indices where counts[index] > 0 {
-            guard afters[index].allSatisfy(placed.contains) else { continue }
+            guard gates[index].allSatisfy(placed.contains) else { continue }
             if mustBeLast[index], remaining > 1 {
                 continue
             }
