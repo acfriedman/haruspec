@@ -313,12 +313,17 @@ public enum BehavioralDiff {
     private static func longestCommonSubsequence<T: Equatable>(_ first: [T], _ second: [T]) -> [(Int, Int)] {
         let firstCount = first.count, secondCount = second.count
         guard firstCount > 0, secondCount > 0 else { return [] }
-        var table = Array(repeating: Array(repeating: 0, count: secondCount + 1), count: firstCount + 1)
+        // One flat allocation rather than `firstCount + 1` row objects. The table is O(E²) `Int`s and is
+        // the dominant cost of diffing a chatty trace — nested arrays add a retain/release and a second
+        // bounds check to every cell of it.
+        let width = secondCount + 1
+        var table = [Int](repeating: 0, count: (firstCount + 1) * width)
         for row in stride(from: firstCount - 1, through: 0, by: -1) {
+            let rowBase = row * width, nextBase = rowBase + width
             for column in stride(from: secondCount - 1, through: 0, by: -1) {
-                table[row][column] = first[row] == second[column]
-                    ? table[row + 1][column + 1] + 1
-                    : max(table[row + 1][column], table[row][column + 1])
+                table[rowBase + column] = first[row] == second[column]
+                    ? table[nextBase + column + 1] + 1
+                    : Swift.max(table[nextBase + column], table[rowBase + column + 1])
             }
         }
         var pairs: [(Int, Int)] = []
@@ -326,7 +331,7 @@ public enum BehavioralDiff {
         while row < firstCount, column < secondCount {
             if first[row] == second[column] {
                 pairs.append((row, column)); row += 1; column += 1
-            } else if table[row + 1][column] >= table[row][column + 1] {
+            } else if table[(row + 1) * width + column] >= table[row * width + column + 1] {
                 row += 1
             } else {
                 column += 1

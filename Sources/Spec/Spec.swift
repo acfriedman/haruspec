@@ -72,10 +72,11 @@ public struct Op<S> {
     }
 }
 
-/// A declared variation of the input surface: seam values, and/or call ordering.
+/// A declared variation of the input surface: seam values, call ordering, and/or how much of it to buy.
 public enum Variation {
     case seam(String, SeamDomain)
     case ordering(max: Int, repeating: Int)
+    case budget(runs: Int)
 }
 
 /// Vary a seam over a domain (property-based breadth). Composes with `Ordering`.
@@ -92,6 +93,19 @@ public func Seam(_ name: String, _ domain: SeamDomain) -> Variation {
 public func Ordering(max: Int = 100, repeating: Int = 2) -> Variation {
     precondition(repeating >= 1, "an op has to appear at least once")
     return .ordering(max: max, repeating: repeating)
+}
+
+/// How many differential runs this spec may spend, in total, across *both* axes — the one number that
+/// bounds its cost. Each run drives the baseline and the candidate once over one (ordering, seam
+/// cassette) pair, so cost is roughly `runs × 2 ×` whatever one pass through the ops costs.
+///
+/// Orderings are bought first (up to `Ordering(max:)`) and the remainder becomes seam breadth: a second
+/// call ordering reaches code that a second value for the same seam cannot. Undeclared, the axes take
+/// their own sizes — `Ordering(max:)` orderings × 64 seam variants — which is the historical default and
+/// is why a defaulted spec is 6,400 runs.
+public func Budget(runs: Int) -> Variation {
+    precondition(runs >= 1, "a budget has to buy at least one run")
+    return .budget(runs: runs)
 }
 
 @resultBuilder public enum OperationsBuilder<S> {
@@ -130,6 +144,9 @@ public struct Spec<S> {
     var exploreOrdering = false
     var maxOrderings = 100
     var orderingRepeats = 2
+    /// Total differential runs this spec may spend, declared via `Budget(runs:)`. `nil` lets each axis
+    /// take its own size (`maxOrderings` × `SpecDefaults.variantCount`).
+    var explorationBudget: Int?
 
     public init(_ name: String) {
         self.name = name
@@ -198,6 +215,7 @@ public struct Spec<S> {
                 copy.exploreOrdering = true
                 copy.maxOrderings = max
                 copy.orderingRepeats = repeating
+            case let .budget(runs): copy.explorationBudget = runs
             }
         }
         return copy

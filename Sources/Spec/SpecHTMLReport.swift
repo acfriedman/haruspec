@@ -20,7 +20,15 @@ public extension SpecVerdict {
         let name = diff.candidateName
         var tiles = [
             HTML.tile(label: "Verdict", value: HTML.shortVerdict(verdict), accent: HTML.accent(verdict)),
-            HTML.tile(label: "Orderings explored", value: "\(orderingsExplored)"),
+            HTML.tile(
+                label: "Orderings explored",
+                value: exploration.map { exploration in
+                    exploration.isExhaustive
+                        ? "\(orderingsExplored)"
+                        : "\(orderingsExplored)/\(exploration.orderingsAreExact ? "" : "≥")"
+                        + "\(exploration.orderingsAvailable)"
+                } ?? "\(orderingsExplored)"
+            ),
             HTML.tile(
                 label: "Divergences",
                 value: "\(diff.divergences.count)",
@@ -64,9 +72,11 @@ public extension SpecVerdict {
         if verdict == .cannotVerify {
             return HTML.abstentionSection(reason: "The oracle could not faithfully isolate this change.")
         }
+        let scope = exploration.map { $0.isExhaustive ? "All \(orderingsExplored)" : "\(orderingsExplored) sampled" }
+            ?? "All \(orderingsExplored)"
         return HTML.cleanSection(
             summary: "Behavior matched across everything explored",
-            detail: "All \(orderingsExplored) call ordering\(plural) — and every generated seam value — produced "
+            detail: "\(scope) call ordering\(plural) — and every generated seam value — produced "
                 + "a byte-for-byte identical behavior trace (within declared tolerances). No divergences."
         )
     }

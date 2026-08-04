@@ -17,6 +17,24 @@ public struct SpecVerdict: Codable, Sendable {
     public let failingOrder: [String]?
     /// The generated input that triggered a divergence (its varied seam values are the counterexample).
     public let counterexample: CassetteData?
+    /// The budget spent and the surface it covered. Optional because artifacts written before the
+    /// budget existed carry no such field — an old `result.json` still decodes, it just can't say what
+    /// fraction it swept.
+    public let exploration: Exploration?
+
+    public init(
+        result: VerificationResult,
+        orderingsExplored: Int,
+        failingOrder: [String]?,
+        counterexample: CassetteData?,
+        exploration: Exploration? = nil
+    ) {
+        self.result = result
+        self.orderingsExplored = orderingsExplored
+        self.failingOrder = failingOrder
+        self.counterexample = counterexample
+        self.exploration = exploration
+    }
 
     public var verdict: TraceDiff.Verdict {
         result.verdict
@@ -39,7 +57,7 @@ public struct SpecVerdict: Codable, Sendable {
         case .cannotVerify: "⚠️ CANNOT-VERIFY"
         }
         var lines = ["\(banner)  \(diff.baselineName) → \(diff.candidateName)",
-                     "  orderings explored: \(orderingsExplored)"]
+                     "  explored: \(exploration?.summary ?? "\(orderingsExplored) orderings")"]
         if let fraction = coverage.fraction {
             var line = "  coverage: \(Int((fraction * 100).rounded()))% "
                 + "of \(coverage.declared.count) declared boundaries"
@@ -92,7 +110,11 @@ public struct SpecVerdict: Codable, Sendable {
 /// (`record()` / `verify(replaying:)`) — one surface, whichever side of a build boundary it runs on.
 enum SpecDefaults {
     static let seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+    /// Seam cassettes per ordering when no `Budget(runs:)` is declared.
     static let variantCount = 64
+    /// Where counting valid orderings gives up and reports a lower bound. A denominator is worth a few
+    /// milliseconds, not a factorial walk.
+    static let orderingCountLimit = 100_000
 }
 
 public extension Spec {
@@ -105,27 +127,20 @@ public extension Spec {
         _ = capture(make: makeSystem, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
 
-        let orderings = exploreOrdering ? linearExtensions(operations, max: maxOrderings, repeating: orderingRepeats) :
-            [operations]
+        let plan = explorationPlan(golden: golden)
 
-        for order in orderings {
-            let cassettes = seamDomains.isEmpty
-                ? [golden]
-                : golden.generatedVariants(
-                    count: SpecDefaults.variantCount,
-                    varying: seamDomains,
-                    seed: SpecDefaults.seed
-                )
-            for cassette in cassettes {
+        for (index, order) in plan.orderings.enumerated() {
+            for cassette in plan.cassettes(forOrdering: index) {
                 let run = compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette)
                 guard run.diff.isEquivalent else {
                     let shrunk = shrink(candidate: candidate, failing: order, cassette: cassette)
                     let coverage = coverage(replays: [run.candidateReplay], domainHeld: false)
                     return SpecVerdict(
                         result: VerificationResult(diff: run.diff, coverage: coverage),
-                        orderingsExplored: orderings.count,
+                        orderingsExplored: plan.orderings.count,
                         failingOrder: exploreOrdering ? shrunk.map(\.label) : nil,
-                        counterexample: seamDomains.isEmpty ? nil : cassette
+                        counterexample: seamDomains.isEmpty ? nil : cassette,
+                        exploration: plan.exploration
                     )
                 }
             }
@@ -135,9 +150,10 @@ public extension Spec {
         let coverage = coverage(replays: [representative.candidateReplay], domainHeld: true)
         return SpecVerdict(
             result: VerificationResult(diff: representative.diff, coverage: coverage),
-            orderingsExplored: orderings.count,
+            orderingsExplored: plan.orderings.count,
             failingOrder: nil,
-            counterexample: nil
+            counterexample: nil,
+            exploration: plan.exploration
         )
     }
 
@@ -260,41 +276,4 @@ public extension Spec {
         }
         return minimal
     }
-}
-
-/// Enumerate linear extensions of the declared partial order (respecting `.after` and `.last`), capped.
-/// Full N! never happens; constraints prune to orderings a real caller could produce.
-/// Linear extensions of the declared partial order, over a *multiset* of ops: a repeatable op
-/// contributes `repeating` occurrences, so orderings explore applying an operation more than once —
-/// which is where merge-into-existing and remove-what-is-not-there branches live. Ops marked
-/// `.once()` (and `.last()`, which implies it) contribute exactly one.
-func linearExtensions<S>(_ ops: [Op<S>], max: Int, repeating: Int = 1) -> [[Op<S>]] {
-    let multiset = ops.flatMap { operation in
-        Array(repeating: operation, count: operation.repeatable ? Swift.max(1, repeating) : 1)
-    }
-
-    var result: [[Op<S>]] = []
-    func recurse(_ placed: [Op<S>], _ remaining: [Op<S>]) {
-        if result.count >= max {
-            return
-        }
-        if remaining.isEmpty {
-            result.append(placed); return
-        }
-        let done = Set(placed.map(\.label))
-        // One branch per *distinct* next op: two occurrences of the same label are interchangeable,
-        // so recursing on both would enumerate the same ordering twice.
-        var tried: Set<String> = []
-        for (index, operation) in remaining.enumerated() where tried.insert(operation.label).inserted {
-            guard operation.afters.allSatisfy(done.contains) else { continue }
-            if operation.mustBeLast, remaining.count > 1 {
-                continue
-            }
-            var rest = remaining
-            rest.remove(at: index)
-            recurse(placed + [operation], rest)
-        }
-    }
-    recurse([], multiset)
-    return result
 }

@@ -10,3 +10,4 @@ identifier_name:
     # Capitalized DSL factory functions that read like declarations (deliberate idiom).
     - Seam
     - Ordering
+    - Budget

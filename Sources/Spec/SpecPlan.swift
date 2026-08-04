@@ -159,20 +159,15 @@ public extension Spec {
         _ = capture(make: makeSystem, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
 
-        let orderings = exploreOrdering ? linearExtensions(operations, max: maxOrderings, repeating: orderingRepeats) :
-            [operations]
-        let cassettes = seamDomains.isEmpty
-            ? [golden]
-            : golden.generatedVariants(
-                count: SpecDefaults.variantCount,
-                varying: seamDomains,
-                seed: SpecDefaults.seed
-            )
+        // The same resolved surface `verify(against:)` explores — one budget, spent identically on
+        // both sides of the build boundary, so the plan's size is the dial the author declared.
+        let plan = explorationPlan(golden: golden)
 
         let declaredLabels = operations.map(\.label)
         var probes = [probe(order: operations, cassette: golden)]
-        for order in orderings {
-            for cassette in cassettes where !(order.map(\.label) == declaredLabels && cassette == golden) {
+        for (index, order) in plan.orderings.enumerated() {
+            for cassette in plan.cassettes(forOrdering: index)
+                where !(order.map(\.label) == declaredLabels && cassette == golden) {
                 probes.append(probe(order: order, cassette: cassette))
             }
         }
@@ -216,6 +211,17 @@ public extension Spec {
 
         let distinctOrderings = Set(plan.probes.map(\.ordering)).count
         let variedInputs = plan.probes.contains { $0.cassette != plan.probes.first?.cassette }
+        // The plan pins what was explored; the *available* surface comes from the partial order the
+        // current build declares, so a replay reports the same fraction a live verify would.
+        let available = exploreOrdering
+            ? countLinearExtensions(operations, repeating: orderingRepeats, limit: SpecDefaults.orderingCountLimit)
+            : (count: 1, exact: true)
+        let exploration = Exploration(
+            orderingsExplored: distinctOrderings,
+            orderingsAvailable: Swift.max(available.count, distinctOrderings),
+            orderingsAreExact: available.exact,
+            variantsPerOrdering: Swift.max(1, plan.probes.count / Swift.max(1, distinctOrderings))
+        )
 
         var replays: [Cassette] = []
         var representative: TraceDiff?
@@ -248,7 +254,8 @@ public extension Spec {
                     result: VerificationResult(diff: diff, coverage: coverage),
                     orderingsExplored: distinctOrderings,
                     failingOrder: distinctOrderings > 1 ? probe.ordering : nil,
-                    counterexample: variedInputs ? probe.cassette : nil
+                    counterexample: variedInputs ? probe.cassette : nil,
+                    exploration: exploration
                 )
             }
         }
@@ -267,7 +274,8 @@ public extension Spec {
             result: VerificationResult(diff: diff, coverage: coverage),
             orderingsExplored: distinctOrderings,
             failingOrder: nil,
-            counterexample: nil
+            counterexample: nil,
+            exploration: exploration
         )
     }
 
