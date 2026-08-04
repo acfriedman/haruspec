@@ -225,6 +225,42 @@ final class ExplorationTests: XCTestCase {
         )
     }
 
+    func testTheSampleIsUniformOverOrderingsNotOverNextOpChoices() {
+        // `{a, a, b, b}` — 6 orderings. Picking evenly among available ops gives `aabb` 25% and the
+        // interleavings 12.5% apiece, because spending both `a`s forces the tail and collapses that
+        // branch to one ordering. Weighting each choice by the orderings beneath it evens that out.
+        let ops = [Op<PromoCart>("a") { _ in }, Op<PromoCart>("b") { _ in }]
+        var tally: [String: Int] = [:]
+        for seed in 0 ..< 4000 {
+            for ordering in linearExtensions(ops, max: 1, repeating: 2, seed: UInt64(seed)) {
+                tally[ordering.map(\.label).joined(), default: 0] += 1
+            }
+        }
+
+        XCTAssertEqual(tally.count, 6, "every ordering must remain reachable")
+        let expected = Double(tally.values.reduce(0, +)) / 6
+        for (ordering, count) in tally {
+            XCTAssertLessThan(
+                abs(Double(count) - expected) / expected,
+                0.15,
+                "\(ordering) drew \(count) of an expected \(Int(expected)) — the walk is weighting "
+                    + "branches rather than orderings"
+            )
+        }
+    }
+
+    func testAnUncountableStateSpaceFallsBackToAnEvenPickRatherThanRefusing() {
+        // A biased sample still beats no sample. `stateLimit: 1` forces the unweighted path.
+        let ops = ["a", "b", "c"].map { label in Op<PromoCart>(label) { _ in } }
+        var counter = ExtensionCounter(ops, stateLimit: 1)
+        var rng = SplitMix64(seed: 1)
+
+        let picks = (0 ..< 50).map { _ in counter.choose(from: ["a", "b", "c"], using: &rng) }
+
+        XCTAssertTrue(picks.allSatisfy { (0 ..< 3).contains($0) })
+        XCTAssertGreaterThan(Set(picks).count, 1, "the fallback still has to be a sample")
+    }
+
     func testSamplingRespectsTheDeclaredPartialOrder() {
         let ops = [
             Op<PromoCart>("add") { _ in },
