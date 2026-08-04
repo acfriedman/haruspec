@@ -135,9 +135,7 @@ extension Spec {
     /// Resolve what this spec declared into the work a run will actually do.
     func explorationPlan(golden: CassetteData) -> ExplorationPlan<S> {
         let hasSeams = !seamDomains.isEmpty
-        let available = exploreOrdering
-            ? countLinearExtensions(operations, repeating: orderingRepeats, limit: SpecDefaults.orderingCountLimit)
-            : (count: 1, exact: true)
+        let available = availableOrderings()
 
         // Resolve the budget *before* enumerating: taking a prefix of an exhaustive enumeration would
         // reintroduce exactly the prefix bias the sampling below exists to remove.
@@ -165,6 +163,23 @@ extension Spec {
             domains: seamDomains,
             seed: SpecDefaults.seed
         )
+    }
+}
+
+extension Spec {
+    /// The denominator: how many orderings the declared partial order admits. Counted exactly wherever
+    /// the memoized state space allows, and otherwise walked up to a limit and reported as a bound.
+    func availableOrderings() -> (count: Int, exact: Bool) {
+        guard exploreOrdering else {
+            return (1, true)
+        }
+        var counter = ExtensionCounter(explorationOrder())
+        // 2^53 is where a Double stops representing consecutive integers; past there the count is a
+        // display denominator anyway, and the capped walk's honest lower bound is the better answer.
+        if let exact = counter.totalExtensions(), exact <= 9_007_199_254_740_992 {
+            return (Int(exact), true)
+        }
+        return countLinearExtensions(operations, repeating: orderingRepeats, limit: SpecDefaults.orderingCountLimit)
     }
 }
 
@@ -398,6 +413,18 @@ struct ExtensionCounter {
             }
         }
         return weights.count - 1 // floating-point residue only
+    }
+
+    /// The exact number of orderings the whole partial order admits, or `nil` when the state space was
+    /// too large to count. Far better than the capped walk where it applies: the example spec's 15-item
+    /// multiset is 302,702,400 orderings over only 1,576 reachable states, which the walk would give up
+    /// on at 100,000 and report as a lower bound.
+    mutating func totalExtensions() -> Double? {
+        guard isWeighted else {
+            return nil
+        }
+        reset()
+        return extensions()
     }
 
     /// Record that the walk placed `label`, so subsequent weights are conditioned on it.

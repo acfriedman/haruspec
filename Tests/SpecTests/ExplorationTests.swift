@@ -281,6 +281,30 @@ final class ExplorationTests: XCTestCase {
 
     // MARK: - Counting the denominator
 
+    func testTheDenominatorIsExactWellPastWhatTheWalkCouldCount() {
+        // Eight ops applied up to twice: hundreds of millions of orderings over a few thousand
+        // reachable states. Walking them stops at the limit and reports a bound; counting is instant.
+        let spec = Spec<PromoCart>("promo-cart.wide")
+            .system(makeGood)
+            .operations {
+                Op("a") { $0.addItem(priceCents: 1, qty: 1) }
+                Op("b") { $0.addItem(priceCents: 2, qty: 1) }
+                Op("c") { $0.addItem(priceCents: 3, qty: 1) }
+                Op("d") { $0.addItem(priceCents: 4, qty: 1) }
+                Op("e") { $0.addItem(priceCents: 5, qty: 1) }
+                Op("promo") { $0.applyPromo() }
+                Op("checkout") { _ = $0.checkout() }.last()
+            }
+            .vary { Ordering(max: 4, repeating: 2) }
+
+        let available = spec.availableOrderings()
+
+        XCTAssertTrue(available.exact, "an exactly countable space must not report a lower bound")
+        XCTAssertGreaterThan(available.count, SpecDefaults.orderingCountLimit)
+        // 12 interchangeable-in-pairs ops ahead of a pinned `checkout`: 12! / 2^6, independently.
+        XCTAssertEqual(available.count, 7_484_400)
+    }
+
     func testCountingIsExactForASmallSpace() {
         let ops = [Op<PromoCart>("a") { _ in }, Op<PromoCart>("b") { _ in }, Op<PromoCart>("c") { _ in }]
         let counted = countLinearExtensions(ops, repeating: 1, limit: 100_000)
