@@ -143,7 +143,10 @@ struct ExplorationPlan<S> {
 extension Spec {
     /// Resolve what this spec declared into the work a run will actually do.
     func explorationPlan(golden: CassetteData) -> ExplorationPlan<S> {
-        let hasSeams = !seamDomains.isEmpty
+        // Against what the golden actually recorded, not what was declared: a domain whose key nothing
+        // reads moves nothing, and buying it a seam axis spends the budget generating identical
+        // cassettes while the verdict reports them as variants.
+        let hasSeams = !Set(seamDomains.keys).isDisjoint(with: golden.tracks.keys)
         let available = availableOrderings()
 
         // Resolve the budget *before* enumerating: taking a prefix of an exhaustive enumeration would

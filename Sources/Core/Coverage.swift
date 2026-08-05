@@ -23,6 +23,14 @@ public struct Coverage: Codable, Sendable, Equatable {
         /// not a hard trigger — we simply didn't test that path (v1 policy; a fraction threshold is
         /// future work).
         case unexercised
+        /// A *value domain* was declared for a seam key nothing ever read, so the domain applied to
+        /// nothing. The run swept a surface the spec claims it varied, which is the one shape of false
+        /// negative this engine exists not to produce — so it is a hard `CANNOT-VERIFY` trigger like
+        /// `unrecorded`, not a fraction adjustment.
+        ///
+        /// A typo'd key is the usual cause. A seam read only on a branch the golden run didn't take is
+        /// the honest one, and the verdict is still right there: that domain varied nothing.
+        case unmatchedDomain
     }
 
     /// One uncovered boundary.
@@ -84,12 +92,18 @@ public struct Coverage: Codable, Sendable, Equatable {
         gaps.filter { $0.reason == .unrecorded }
     }
 
+    /// Declared domains that matched no seam anything read — the signal that a sweep the spec claims
+    /// never happened at all.
+    public var unmatchedDomains: [Gap] {
+        gaps.filter { $0.reason == .unmatchedDomain }
+    }
+
     /// Can an `EQUIVALENT` diff be *trusted* over this coverage? Only when the surface is known and no
     /// boundary fell back to live. v1 hard rule: unrecorded reach downgrades to `CANNOT-VERIFY`; a low
     /// but gap-free fraction is reported, not gated (a declared `CoveragePolicy` threshold is future
     /// work). An unknown surface (no registry) is never trusted.
     public var trustsEquivalent: Bool {
-        !declared.isEmpty && unrecordedReach.isEmpty
+        !declared.isEmpty && unrecordedReach.isEmpty && unmatchedDomains.isEmpty
     }
 
     public init() {

@@ -68,12 +68,17 @@ public struct SpecVerdict: Codable, Sendable {
         if let fraction = coverage.fraction {
             var line = "  coverage: \(Int((fraction * 100).rounded()))% "
                 + "of \(coverage.declared.count) declared boundaries"
-            if let domain = coverage.domainFraction, domain > 0 {
+            // Printed at 0 too: a spec that declared domains and swept none of them is exactly the
+            // case worth saying out loud, and gating the clause on `> 0` hid it.
+            if let domain = coverage.domainFraction, !coverage.domainExercised.isEmpty || domain == 0 {
                 line += " · domain-swept \(Int((domain * 100).rounded()))%"
             }
             lines.append(line)
             for gap in coverage.unrecordedReach {
                 lines.append("    ⚠︎ unrecorded reach: \(gap.boundary) (replay fell back to live)")
+            }
+            for gap in coverage.unmatchedDomains {
+                lines.append("    ⚠︎ declared domain matched nothing: \(gap.boundary) (nothing read that seam)")
             }
         }
         if diff.divergences.isEmpty {
@@ -291,9 +296,18 @@ public extension Spec {
         let exercisedOps = ops.filter { !missingOps.contains($0) }.map { "op:\($0)" }
         gaps += missingOps.map { Coverage.Gap(boundary: "op:\($0)", reason: .unrecorded) }
 
-        let swept = domainHeld ? Set(sweptSeams ?? Array(seamDomains.keys)).intersection(declared) : []
+        // A domain declared for a key nothing read applied to nothing, and the run reports a swept
+        // surface it never swept. Only knowable once the golden has been recorded — which reads is not
+        // a static property of a spec — so it is caught here rather than at construction.
+        let declaredDomains = Set(sweptSeams ?? Array(seamDomains.keys))
+        let unmatched = declaredDomains.subtracting(declared).sorted()
+        gaps += unmatched.map { Coverage.Gap(boundary: $0, reason: .unmatchedDomain) }
+
+        let swept = domainHeld ? declaredDomains.intersection(declared) : []
         return Coverage(
-            declared: opBoundaries + declared.sorted(),
+            // An unmatched domain joins the declared surface: the author declared it, and leaving it out
+            // would report a fraction of a surface quietly smaller than the one the spec describes.
+            declared: opBoundaries + declared.sorted() + unmatched,
             exercised: exercisedOps + exercised.sorted(),
             gaps: gaps,
             domainExercised: swept.sorted()
