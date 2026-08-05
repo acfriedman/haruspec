@@ -169,13 +169,14 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         let position: Int?
     }
 
-    /// `trackLengths` is how many readings each seam's track holds — the golden cassette knows, and the
-    /// convenience `generatedVariants(count:varying:seed:)` supplies it. Omitted, every seam is assumed
-    /// to be read once and the schedule is exactly the whole-track pass it always was.
-    public init(domains: [String: SeamDomain], seed: UInt64, trackLengths: [String: Int] = [:]) {
+    /// `golden` is the template's own tracks — the convenience `generatedVariants(count:varying:seed:)`
+    /// supplies them. They give the schedule two things it cannot otherwise know: how many readings each
+    /// seam has, and what each already holds. Omitted, every seam is assumed to be read once and the
+    /// schedule is exactly the whole-track pass it always was.
+    public init(domains: [String: SeamDomain], seed: UInt64, golden: [String: [CanonicalValue]] = [:]) {
         self.domains = domains
         rng = SplitMix64(seed: seed)
-        schedule = Self.boundarySchedule(domains, trackLengths: trackLengths)
+        schedule = Self.boundarySchedule(domains, golden: golden)
         pinned = schedule.first
     }
 
@@ -183,24 +184,63 @@ public struct DomainSeamGenerator: SeamValueGenerator {
     /// would make a run's inputs unreproducible across processes.
     private static func boundarySchedule(
         _ domains: [String: SeamDomain],
-        trackLengths: [String: Int]
+        golden: [String: [CanonicalValue]]
     ) -> [Pin] {
-        let edges = domains.keys.sorted().map { (seam: $0, values: domains[$0]?.boundaryValues ?? []) }
-        var turns: [String: Int] = [:]
+        let perSeam = domains.keys.sorted().map { seam in
+            pins(seam: seam, edges: domains[seam]?.boundaryValues ?? [], track: golden[seam] ?? [])
+        }
         var schedule: [Pin] = []
-        for index in 0 ..< (edges.map(\.values.count).max() ?? 0) {
-            for edge in edges where index < edge.values.count {
-                schedule.append(Pin(seam: edge.seam, value: edge.values[index], position: nil))
-                // A track read once has no distinct single-reading case — `.at(0)` would be the variant
-                // above a second time, and a duplicated variant is budget spent on nothing.
-                let length = trackLengths[edge.seam] ?? 1
-                guard length > 1 else { continue }
-                let turn = turns[edge.seam, default: 0]
-                turns[edge.seam] = turn + 1
-                schedule.append(Pin(seam: edge.seam, value: edge.values[index], position: turn % length))
+        for index in 0 ..< (perSeam.map(\.count).max() ?? 0) {
+            for seam in perSeam where index < seam.count {
+                schedule.append(seam[index])
             }
         }
         return schedule
+    }
+
+    /// One seam's entries: its edges across the whole track, interleaved with its edges at a single
+    /// reading.
+    ///
+    /// Two entries are never scheduled. An edge the golden *already holds* everywhere it would be pinned
+    /// regenerates the golden cassette, and a variant identical to one already run is budget spent on
+    /// nothing — which was easy to miss because a domain's first edge is very often the recorded value.
+    /// And a track read once has no distinct single-reading case; `.at(0)` there is the whole-track pin
+    /// again.
+    private static func pins(seam: String, edges: [CanonicalValue], track: [CanonicalValue]) -> [Pin] {
+        guard !edges.isEmpty else {
+            return []
+        }
+        let length = Swift.max(1, track.count)
+        let aggregate = edges
+            .filter { edge in !(!track.isEmpty && track.allSatisfy { $0.canonicalString == edge.canonicalString }) }
+            .map { Pin(seam: seam, value: $0, position: nil) }
+
+        var positional: [Pin] = []
+        if length > 1 {
+            // Enough turns that every reading is pinned in isolation, cycling the edges where a domain
+            // has fewer of them than the track has slots. Rotating only `edges.count` times left every
+            // later slot reachable *only* by the aggregate pin — silently, and more so the higher
+            // `.repeating(_:)` went.
+            for turn in 0 ..< Swift.max(edges.count, length) {
+                let edge = edges[turn % edges.count]
+                let position = turn % length
+                guard position >= track.count || track[position].canonicalString != edge.canonicalString
+                else { continue }
+                positional.append(Pin(seam: seam, value: edge, position: position))
+            }
+        }
+
+        // Interleaved, not tiered, so a truncated budget still gets both flavors of this seam.
+        var pins: [Pin] = []
+        for index in 0 ..< Swift.max(aggregate.count, positional.count) {
+            if index < aggregate.count {
+                pins.append(aggregate[index])
+            }
+            if index < positional.count {
+                pins.append(positional[index])
+            }
+        }
+        return pins
     }
 
     public var variedSeams: Set<String> {
@@ -248,11 +288,7 @@ public extension CassetteData {
     /// Convenience: variants via the built-in domain generator (dependency-free). The golden's own track
     /// lengths go in, so the boundary pass can pin a single reading of a repeatedly-read seam.
     func generatedVariants(count: Int, varying domains: [String: SeamDomain], seed: UInt64) -> [CassetteData] {
-        var generator = DomainSeamGenerator(
-            domains: domains,
-            seed: seed,
-            trackLengths: tracks.mapValues(\.count)
-        )
+        var generator = DomainSeamGenerator(domains: domains, seed: seed, golden: tracks)
         return generatedVariants(count: count, using: &generator)
     }
 }

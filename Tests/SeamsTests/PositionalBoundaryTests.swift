@@ -33,7 +33,7 @@ final class PositionalBoundaryTests: XCTestCase {
         var generator = DomainSeamGenerator(
             domains: ["qty": .int(0 ... 20)],
             seed: 1,
-            trackLengths: ["qty": 2]
+            golden: ["qty": Array(repeating: CanonicalValue.int(7), count: 2)]
         )
         let variants = golden(["qty": 7], readings: 2).generatedVariants(count: 8, using: &generator)
 
@@ -48,7 +48,7 @@ final class PositionalBoundaryTests: XCTestCase {
         var generator = DomainSeamGenerator(
             domains: ["qty": .int(0 ... 20)],
             seed: 1,
-            trackLengths: ["qty": 3]
+            golden: ["qty": Array(repeating: CanonicalValue.int(7), count: 3)]
         )
         let variants = golden(["qty": 7], readings: 3).generatedVariants(count: 8, using: &generator)
         // The odd variants are the single-reading pins; which slot they move must not be constant.
@@ -64,7 +64,7 @@ final class PositionalBoundaryTests: XCTestCase {
         var generator = DomainSeamGenerator(
             domains: ["qty": .int(0 ... 20)],
             seed: 1,
-            trackLengths: ["qty": 1]
+            golden: ["qty": Array(repeating: CanonicalValue.int(7), count: 1)]
         )
         let variants = golden(["qty": 7], readings: 1).generatedVariants(count: 4, using: &generator)
 
@@ -77,6 +77,42 @@ final class PositionalBoundaryTests: XCTestCase {
         let variants = golden(["qty": 7], readings: 2).generatedVariants(count: 4, using: &generator)
 
         XCTAssertEqual(values(variants, "qty"), [[0, 0], [20, 20], [1, 1], [19, 19]])
+    }
+
+    func testEveryReadingGetsAnIsolatedPinEvenWhenTheDomainHasFewerEdges() {
+        // 4 edges over a 6-reading track. Rotating only `edges.count` times left slots 4 and 5
+        // reachable *only* by the whole-track pin — silently, and more so the higher `.repeating(_:)`
+        // went. Golden 500 sits outside the domain so every pin is visible.
+        let template = CassetteData(tracks: ["qty": Array(repeating: CanonicalValue.int(500), count: 6)])
+        let variants = template.generatedVariants(count: 10, varying: ["qty": .int(0 ... 20)], seed: 1)
+
+        var isolated = Set<Int>()
+        for variant in variants {
+            let track = (variant.tracks["qty"] ?? []).map(\.canonicalString)
+            let moved = track.indices.filter { track[$0] != "500" }
+            if moved.count == 1 {
+                isolated.insert(moved[0])
+            }
+        }
+
+        XCTAssertEqual(isolated, [0, 1, 2, 3, 4, 5], "every slot needs its own one-factor variant")
+    }
+
+    func testAnEdgeTheGoldenAlreadyHoldsIsNotScheduled() {
+        // A domain's first edge is very often the recorded value, and pinning it regenerates the golden
+        // — a variant identical to one already run. Here `SAVE10` is both.
+        let template = CassetteData(tracks: ["code": [CanonicalValue.string("SAVE10")]])
+        let variants = template.generatedVariants(
+            count: 2,
+            varying: ["code": .oneOf("SAVE10", "save10", "NOPE")],
+            seed: 1
+        )
+
+        XCTAssertEqual(
+            variants.map { ($0.tracks["code"] ?? []).map(\.canonicalString) },
+            [["\"save10\""], ["\"NOPE\""]],
+            "the budget should go to the two edges that actually change the input"
+        )
     }
 
     // MARK: - What it buys

@@ -177,19 +177,37 @@ extension Spec {
 }
 
 extension Spec {
-    /// The denominator: how many orderings the declared partial order admits. Counted exactly wherever
-    /// the memoized state space allows, and otherwise walked up to a limit and reported as a bound.
+    /// The denominator: how many orderings the declared constraints admit, summed over every shape the
+    /// declared multiplicities allow. Counted exactly wherever the memoized state space allows, and
+    /// otherwise walked up to a limit and reported as a bound.
     func availableOrderings() -> (count: Int, exact: Bool) {
         guard exploreOrdering else {
             return (1, true)
         }
-        var counter = ExtensionCounter(explorationOrder())
+        let shapes = orderingShapes(operations, repeating: orderingRepeats, limit: SpecDefaults.shapeLimit)
+        var total = 0.0
+        for shape in shapes.shapes {
+            var counter = ExtensionCounter(multiset(operations, shape: shape))
+            guard let exact = counter.totalExtensions() else {
+                return countLinearExtensions(
+                    operations,
+                    repeating: orderingRepeats,
+                    limit: SpecDefaults.orderingCountLimit
+                )
+            }
+            total += exact
+        }
         // 2^53 is where a Double stops representing consecutive integers; past there the count is a
         // display denominator anyway, and the capped walk's honest lower bound is the better answer.
-        if let exact = counter.totalExtensions(), exact <= 9_007_199_254_740_992 {
-            return (Int(exact), true)
+        guard total <= 9_007_199_254_740_992 else {
+            return countLinearExtensions(
+                operations,
+                repeating: orderingRepeats,
+                limit: SpecDefaults.orderingCountLimit
+            )
         }
-        return countLinearExtensions(operations, repeating: orderingRepeats, limit: SpecDefaults.orderingCountLimit)
+        // Sampled shapes make this a floor, not the space: the shapes left out hold orderings too.
+        return (Int(total), shapes.exact)
     }
 }
 
@@ -241,17 +259,28 @@ enum ExplorationBudget {
 /// each step by `ExtensionCounter` makes that walk *uniform over orderings* (see there for why an
 /// unweighted walk isn't). When the state space is too large to count, the walk falls back to unweighted.
 ///
-/// Over a *multiset* of ops: a repeatable op contributes `repeating` occurrences, so orderings explore
-/// applying an operation more than once — which is where merge-into-existing and
-/// remove-what-is-not-there branches live. Ops marked `.once()` (and `.last()`, which implies it)
-/// contribute exactly one.
+/// Over a *multiset* of ops: an op contributes as many occurrences as `.repeating(_:)` declares — or as
+/// `Ordering(repeating:)` does where it doesn't — so orderings explore applying an operation more than
+/// once, which is where merge-into-existing and remove-what-is-not-there branches live. An op that
+/// declares a *range* contributes a count that varies between sequences, which puts the whole multiset
+/// on the sampled axis rather than fixing it (see `Multiplicity.swift`).
 func linearExtensions<S>(
     _ ops: [Op<S>],
     max: Int,
     repeating: Int = 1,
     seed: UInt64 = SpecDefaults.seed
 ) -> [[Op<S>]] {
-    let admitted = multiset(ops, repeating: repeating)
+    let shapes = orderingShapes(ops, repeating: repeating, limit: SpecDefaults.shapeLimit, seed: seed).shapes
+    guard let single = shapes.first, shapes.count == 1 else {
+        return extensionsAcross(shapes, ops: ops, max: max, seed: seed)
+    }
+    return extensions(of: single, ops: ops, max: max, seed: seed)
+}
+
+/// The sample within one fixed multiset: exhaustive when the space fits, stratified around the soft
+/// preconditions when it doesn't.
+private func extensions<S>(of shape: OrderingShape, ops: [Op<S>], max: Int, seed: UInt64) -> [[Op<S>]] {
+    let admitted = multiset(ops, shape: shape)
     // One past the cap, so a full enumeration is distinguishable from a truncated one. An exhaustive
     // space needs no strata — it already holds every in-order and out-of-order sequence.
     let enumerated = enumerateExtensions(admitted, limit: max + 1)
@@ -260,7 +289,7 @@ func linearExtensions<S>(
     }
 
     let preconditions = preconditions(of: ops)
-    let inOrder = multiset(gated(ops, strict: true), repeating: repeating)
+    let inOrder = multiset(gated(ops, strict: true), shape: shape)
     let quota = preconditions.isEmpty ? 0 : Int((Double(max) * SpecDefaults.outOfOrderShare).rounded())
 
     var sample = sampleExtensions(inOrder, count: max - quota, seed: seed)
@@ -282,7 +311,7 @@ func linearExtensions<S>(
 /// The ops as one exploration stratum enforces them. `strict` folds the soft `.after` preconditions
 /// into the hard gates, which is how the in-order stratum is built; the out-of-order stratum walks the
 /// declared gates alone and filters for violations afterwards.
-private func gated<S>(_ ops: [Op<S>], strict: Bool) -> [Op<S>] {
+func gated<S>(_ ops: [Op<S>], strict: Bool) -> [Op<S>] {
     guard strict else {
         return ops
     }
@@ -291,15 +320,8 @@ private func gated<S>(_ ops: [Op<S>], strict: Bool) -> [Op<S>] {
     }
 }
 
-/// A repeatable op contributes `repeating` occurrences; `.once()` / `.last()` contribute one.
-private func multiset<S>(_ ops: [Op<S>], repeating: Int) -> [Op<S>] {
-    ops.flatMap { operation in
-        Array(repeating: operation, count: operation.repeatable ? Swift.max(1, repeating) : 1)
-    }
-}
-
 /// Orderings are identified by their label sequence: two occurrences of one label are interchangeable.
-private func orderingKey(_ order: [Op<some Any>]) -> String {
+func orderingKey(_ order: [Op<some Any>]) -> String {
     order.map(\.label).joined(separator: ">")
 }
 
@@ -335,7 +357,7 @@ private func enumerateExtensions<S>(_ multiset: [Op<S>], limit: Int) -> [[Op<S>]
 /// rejected by `keeping` (how the out-of-order stratum is drawn). Attempts are bounded: dedup can
 /// starve near the end of a space barely larger than the budget — and a rejection filter can starve
 /// outright — and returning slightly fewer orderings beats spinning.
-private func sampleExtensions<S>(
+func sampleExtensions<S>(
     _ multiset: [Op<S>],
     count: Int,
     seed: UInt64,
@@ -398,7 +420,23 @@ private func randomExtension<S>(
 /// them and stopped at `limit` — the space grows factorially, and "≥100000" is as useful a denominator
 /// as the true number.
 func countLinearExtensions(_ ops: [Op<some Any>], repeating: Int, limit: Int) -> (count: Int, exact: Bool) {
-    var counts = ops.map { $0.repeatable ? Swift.max(1, repeating) : 1 }
+    let shapes = orderingShapes(ops, repeating: repeating, limit: SpecDefaults.shapeLimit)
+    var total = 0
+    var exact = shapes.exact
+    for shape in shapes.shapes {
+        let counted = countExtensions(ops, shape: shape, limit: limit - total)
+        total += counted.count
+        exact = exact && counted.exact
+        if total >= limit {
+            return (total, false)
+        }
+    }
+    return (total, exact)
+}
+
+/// The walk for one shape, stopped at `limit`.
+private func countExtensions(_ ops: [Op<some Any>], shape: OrderingShape, limit: Int) -> (count: Int, exact: Bool) {
+    var counts = shape
     let labels = ops.map(\.label)
     let gates = ops.map(\.gates)
     let mustBeLast = ops.map(\.mustBeLast)

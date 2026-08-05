@@ -107,21 +107,28 @@ public struct SpecVerdict: Codable, Sendable {
         return lines
     }
 
-    /// The varied integer seam values of the counterexample as `(key, value)` pairs, e.g.
-    /// `("coffeeQty", "1")`. Shared by `report()` and `htmlReport()` so the extraction lives in one place.
+    /// The counterexample's seam values as `(key, value)` pairs, e.g. `("add.quantity", "1,20")` —
+    /// one entry per reading, so a repeatedly-read seam shows which position was extreme. Shared by
+    /// `report()` and `htmlReport()` so the extraction lives in one place.
+    ///
+    /// Every value type renders, not only integers: a categorical argument (`.oneOf(Catalog.all)`) is
+    /// the input a counterexample most needs to name, and dropping it left the reader with a quantity
+    /// and no SKU.
     var counterexampleSeamPairs: [(key: String, value: String)] {
         guard let tracks = counterexample?.tracks else { return [] }
-        let ints = tracks.compactMapValues { values -> String? in
-            let rendered = values.compactMap {
-                if case let .int(intValue) = $0 {
-                    String(intValue)
-                } else {
-                    nil
-                }
-            }
-            return rendered.isEmpty ? nil : rendered.joined(separator: ",")
+        let rendered = tracks.compactMapValues { values -> String? in
+            values.isEmpty ? nil : values.map(Self.render).joined(separator: ",")
         }
-        return ints.sorted { $0.key < $1.key }.map { (key: $0.key, value: $0.value) }
+        return rendered.sorted { $0.key < $1.key }.map { (key: $0.key, value: $0.value) }
+    }
+
+    /// Unquoted for a report line — `add.sku=COFFEE` reads better than `add.sku="COFFEE"`, and the
+    /// serialized cassette is the artifact anything machine-read should use.
+    private static func render(_ value: CanonicalValue) -> String {
+        if case let .string(text) = value {
+            return text
+        }
+        return value.canonicalString
     }
 }
 
@@ -139,6 +146,13 @@ enum SpecDefaults {
     /// at a typical `Ordering(max: 50)`, while the bulk of the sweep stays on the surface the author
     /// described. Zero when a spec declares no preconditions — there is no such stratum to draw from.
     static let outOfOrderShare = 0.25
+    /// How many distinct occurrence-count shapes a spec's declared `.repeating(_:)` ranges may produce
+    /// before shapes are sampled rather than enumerated. Generous: the product only grows when an author
+    /// declares several ranged ops, and the fallback is a lower-bound denominator, not a wrong one.
+    static let shapeLimit = 4096
+    /// How many times the sampler revisits every shape. Each pass draws at most one ordering per shape,
+    /// so this bounds the work when most shapes are exhausted and the budget still isn't spent.
+    static let shapePasses = 8
 }
 
 public extension Spec {
@@ -196,7 +210,7 @@ public extension Spec {
             return operations
         }
         return operations.flatMap { operation in
-            Array(repeating: operation, count: operation.repeatable ? Swift.max(1, orderingRepeats) : 1)
+            Array(repeating: operation, count: operation.occurrences(default: orderingRepeats).upperBound)
         }
     }
 

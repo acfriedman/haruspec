@@ -44,9 +44,14 @@ public struct Op<S> {
     /// Enforced while an ordering is built, so no sampled ordering ever violates one. The in-order
     /// stratum folds `afters` in here temporarily (see `gated`); the declared arrays stay untouched.
     var gates: [String] = []
-    /// Whether ordering exploration may place this op more than once. `.last()` ops are pinned to a
-    /// single occurrence by construction — a second one could not also be last.
-    var repeatable = true
+    /// How many times ordering exploration may apply this op, declared with `.repeating(_:)`. `nil`
+    /// defers to the spec-wide `Ordering(repeating:)`. A *range* means the count itself varies between
+    /// sequences, which is the only way a shorter run — a checkout on an empty cart — is reachable.
+    var multiplicity: ClosedRange<Int>?
+    /// Domains declared on this op by `Op(_:varying:)`, against the seam keys they synthesized.
+    /// `Spec.operations(_:)` merges them into the declared surface, so a typed argument is
+    /// property-varied without anyone naming it in `.vary` — which is the join that used to be a string.
+    var argumentDomains: [(seam: String, domain: SeamDomain)] = []
 
     /// A simple op.
     public init(_ label: String, _ action: @escaping (S) -> Void) {
@@ -63,13 +68,39 @@ public struct Op<S> {
 
     /// This op must run last (e.g. `checkout`). Implies `.once()`.
     public func last() -> Op<S> {
-        var copy = self; copy.mustBeLast = true; copy.repeatable = false; return copy
+        var copy = self; copy.mustBeLast = true; return copy.repeating(1)
     }
 
-    /// Exempt this op from ordering repetition — it runs at most once per ordering. For an op whose
+    /// Exempt this op from ordering repetition — it runs exactly once per sequence. For an op whose
     /// second application is meaningless or destructive rather than interesting.
     public func once() -> Op<S> {
-        var copy = self; copy.repeatable = false; return copy
+        repeating(1)
+    }
+
+    /// Apply this op exactly `count` times in every sequence, overriding `Ordering(repeating:)`.
+    ///
+    /// The spec-wide number is one dial for every op, which stops fitting as soon as ops are collapsed:
+    /// one `add` wants applying six times where one `applyPromo` wants two, and raising the global
+    /// number buys both. Sequence length is the cost model's one super-linear term, so buying length
+    /// you don't want is the expensive mistake.
+    public func repeating(_ count: Int) -> Op<S> {
+        repeating(count ... count)
+    }
+
+    /// Apply this op *between* `range.lowerBound` and `range.upperBound` times — the count varies from
+    /// sequence to sequence rather than being fixed.
+    ///
+    /// Exact multiplicity means every sequence runs every op the same number of times, so states that
+    /// need an op to be *absent* or *scarce* — checkout on an empty cart, a single-line cart, a run
+    /// where the promo never fired — are unreachable no matter how many orderings are sampled. A range
+    /// is what reaches them, and the sequences it adds are shorter, so they are also cheaper than the
+    /// ones already being run.
+    public func repeating(_ range: ClosedRange<Int>) -> Op<S> {
+        precondition(range.lowerBound >= 0, "an op cannot appear a negative number of times")
+        precondition(range.upperBound >= 1, "an op declared 0 ... 0 would never run — delete it instead")
+        var copy = self
+        copy.multiplicity = range
+        return copy
     }
 
     /// This op is *expected* to run after `label` — a soft precondition, not a filter.
@@ -161,6 +192,9 @@ public struct Spec<S> {
     var tolerances: Tolerance = .strict
     var intent: Intent = .none
     var seamDomains: [String: SeamDomain] = [:]
+    /// Which of `seamDomains` came from a typed op argument — so a `Seam(_:_:)` that collides with one
+    /// traps instead of quietly redefining an argument's domain from a distance.
+    var argumentSeams: Set<String> = []
     /// The builds a catalog can enumerate, declared via `.candidates { }`. Empty for a spec whose
     /// suite checks each build inline (`check(_:expecting:_:)`), which is the ordinary case.
     var candidates: [Candidate<S>] = []
@@ -184,8 +218,25 @@ public struct Spec<S> {
     }
 
     /// The interactions to drive, as labeled ops with optional ordering constraints.
+    ///
+    /// Typed op arguments declare their domains here rather than in `.vary`, so this is where they join
+    /// the declared surface. Order between `.operations` and `.vary` doesn't matter — both write the
+    /// same dictionary, and a collision between the two traps rather than letting one silently win.
     public func operations(@OperationsBuilder<S> _ build: () -> [Op<S>]) -> Spec<S> {
-        var copy = self; copy.operations = build(); return copy
+        var copy = self
+        copy.operations = build()
+        for operation in copy.operations {
+            for argument in operation.argumentDomains {
+                precondition(
+                    copy.seamDomains[argument.seam] == nil,
+                    "\"\(argument.seam)\" is declared twice — a typed argument's key is "
+                        + "`<op>.<name-or-position>`, so rename the argument or the Seam it collides with"
+                )
+                copy.seamDomains[argument.seam] = argument.domain
+                copy.argumentSeams.insert(argument.seam)
+            }
+        }
+        return copy
     }
 
     /// Narrow observation to an explicit allowlist of notification names. **Optional** — specs
@@ -233,7 +284,13 @@ public struct Spec<S> {
         var copy = self
         for variation in build() {
             switch variation {
-            case let .seam(name, domain): copy.seamDomains[name] = domain
+            case let .seam(name, domain):
+                precondition(
+                    !copy.argumentSeams.contains(name),
+                    "\(name) is already a typed argument's domain — declaring it again here would "
+                        + "redefine it from a distance, which is the join the typed form removes"
+                )
+                copy.seamDomains[name] = domain
             case let .ordering(max, repeating):
                 copy.exploreOrdering = true
                 copy.maxOrderings = max
