@@ -103,7 +103,7 @@ public enum BehavioralDiff {
     private struct Signature: Hashable {
         let kind: EventKind
         let label: String
-        let thread: LogicalThread
+        let domain: ConcurrencyDomain
     }
 
     public static func compare(
@@ -306,7 +306,7 @@ public enum BehavioralDiff {
     }
 
     private static func signature(_ event: TraceEvent) -> Signature {
-        Signature(kind: event.kind, label: event.label, thread: event.thread)
+        Signature(kind: event.kind, label: event.label, domain: event.domain)
     }
 
     /// Classic O(n·m) LCS, returning the aligned index pairs in increasing order.

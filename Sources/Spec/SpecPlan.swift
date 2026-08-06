@@ -40,8 +40,10 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// a stale shape whose field names happen to still decode would replay garbage with confidence.
     ///
     /// Bumped to 2 when `Scenario` became `Spec`: the plan's `scenarioName` key is now `specName`,
-    /// so a version-1 artifact must be re-recorded rather than coerced.
-    public static let supportedSchemaVersion = 2
+    /// so a version-1 artifact must be re-recorded rather than coerced. Bumped to 3 when a trace
+    /// event's `thread` (a first-seen `worker-N`) became a nominal `domain` — a version-2 artifact
+    /// names threads that no longer exist as a concept.
+    public static let supportedSchemaVersion = 3
 
     public var schemaVersion: Int
     public var specName: String

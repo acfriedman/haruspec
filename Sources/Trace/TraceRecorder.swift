@@ -20,11 +20,10 @@ public final class TraceRecorder: @unchecked Sendable {
     private var seqCounter = 0
     private var depth = 0
 
-    // Canonicalization maps, assigned in first-seen order for run-stability.
+    // Symbolic identity, assigned in first-seen order for run-stability. Covers traced subjects and
+    // actor domain instances alike.
     private var identityMap: [ObjectIdentifier: Int] = [:]
     private var nextIdentity = 1
-    private var workerMap: [ObjectIdentifier: Int] = [:]
-    private var nextWorker = 1
 
     /// Mirror intervals to Instruments too, so the same run is inspectable with Apple tooling.
     private let signposter = OSSignposter(subsystem: "com.haruspec.trace", category: "interval")
@@ -37,37 +36,64 @@ public final class TraceRecorder: @unchecked Sendable {
     // MARK: - Public recording API
 
     /// Record a function/method entry. Increments call-nesting depth.
-    public func call(_ label: String, subject: AnyObject? = nil, args: CanonicalValue? = nil) {
+    public func call(
+        _ label: String,
+        subject: AnyObject? = nil,
+        args: CanonicalValue? = nil,
+        isolation: (any Actor)? = #isolation
+    ) {
         lock.lock(); defer { lock.unlock() }
-        appendLocked(kind: .call, label: label, subject: subject, payload: args, duration: nil)
+        appendLocked(isolation: isolation, kind: .call, label: label, subject: subject, payload: args)
         depth += 1
     }
 
     /// Record a function/method return. Decrements call-nesting depth first.
-    public func ret(_ label: String, subject: AnyObject? = nil, value: CanonicalValue? = nil) {
+    public func ret(
+        _ label: String,
+        subject: AnyObject? = nil,
+        value: CanonicalValue? = nil,
+        isolation: (any Actor)? = #isolation
+    ) {
         lock.lock(); defer { lock.unlock() }
         depth = max(0, depth - 1)
-        appendLocked(kind: .ret, label: label, subject: subject, payload: value, duration: nil)
+        appendLocked(isolation: isolation, kind: .ret, label: label, subject: subject, payload: value)
     }
 
     /// Record a posted notification / broadcast side effect — an observable product behavior, so it
     /// lands in the durable **semantic** tier (its value contract survives code-symbol renames).
-    public func notification(_ name: String, subject: AnyObject? = nil, payload: CanonicalValue? = nil) {
+    public func notification(
+        _ name: String,
+        subject: AnyObject? = nil,
+        payload: CanonicalValue? = nil,
+        isolation: (any Actor)? = #isolation
+    ) {
         lock.lock(); defer { lock.unlock() }
         appendLocked(
+            isolation: isolation,
             kind: .notification,
             label: name,
             subject: subject,
             payload: payload,
-            duration: nil,
             tier: .semantic
         )
     }
 
     /// Record an observable state / property mutation (KVO) — a durable **semantic**-tier side effect.
-    public func stateChange(_ label: String, subject: AnyObject? = nil, value: CanonicalValue? = nil) {
+    public func stateChange(
+        _ label: String,
+        subject: AnyObject? = nil,
+        value: CanonicalValue? = nil,
+        isolation: (any Actor)? = #isolation
+    ) {
         lock.lock(); defer { lock.unlock() }
-        appendLocked(kind: .stateChange, label: label, subject: subject, payload: value, duration: nil, tier: .semantic)
+        appendLocked(
+            isolation: isolation,
+            kind: .stateChange,
+            label: label,
+            subject: subject,
+            payload: value,
+            tier: .semantic
+        )
     }
 
     /// Record an outbound call to a **spied collaborator** — a real side effect leaving the SUT across a
@@ -75,36 +101,71 @@ public final class TraceRecorder: @unchecked Sendable {
     /// (the collaborator's stable public API, not an internal code symbol), and `args` is the
     /// canonicalized argument list. Unlike `call`, it does *not* nest depth: a spied effect is a leaf
     /// observation, not a call frame the SUT's own trace descends into.
-    public func effect(_ label: String, subject: AnyObject? = nil, args: CanonicalValue? = nil) {
+    public func effect(
+        _ label: String,
+        subject: AnyObject? = nil,
+        args: CanonicalValue? = nil,
+        isolation: (any Actor)? = #isolation
+    ) {
         lock.lock(); defer { lock.unlock() }
-        appendLocked(kind: .effect, label: label, subject: subject, payload: args, duration: nil, tier: .semantic)
+        appendLocked(
+            isolation: isolation,
+            kind: .effect,
+            label: label,
+            subject: subject,
+            payload: args,
+            tier: .semantic
+        )
     }
 
     /// Record an application-defined custom telemetry event (structural tier; droppable via `ignoredKinds`).
-    public func custom(_ label: String, subject: AnyObject? = nil, payload: CanonicalValue? = nil) {
+    public func custom(
+        _ label: String,
+        subject: AnyObject? = nil,
+        payload: CanonicalValue? = nil,
+        isolation: (any Actor)? = #isolation
+    ) {
         lock.lock(); defer { lock.unlock() }
-        appendLocked(kind: .custom, label: label, subject: subject, payload: payload, duration: nil)
+        appendLocked(
+            isolation: isolation,
+            kind: .custom,
+            label: label,
+            subject: subject,
+            payload: payload
+        )
     }
 
     /// Record a payload-free **temporal marker** (the semantic tier): a domain-milestone signpost used
     /// to pin ordering / temporal coupling across refactors that reshuffle the structural tier.
     /// Deliberately carries no payload — value verification rides production-observable seams
     /// (notification userInfo, return values, KVO), never hand-authored marker state.
-    public func marker(_ label: String, subject: AnyObject? = nil) {
+    public func marker(_ label: String, subject: AnyObject? = nil, isolation: (any Actor)? = #isolation) {
         lock.lock(); defer { lock.unlock() }
-        appendLocked(kind: .marker, label: label, subject: subject, payload: nil, duration: nil, tier: .semantic)
+        appendLocked(
+            isolation: isolation,
+            kind: .marker,
+            label: label,
+            subject: subject,
+            payload: nil,
+            tier: .semantic
+        )
     }
 
     /// Time a unit of work as a signpost interval; the measured duration is a *tolerant* trace field.
     @discardableResult
-    public func interval<T>(_ label: String, subject: AnyObject? = nil, _ body: () throws -> T) rethrows -> T {
+    public func interval<T>(
+        _ label: String,
+        subject: AnyObject? = nil,
+        isolation: (any Actor)? = #isolation,
+        _ body: () throws -> T
+    ) rethrows -> T {
         let state = signposter.beginInterval("interval", id: signposter.makeSignpostID())
         let start = clock.now()
         defer { signposter.endInterval("interval", state) }
         let result = try body()
         let elapsed = clock.now() - start
         lock.lock(); defer { lock.unlock() }
-        appendLocked(kind: .signpost, label: label, subject: subject, payload: nil, duration: elapsed)
+        appendSignpostLocked(isolation: isolation, label: label, subject: subject, durationTicks: elapsed)
         return result
     }
 
@@ -127,38 +188,67 @@ public final class TraceRecorder: @unchecked Sendable {
 
     /// Record a pre-measured signpost interval (the duration was computed by the caller). Used by the
     /// `@Timed` method instrumentation, which brackets the whole method itself.
-    public func signpost(_ label: String, subject: AnyObject? = nil, durationTicks: Int64) {
+    public func signpost(
+        _ label: String,
+        subject: AnyObject? = nil,
+        durationTicks: Int64,
+        isolation: (any Actor)? = #isolation
+    ) {
         lock.lock(); defer { lock.unlock() }
-        appendLocked(kind: .signpost, label: label, subject: subject, payload: nil, duration: durationTicks)
+        appendSignpostLocked(isolation: isolation, label: label, subject: subject, durationTicks: durationTicks)
     }
 
     // MARK: - Locked helpers (callers already hold `lock`)
 
     private func appendLocked(
+        isolation: (any Actor)?,
         kind: EventKind,
         label: String,
         subject: AnyObject?,
         payload: CanonicalValue?,
-        duration: Int64?,
         tier: EventTier = .structural
     ) {
-        let event = TraceEvent(
+        appendLocked(TraceEvent(
             seq: seqCounter,
             kind: kind,
             label: label,
-            thread: currentThreadLocked(),
+            domain: domainLocked(isolation),
             subject: symbolicIDLocked(subject),
             payload: payload,
-            durationTicks: duration,
             depth: depth,
             tier: tier
-        )
+        ))
+    }
+
+    /// Only a `.signpost` carries a duration, so the timed path is its own entry point rather than a
+    /// `durationTicks:` every other kind has to pass `nil` to.
+    private func appendSignpostLocked(
+        isolation: (any Actor)?,
+        label: String,
+        subject: AnyObject?,
+        durationTicks: Int64
+    ) {
+        appendLocked(TraceEvent(
+            seq: seqCounter,
+            kind: .signpost,
+            label: label,
+            domain: domainLocked(isolation),
+            subject: symbolicIDLocked(subject),
+            durationTicks: durationTicks,
+            depth: depth
+        ))
+    }
+
+    private func appendLocked(_ event: TraceEvent) {
         events.append(event)
         seqCounter += 1
     }
 
     private func symbolicIDLocked(_ subject: AnyObject?) -> Int? {
-        guard let subject else { return nil }
+        subject.map { symbolicIDLocked($0) }
+    }
+
+    private func symbolicIDLocked(_ subject: AnyObject) -> Int {
         let key = ObjectIdentifier(subject)
         if let existing = identityMap[key] {
             return existing
@@ -169,17 +259,9 @@ public final class TraceRecorder: @unchecked Sendable {
         return assigned
     }
 
-    private func currentThreadLocked() -> LogicalThread {
-        if Thread.isMainThread {
-            return .main
-        }
-        let key = ObjectIdentifier(Thread.current)
-        if let existing = workerMap[key] {
-            return .worker(existing)
-        }
-        let assigned = nextWorker
-        nextWorker += 1
-        workerMap[key] = assigned
-        return .worker(assigned)
+    /// Resolve the domain for an event, reusing `symbolicIDLocked` so an actor that is also a traced
+    /// subject carries one identity in both places.
+    private func domainLocked(_ isolation: (any Actor)?) -> ConcurrencyDomain {
+        DomainResolver.resolve(isolation: isolation, instanceID: symbolicIDLocked)
     }
 }

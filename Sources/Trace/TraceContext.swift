@@ -18,10 +18,17 @@ public enum TraceContext {
 /// timing regions and temporal markers. Each is a no-op when no capture is active.
 public enum Haruspec {
     /// Measure a region as a signpost interval, recording to the ambient recorder if present.
+    /// `isolation` is forwarded rather than defaulted again inside, so the domain resolves to the
+    /// *app's* call site — defaulting it here would resolve every interval to this file's context.
     @discardableResult
-    public static func interval<T>(_ label: String, subject: AnyObject? = nil, _ body: () throws -> T) rethrows -> T {
+    public static func interval<T>(
+        _ label: String,
+        subject: AnyObject? = nil,
+        isolation: (any Actor)? = #isolation,
+        _ body: () throws -> T
+    ) rethrows -> T {
         if let recorder = TraceContext.current {
-            return try recorder.interval(label, subject: subject, body)
+            return try recorder.interval(label, subject: subject, isolation: isolation, body)
         }
         return try body()
     }
@@ -38,7 +45,7 @@ public enum Haruspec {
     /// reactive). It carries no payload by design: verify *values* through production seams
     /// (notification userInfo, return values, KVO), not through instrumentation you authored — so the
     /// oracle checks real behavior, not itself.
-    public static func marker(_ label: String, subject: AnyObject? = nil) {
-        TraceContext.current?.marker(label, subject: subject)
+    public static func marker(_ label: String, subject: AnyObject? = nil, isolation: (any Actor)? = #isolation) {
+        TraceContext.current?.marker(label, subject: subject, isolation: isolation)
     }
 }
