@@ -48,14 +48,14 @@ final class SpecProvidingTests: XCTestCase {
         XCTAssertEqual(PromoCartSpec().candidateNames, ["RefactorCart", "RoundBugCart"])
     }
 
-    func testCheckPassesWhenAPortEarnsItsDeclaredVerdict() throws {
+    func testCheckPassesWhenAPortEarnsItsDeclaredVerdict() async throws {
         // The counterexample meets its expectation by diverging, so neither throws.
-        try PromoCartSpec().check(candidate: "RefactorCart", reportsIn: scratch())
-        try PromoCartSpec().check(candidate: "RoundBugCart", reportsIn: scratch())
+        try await PromoCartSpec().check(candidate: "RefactorCart", reportsIn: scratch())
+        try await PromoCartSpec().check(candidate: "RoundBugCart", reportsIn: scratch())
     }
 
-    func testCheckNamesACandidateThatIsNoLongerDeclared() {
-        XCTAssertThrowsError(try PromoCartSpec().check(candidate: "Renamed")) { error in
+    func testCheckNamesACandidateThatIsNoLongerDeclared() async {
+        await XCTAssertThrowsErrorAsync(try PromoCartSpec().check(candidate: "Renamed")) { error in
             XCTAssertEqual(
                 (error as? SpecCatalog.CheckFailure)?.description,
                 "Renamed is no longer a declared candidate"
@@ -71,23 +71,23 @@ final class SpecProvidingTests: XCTestCase {
         )
     }
 
-    func testContinuousRecordAndReplayRoundTripPerSpec() throws {
+    func testContinuousRecordAndReplayRoundTripPerSpec() async throws {
         let planURL = scratch().appendingPathComponent("plan.json")
         let resultsDir = scratch()
 
-        try PromoCartSpec().checkContinuous(.record, environment: [
+        try await PromoCartSpec().checkContinuous(.record, environment: [
             "HARUSPEC_MODE": "record",
             "HARUSPEC_PLAN_PATH": planURL.path
         ])
-        try PromoCartSpec().checkContinuous(.replay, environment: [
+        try await PromoCartSpec().checkContinuous(.replay, environment: [
             "HARUSPEC_MODE": "replay",
             "HARUSPEC_PLAN_PATH": planURL.path,
             "HARUSPEC_RESULTS_DIR": resultsDir.path
         ])
     }
 
-    func testContinuousReportsAMissingDestinationRatherThanThrowingRaw() {
-        XCTAssertThrowsError(
+    func testContinuousReportsAMissingDestinationRatherThanThrowingRaw() async {
+        await XCTAssertThrowsErrorAsync(
             try PromoCartSpec().checkContinuous(.record, environment: ["HARUSPEC_MODE": "record"])
         ) { error in
             XCTAssertTrue(

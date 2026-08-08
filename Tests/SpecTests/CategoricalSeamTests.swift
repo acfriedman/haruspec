@@ -29,27 +29,27 @@ final class CategoricalSeamTests: XCTestCase {
             .vary { Seam("salutation", .oneOf("hello", "hola", "bonjour")) }
     }
 
-    func testEveryDeclaredValueIsReachable() {
+    func testEveryDeclaredValueIsReachable() async {
         // Recording explores the declared surface, so the generated cassettes should between them
         // cover the whole set rather than pinning one value.
         var seen: Set<String> = []
-        _ = spec(recording: { seen.insert($0) }).record()
+        _ = await spec(recording: { seen.insert($0) }).record()
 
         XCTAssertEqual(seen, ["hello", "hola", "bonjour"])
     }
 
-    func testOnlyDeclaredValuesAreEverProduced() {
+    func testOnlyDeclaredValuesAreEverProduced() async {
         var seen: Set<String> = []
-        _ = spec(recording: { seen.insert($0) }).record()
+        _ = await spec(recording: { seen.insert($0) }).record()
 
         XCTAssertTrue(seen.isSubset(of: ["hello", "hola", "bonjour"]))
     }
 
-    func testTheSameSeedReplaysTheSameChoices() {
+    func testTheSameSeedReplaysTheSameChoices() async {
         var first: [String] = []
         var second: [String] = []
-        _ = spec(recording: { first.append($0) }).record()
-        _ = spec(recording: { second.append($0) }).record()
+        _ = await spec(recording: { first.append($0) }).record()
+        _ = await spec(recording: { second.append($0) }).record()
 
         XCTAssertEqual(first, second, "generation is seeded; a categorical draw must be reproducible")
     }
@@ -57,7 +57,7 @@ final class CategoricalSeamTests: XCTestCase {
     /// The golden probe runs under *live* seams, so it reads each seam's `default` — generated
     /// variants replace it afterwards. A spec whose default sits outside its declared set therefore
     /// verifies one input it never declared, which is worth seeing rather than discovering.
-    func testTheGoldenProbeReadsTheDefaultBeforeVariantsReplaceIt() {
+    func testTheGoldenProbeReadsTheDefaultBeforeVariantsReplaceIt() async {
         var seen: Set<String> = []
         let pinned = Spec<Greeter>("greeter.pinned")
             .system { _ in Greeter() }
@@ -69,12 +69,12 @@ final class CategoricalSeamTests: XCTestCase {
                 }
             }
             .vary { Seam("salutation", .oneOf("only")) }
-        _ = pinned.record()
+        _ = await pinned.record()
 
         XCTAssertEqual(seen, ["undeclared", "only"])
     }
 
-    func testIntSetsVaryOverExactlyTheDeclaredValues() {
+    func testIntSetsVaryOverExactlyTheDeclaredValues() async {
         var seen: Set<Int64> = []
         let spec = Spec<Greeter>("greeter.ints")
             .system { _ in Greeter() }
@@ -86,7 +86,7 @@ final class CategoricalSeamTests: XCTestCase {
                 }
             }
             .vary { Seam("qty", .oneOf([0, 7, 999])) }
-        _ = spec.record()
+        _ = await spec.record()
 
         XCTAssertEqual(seen, [0, 7, 999], "a categorical int must not fill the gaps between values")
     }

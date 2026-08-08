@@ -124,7 +124,7 @@ final class ReproSwiftPort: ReproCart {
 }
 
 final class ForwarderReproTests: XCTestCase {
-    func testForwarderBaselineVsFaithfulPortIsEquivalent() {
+    func testForwarderBaselineVsFaithfulPortIsEquivalent() async {
         let spec = Spec<ReproCart>("cart.repro")
             .system { _ in TracedReproCart() }
             .operations {
@@ -155,7 +155,7 @@ final class ForwarderReproTests: XCTestCase {
                 Ordering(max: 50)
             }
 
-        let verdict = spec.verify(against: { _ in ReproSwiftPort() })
+        let verdict = await spec.verify(against: { _ in ReproSwiftPort() })
         print("=== FORWARDER REPRO ===")
         print(verdict.report())
         print("=== FORWARDER REPRO END ===")

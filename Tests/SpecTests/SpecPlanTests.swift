@@ -122,8 +122,8 @@ final class SpecPlanTests: XCTestCase {
 
     // MARK: Record → artifact
 
-    func testRecordPinsTheExploredSurfaceAndRoundTrips() throws {
-        let plan = cart(system: makeGood).record()
+    func testRecordPinsTheExploredSurfaceAndRoundTrips() async throws {
+        let plan = await cart(system: makeGood).record()
 
         XCTAssertEqual(plan.specName, "promo-cart.plan")
         XCTAssertGreaterThan(plan.probes.count, 1, "orderings × variants explored, not just the declared run")
@@ -138,22 +138,24 @@ final class SpecPlanTests: XCTestCase {
         // The artifact round-trips bit-identically — the reviewer replays *this file*.
         let url = planURL("roundtrip")
         defer { try? FileManager.default.removeItem(at: url) }
-        let written = try cart(system: makeGood).record(to: url)
+        let written = await try cart(system: makeGood).record(to: url)
         let reloaded = try SpecPlan(contentsOf: url)
         XCTAssertEqual(reloaded, written)
     }
 
-    func testRecordIsDeterministic() {
+    func testRecordIsDeterministic() async {
         // Two records of the same base build produce the same plan — the cross-build analog of
         // `testCaptureIsDeterministicUnderTolerances`, and what makes committed-golden viable.
-        XCTAssertEqual(cart(system: makeGood).record(), cart(system: makeGood).record())
+        let first = await cart(system: makeGood).record()
+        let second = await cart(system: makeGood).record()
+        XCTAssertEqual(first, second)
     }
 
     // MARK: Replay verdicts
 
-    func testFaithfulChangeVerifiesEquivalentFromThePlan() {
-        let plan = cart(system: makeGood).record()
-        let verdict = cart(system: makeRefactor).verify(replaying: plan)
+    func testFaithfulChangeVerifiesEquivalentFromThePlan() async {
+        let plan = await cart(system: makeGood).record()
+        let verdict = await cart(system: makeRefactor).verify(replaying: plan)
 
         XCTAssertEqual(
             verdict.verdict,
@@ -169,13 +171,13 @@ final class SpecPlanTests: XCTestCase {
         XCTAssertGreaterThan(verdict.orderingsExplored, 1)
     }
 
-    func testRegressionDivergesLocalizedAndReproducible() throws {
+    func testRegressionDivergesLocalizedAndReproducible() async throws {
         let url = planURL("regression")
         defer { try? FileManager.default.removeItem(at: url) }
-        try cart(system: makeGood).record(to: url)
+        try await cart(system: makeGood).record(to: url)
 
         // "On the branch": same spec source, changed code under it.
-        let verdict = try cart(system: makeRoundBug).verify(replayingContentsOf: url)
+        let verdict = await try cart(system: makeRoundBug).verify(replayingContentsOf: url)
 
         XCTAssertEqual(verdict.verdict, .diverged, "the truncation bug is caught across the build boundary")
         XCTAssertNotNil(verdict.counterexample, "the varied seam value that exposed it is pinned")
@@ -193,7 +195,7 @@ final class SpecPlanTests: XCTestCase {
         XCTAssertEqual(reloaded.diff.divergences, verdict.diff.divergences)
 
         // …and the reviewer reproduces the exact verdict by re-running the plan.
-        let rerun = try cart(system: makeRoundBug).verify(replayingContentsOf: url)
+        let rerun = await try cart(system: makeRoundBug).verify(replayingContentsOf: url)
         XCTAssertEqual(rerun.verdict, verdict.verdict)
         XCTAssertEqual(rerun.diff.divergences, verdict.diff.divergences)
         XCTAssertEqual(rerun.counterexample, verdict.counterexample)
@@ -201,28 +203,28 @@ final class SpecPlanTests: XCTestCase {
 
     // MARK: Extension mode on the PR shape
 
-    func testIntentAbsorbsDeclaredDeltaAndGatesOnCollateral() {
-        let plan = cart(system: makeGood).record()
+    func testIntentAbsorbsDeclaredDeltaAndGatesOnCollateral() async {
+        let plan = await cart(system: makeGood).record()
 
         // Undeclared: the new LoyaltyPointsEarned post is collateral → gates.
-        let parity = cart(system: makeLoyalty).verify(replaying: plan)
+        let parity = await cart(system: makeLoyalty).verify(replaying: plan)
         XCTAssertEqual(parity.verdict, .diverged, "parity mode gates on any divergence")
 
         // Declared: the same delta under an intent spec is absorbed…
         let declared = Intent(expectedNewEvents: ["LoyaltyPointsEarned"])
-        let extended = cart(system: makeLoyalty).intend(declared).verify(replaying: plan)
+        let extended = await cart(system: makeLoyalty).intend(declared).verify(replaying: plan)
         XCTAssertEqual(extended.verdict, .equivalent, "the declared feature delta doesn't gate")
         XCTAssertGreaterThan(extended.diff.intendedCount, 0, "…but is still reported, labeled intended")
 
         // …while an *undeclared* regression riding along still gates.
-        let riding = cart(system: makeRoundBug).intend(declared).verify(replaying: plan)
+        let riding = await cart(system: makeRoundBug).intend(declared).verify(replaying: plan)
         XCTAssertEqual(riding.verdict, .diverged, "intent never excuses collateral")
     }
 
     // MARK: Soundness across the build boundary
 
-    func testOpDriftAbstainsRatherThanSkipping() {
-        let plan = cart(system: makeGood).record()
+    func testOpDriftAbstainsRatherThanSkipping() async {
+        let plan = await cart(system: makeGood).record()
 
         // The branch renamed an op: its recorded probes are unreplayable input, not skippable noise.
         let drifted = Spec<PromoCart>("promo-cart.plan")
@@ -236,7 +238,7 @@ final class SpecPlanTests: XCTestCase {
             }
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
 
-        let verdict = drifted.verify(replaying: plan)
+        let verdict = await drifted.verify(replaying: plan)
         XCTAssertEqual(
             verdict.verdict,
             .cannotVerify,
@@ -245,12 +247,12 @@ final class SpecPlanTests: XCTestCase {
         XCTAssertTrue(verdict.coverage.gaps.contains { $0.boundary == "op:addCoffee" && $0.reason == .unrecorded })
     }
 
-    func testSeamReachPastTheRecordingAbstains() {
-        let plan = cart(system: makeGood).record()
+    func testSeamReachPastTheRecordingAbstains() async {
+        let plan = await cart(system: makeGood).record()
 
         // Behaviorally identical (the live fallback default changes nothing observable) — the trace
         // alone would pass. Reaching past the recording is what downgrades it.
-        let verdict = cart(system: makeGreedy).verify(replaying: plan)
+        let verdict = await cart(system: makeGreedy).verify(replaying: plan)
         XCTAssertEqual(
             verdict.verdict,
             .cannotVerify,
@@ -261,8 +263,8 @@ final class SpecPlanTests: XCTestCase {
 
     // MARK: Scope selection
 
-    func testCoverageIndexScopesPlansToChangedClasses() {
-        let plan = cart(system: makeGood).record()
+    func testCoverageIndexScopesPlansToChangedClasses() async {
+        let plan = await cart(system: makeGood).record()
 
         XCTAssertTrue(
             plan.coveredClasses.contains("PromoCart"),

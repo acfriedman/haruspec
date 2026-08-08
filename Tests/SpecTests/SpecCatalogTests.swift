@@ -77,10 +77,9 @@ final class SpecCatalogTests: XCTestCase {
         ])
     }
 
-    func testACaseRunsTheCandidateItNames() throws {
-        let verdict = try XCTUnwrap(
-            catalog().verify(migrationCase: "promo-cart/RoundBugCart", reportsIn: scratch())
-        )
+    func testACaseRunsTheCandidateItNames() async throws {
+        let run = await catalog().verify(migrationCase: "promo-cart/RoundBugCart", reportsIn: scratch())
+        let verdict = try XCTUnwrap(run)
 
         XCTAssertEqual(verdict.name, "RoundBugCart")
         XCTAssertEqual(verdict.actual, .diverged)
@@ -88,12 +87,15 @@ final class SpecCatalogTests: XCTestCase {
         XCTAssertTrue(verdict.metExpectation)
     }
 
-    func testARenamedHalfOfACaseFailsTheLookup() {
+    func testARenamedHalfOfACaseFailsTheLookup() async {
         let catalog = catalog()
 
-        XCTAssertNil(catalog.verify(migrationCase: "promo-cart/Renamed"))
-        XCTAssertNil(catalog.verify(migrationCase: "renamed/RefactorCart"))
-        XCTAssertNil(catalog.verify(migrationCase: "no-separator"))
+        let miss0 = await catalog.verify(migrationCase: "promo-cart/Renamed")
+        XCTAssertNil(miss0)
+        let miss1 = await catalog.verify(migrationCase: "renamed/RefactorCart")
+        XCTAssertNil(miss1)
+        let miss2 = await catalog.verify(migrationCase: "no-separator")
+        XCTAssertNil(miss2)
     }
 
     // MARK: Continuous selection
@@ -126,22 +128,24 @@ final class SpecCatalogTests: XCTestCase {
 
     // MARK: Continuous runs
 
-    func testRecordAndReplayRoundTripThroughTheCatalog() throws {
+    func testRecordAndReplayRoundTripThroughTheCatalog() async throws {
         let catalog = catalog()
         let planURL = scratch().appendingPathComponent("plan.json")
         let resultsDir = scratch()
 
-        let recorded = try XCTUnwrap(catalog.runContinuous(spec: "promo-cart", environment: [
+        let recordedRaw = await catalog.runContinuous(spec: "promo-cart", environment: [
             "HARUSPEC_MODE": "record",
             "HARUSPEC_PLAN_PATH": planURL.path
-        ]))
+        ])
+        let recorded = try XCTUnwrap(recordedRaw)
         XCTAssertTrue(recorded.succeeded, recorded.summary)
 
-        let replayed = try XCTUnwrap(catalog.runContinuous(spec: "promo-cart", environment: [
+        let replayedRaw = await catalog.runContinuous(spec: "promo-cart", environment: [
             "HARUSPEC_MODE": "replay",
             "HARUSPEC_PLAN_PATH": planURL.path,
             "HARUSPEC_RESULTS_DIR": resultsDir.path
-        ]))
+        ])
+        let replayed = try XCTUnwrap(replayedRaw)
         XCTAssertTrue(replayed.succeeded, replayed.summary)
     }
 
@@ -163,13 +167,13 @@ final class SpecCatalogTests: XCTestCase {
 
     // MARK: One-call checks
 
-    func testCheckPassesWhenACaseEarnsItsDeclaredVerdict() throws {
+    func testCheckPassesWhenACaseEarnsItsDeclaredVerdict() async throws {
         // The counterexample meets its expectation by diverging, so neither case throws.
-        try catalog().check(migrationCase: "promo-cart/RoundBugCart", reportsIn: scratch())
-        try catalog().check(migrationCase: "promo-cart/RefactorCart", reportsIn: scratch())
+        try await catalog().check(migrationCase: "promo-cart/RoundBugCart", reportsIn: scratch())
+        try await catalog().check(migrationCase: "promo-cart/RefactorCart", reportsIn: scratch())
     }
 
-    func testCheckThrowsTheReportWhenAnExpectationIsUnmet() {
+    func testCheckThrowsTheReportWhenAnExpectationIsUnmet() async {
         // RefactorCart is faithful, but declared here as a counterexample — so it fails by holding.
         let mismatched = SpecCatalog(
             cart("promo-cart")
@@ -177,7 +181,7 @@ final class SpecCatalogTests: XCTestCase {
                 .entry()
         )
 
-        XCTAssertThrowsError(try mismatched.check(migrationCase: "promo-cart/RefactorCart")) { error in
+        await XCTAssertThrowsErrorAsync(try mismatched.check(migrationCase: "promo-cart/RefactorCart")) { error in
             let failure = error as? SpecCatalog.CheckFailure
             XCTAssertTrue(
                 failure?.description.hasPrefix("expected diverged, got equivalent") ?? false,
@@ -186,8 +190,8 @@ final class SpecCatalogTests: XCTestCase {
         }
     }
 
-    func testCheckNamesTheCaseWhenItIsNoLongerDeclared() {
-        XCTAssertThrowsError(try catalog().check(migrationCase: "promo-cart/Renamed")) { error in
+    func testCheckNamesTheCaseWhenItIsNoLongerDeclared() async {
+        await XCTAssertThrowsErrorAsync(try catalog().check(migrationCase: "promo-cart/Renamed")) { error in
             XCTAssertEqual(
                 (error as? SpecCatalog.CheckFailure)?.description,
                 "promo-cart/Renamed is no longer declared"
@@ -195,8 +199,8 @@ final class SpecCatalogTests: XCTestCase {
         }
     }
 
-    func testContinuousCheckThrowsWhenNoModeIsSelected() {
-        XCTAssertThrowsError(
+    func testContinuousCheckThrowsWhenNoModeIsSelected() async {
+        await XCTAssertThrowsErrorAsync(
             try catalog().checkContinuous(spec: "promo-cart", environment: [:])
         ) { error in
             XCTAssertTrue(
@@ -205,7 +209,8 @@ final class SpecCatalogTests: XCTestCase {
         }
     }
 
-    func testAnUndeclaredSpecFailsTheLookup() {
-        XCTAssertNil(catalog().runContinuous(spec: "renamed", environment: ["HARUSPEC_MODE": "record"]))
+    func testAnUndeclaredSpecFailsTheLookup() async {
+        let missing = await catalog().runContinuous(spec: "renamed", environment: ["HARUSPEC_MODE": "record"])
+        XCTAssertNil(missing)
     }
 }

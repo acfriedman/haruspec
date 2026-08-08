@@ -47,13 +47,13 @@ public extension SpecProviding {
     func checkContinuous(
         _ mode: ContinuousMode,
         environment: [String: String] = ProcessInfo.processInfo.environment
-    ) throws {
+    ) async throws {
         let outcome: ContinuousOutcome
         do {
             guard let run = try ContinuousRun.fromEnvironment(environment), mode == run.mode else {
                 throw SpecCatalog.CheckFailure(description: "no \(ContinuousMode.environmentKey) set")
             }
-            outcome = spec.runContinuous(run)
+            outcome = await spec.runContinuous(run)
         } catch let failure as SpecCatalog.CheckFailure {
             throw failure
         } catch {
@@ -74,8 +74,10 @@ public extension SpecProviding {
 public struct SpecEntry {
     public let name: String
     public let candidateNames: [String]
-    let verifyCandidate: (String, URL?) -> CandidateVerdict?
-    let runContinuous: (ContinuousRun) -> ContinuousOutcome
+    // Stored as closures, so the async colour lands in the *type* rather than a signature — the one
+    // spot in this change that is easy to miss.
+    let verifyCandidate: (String, URL?) async -> CandidateVerdict?
+    let runContinuous: (ContinuousRun) async -> ContinuousOutcome
 }
 
 public extension Spec {
@@ -84,8 +86,8 @@ public extension Spec {
         SpecEntry(
             name: name,
             candidateNames: candidateNames,
-            verifyCandidate: { verify(candidateNamed: $0, reportsIn: $1) },
-            runContinuous: { runContinuous($0) }
+            verifyCandidate: { await verify(candidateNamed: $0, reportsIn: $1) },
+            runContinuous: { await runContinuous($0) }
         )
     }
 }
@@ -125,13 +127,14 @@ public struct SpecCatalog {
 
     /// Run one `spec/candidate` case. `nil` when either half is no longer declared — a rename
     /// fails the lookup rather than silently verifying nothing.
-    public func verify(migrationCase: String, reportsIn directory: URL? = nil) -> CandidateVerdict? {
+    public func verify(migrationCase: String, reportsIn directory: URL? = nil) async -> CandidateVerdict? {
         guard let separator = migrationCase.firstIndex(of: "/") else {
             return nil
         }
         let spec = String(migrationCase[..<separator])
         let candidate = String(migrationCase[migrationCase.index(after: separator)...])
-        return entries.first { $0.name == spec }?.verifyCandidate(candidate, directory)
+        guard let entry = entries.first(where: { $0.name == spec }) else { return nil }
+        return await entry.verifyCandidate(candidate, directory)
     }
 
     // MARK: Continuous
@@ -157,11 +160,11 @@ public struct SpecCatalog {
         public let description: String
     }
 
-    /// Run one `scenario/candidate` case, print its report, and throw if it didn't earn the verdict
+    /// Run one `spec/candidate` case, print its report, and throw if it didn't earn the verdict
     /// its candidate declared. The whole body of a migration test case — a test target calls this
     /// and asserts nothing itself, because there is nothing left to decide.
-    public func check(migrationCase: String, reportsIn directory: URL? = nil) throws {
-        guard let verdict = verify(migrationCase: migrationCase, reportsIn: directory) else {
+    public func check(migrationCase: String, reportsIn directory: URL? = nil) async throws {
+        guard let verdict = await verify(migrationCase: migrationCase, reportsIn: directory) else {
             throw CheckFailure(description: "\(migrationCase) is no longer declared")
         }
         // `migrationCase` is already `spec/candidate`, the title every check reports under.
@@ -173,8 +176,8 @@ public struct SpecCatalog {
     public func checkContinuous(
         spec: String,
         environment: [String: String] = ProcessInfo.processInfo.environment
-    ) throws {
-        guard let outcome = runContinuous(spec: spec, environment: environment) else {
+    ) async throws {
+        guard let outcome = await runContinuous(spec: spec, environment: environment) else {
             throw CheckFailure(description: "\(spec) is no longer declared")
         }
         Self.report("\(spec) · continuous", outcome.summary, htmlReportPath: outcome.htmlReportPath)
@@ -201,7 +204,7 @@ public struct SpecCatalog {
     public func runContinuous(
         spec: String,
         environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> ContinuousOutcome? {
+    ) async -> ContinuousOutcome? {
         guard let entry = entries.first(where: { $0.name == spec }) else {
             return nil
         }
@@ -209,7 +212,7 @@ public struct SpecCatalog {
             guard let run = try ContinuousRun.fromEnvironment(environment) else {
                 return .failed("no \(ContinuousMode.environmentKey) set — nothing to run")
             }
-            return entry.runContinuous(run)
+            return await entry.runContinuous(run)
         } catch {
             return .failed("\(error)")
         }

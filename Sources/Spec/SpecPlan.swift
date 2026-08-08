@@ -6,10 +6,10 @@ import HaruspecTrace
 // The Continuous (PR) shape: one class, two *builds*. The Campaign shape (`verify(against:)`) diffs two
 // implementations coexisting as types in one build; a PR has only one — base and branch are separate
 // checkouts. `record()` runs on the base build and pins the whole explored input surface (call
-// orderings × seam cassettes) together with the golden trace each input produced. `verify(replaying:)`
+// orderings × seam cassettes) together with the golden trace each input produced. `await verify(replaying:)`
 // runs on the changed build, replays the *identical* inputs from the plan into the current code, and
 // diffs each run against its stored golden. The plan file is the reproducible PR evidence: a reviewer
-// re-runs `verify(replaying:)` against it and gets the same verdict, bit for bit.
+// re-runs `await verify(replaying:)` against it and gets the same verdict, bit for bit.
 //
 // Soundness across the boundary: inputs the current build can't faithfully reproduce (an op label that
 // no longer exists, a seam read past the recording) surface as `.unrecorded` coverage gaps that
@@ -156,9 +156,9 @@ public extension Spec {
     /// Run this spec's system across the whole explored surface (call orderings × seam cassettes)
     /// and pin every (input, golden trace) pair into a `SpecPlan`. Run on the **base** build; the
     /// first probe is the declared order under the golden cassette — the representative run.
-    func record() -> SpecPlan {
+    func record() async -> SpecPlan {
         let recording = Cassette()
-        _ = capture(make: makeSystem, order: explorationOrder(), cassette: recording)
+        _ = await capture(make: makeSystem, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
 
         // The same resolved surface `verify(against:)` explores — one budget, spent identically on
@@ -166,11 +166,11 @@ public extension Spec {
         let plan = explorationPlan(golden: golden)
 
         let declaredLabels = operations.map(\.label)
-        var probes = [probe(order: operations, cassette: golden)]
+        var probes = await [probe(order: operations, cassette: golden)]
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index)
                 where !(order.map(\.label) == declaredLabels && cassette == golden) {
-                probes.append(probe(order: order, cassette: cassette))
+                await probes.append(probe(order: order, cassette: cassette))
             }
         }
 
@@ -193,8 +193,8 @@ public extension Spec {
 
     /// `record()` and write the plan artifact.
     @discardableResult
-    func record(to url: URL) throws -> SpecPlan {
-        let plan = record()
+    func record(to url: URL) async throws -> SpecPlan {
+        let plan = await record()
         try plan.write(to: url)
         return plan
     }
@@ -205,7 +205,7 @@ public extension Spec {
     /// intent-declared deltas are absorbed and the residual collateral gates. Inputs the current build
     /// can't reproduce (a renamed/removed op, a seam read past the recording) downgrade an otherwise
     /// EQUIVALENT verdict to CANNOT-VERIFY via `.unrecorded` coverage gaps.
-    func verify(replaying plan: SpecPlan) -> SpecVerdict {
+    func verify(replaying plan: SpecPlan) async -> SpecVerdict {
         let opsByLabel = Dictionary(uniqueKeysWithValues: operations.map { ($0.label, $0) })
         let planOps = orderedUnion(plan.probes.map(\.ordering))
         let missingOps = planOps.filter { opsByLabel[$0] == nil }
@@ -219,7 +219,7 @@ public extension Spec {
         var representative: TraceDiff?
         for probe in replayable {
             let replay = Cassette(replaying: probe.cassette)
-            let current = capture(
+            let current = await capture(
                 make: makeSystem,
                 order: probe.ordering.compactMap { opsByLabel[$0] },
                 cassette: replay
@@ -275,8 +275,8 @@ public extension Spec {
     }
 
     /// `verify(replaying:)` against a plan artifact on disk.
-    func verify(replayingContentsOf url: URL) throws -> SpecVerdict {
-        try verify(replaying: SpecPlan(contentsOf: url))
+    func verify(replayingContentsOf url: URL) async throws -> SpecVerdict {
+        try await verify(replaying: SpecPlan(contentsOf: url))
     }
 
     // MARK: - Machinery
@@ -300,8 +300,8 @@ public extension Spec {
     }
 
     /// One golden probe: replay `cassette` into the base system on `order` and pin the trace.
-    private func probe(order: [Op<S>], cassette: CassetteData) -> SpecProbe {
-        let trace = capture(make: makeSystem, order: order, cassette: Cassette(replaying: cassette))
+    private func probe(order: [Op<S>], cassette: CassetteData) async -> SpecProbe {
+        let trace = await capture(make: makeSystem, order: order, cassette: Cassette(replaying: cassette))
         return SpecProbe(ordering: order.map(\.label), cassette: cassette, golden: trace)
     }
 

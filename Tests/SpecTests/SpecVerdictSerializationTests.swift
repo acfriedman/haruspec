@@ -35,9 +35,9 @@ final class SpecVerdictSerializationTests: XCTestCase {
             }
     }
 
-    private func divergedVerdict() -> SpecVerdict {
-        let plan = cart(system: makeGood).record()
-        let verdict = cart(system: makeRoundBug).verify(replaying: plan)
+    private func divergedVerdict() async -> SpecVerdict {
+        let plan = await cart(system: makeGood).record()
+        let verdict = await cart(system: makeRoundBug).verify(replaying: plan)
         XCTAssertEqual(verdict.verdict, .diverged, "the fixture verdict must be a real caught regression")
         return verdict
     }
@@ -46,8 +46,8 @@ final class SpecVerdictSerializationTests: XCTestCase {
         FileManager.default.temporaryDirectory.appendingPathComponent("\(name)-\(UUID().uuidString).json")
     }
 
-    func testResultArtifactRoundTripsThroughFileHelpers() throws {
-        let verdict = divergedVerdict()
+    func testResultArtifactRoundTripsThroughFileHelpers() async throws {
+        let verdict = await divergedVerdict()
         let url = artifactURL("result")
         defer { try? FileManager.default.removeItem(at: url) }
 
@@ -63,8 +63,8 @@ final class SpecVerdictSerializationTests: XCTestCase {
         XCTAssertEqual(reloaded.coverage, verdict.coverage)
     }
 
-    func testCanonicalEncodingIsDeterministic() throws {
-        let verdict = divergedVerdict()
+    func testCanonicalEncodingIsDeterministic() async throws {
+        let verdict = await divergedVerdict()
         XCTAssertEqual(
             try verdict.jsonData(),
             try verdict.jsonData(),
@@ -72,10 +72,10 @@ final class SpecVerdictSerializationTests: XCTestCase {
         )
     }
 
-    func testHandRolledEncoderArtifactStillDecodes() throws {
+    func testHandRolledEncoderArtifactStillDecodes() async throws {
         // Before the helpers existed, callers wrote result.json with a bare JSONEncoder. Those
         // artifacts must stay readable — same fields, different formatting.
-        let verdict = divergedVerdict()
+        let verdict = await divergedVerdict()
         let legacy = try JSONEncoder().encode(verdict)
         let reloaded = try SpecVerdict(jsonData: legacy)
         XCTAssertEqual(reloaded.verdict, verdict.verdict)
@@ -101,7 +101,7 @@ final class SpecVerdictSerializationTests: XCTestCase {
         XCTAssertNotNil(verdict.counterexample)
     }
 
-    func testRegenerateCommittedFixture() throws {
+    func testRegenerateCommittedFixture() async throws {
         // Snapshot refresh, not a test: HARUSPEC_REGENERATE_FIXTURES=1 rewrites the committed
         // artifact after an intentional schema change. Skipped on normal runs.
         try XCTSkipUnless(
@@ -112,6 +112,6 @@ final class SpecVerdictSerializationTests: XCTestCase {
             at: fixtureURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
-        try divergedVerdict().write(to: fixtureURL)
+        try await divergedVerdict().write(to: fixtureURL)
     }
 }

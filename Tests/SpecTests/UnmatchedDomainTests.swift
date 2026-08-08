@@ -27,8 +27,8 @@ final class UnmatchedDomainTests: XCTestCase {
         RefactorCart(center: context.notifications)
     }
 
-    func testADomainNothingReadsCannotBeVerifiedOver() {
-        let verdict = spec("unmatched.typo", varying: "qtyy").verify(against: makeRefactor)
+    func testADomainNothingReadsCannotBeVerifiedOver() async {
+        let verdict = await spec("unmatched.typo", varying: "qtyy").verify(against: makeRefactor)
 
         XCTAssertEqual(
             verdict.verdict,
@@ -38,47 +38,47 @@ final class UnmatchedDomainTests: XCTestCase {
         XCTAssertEqual(verdict.coverage.unmatchedDomains.map(\.boundary), ["qtyy"])
     }
 
-    func testTheMatchingKeyStillVerifiesCleanly() {
-        let verdict = spec("unmatched.correct", varying: "qty").verify(against: makeRefactor)
+    func testTheMatchingKeyStillVerifiesCleanly() async {
+        let verdict = await spec("unmatched.correct", varying: "qty").verify(against: makeRefactor)
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
         XCTAssertTrue(verdict.coverage.unmatchedDomains.isEmpty)
         XCTAssertEqual(verdict.coverage.domainExercised, ["qty"])
     }
 
-    func testTheGapIsNamedInTheReport() {
-        let report = spec("unmatched.report", varying: "qtyy").verify(against: makeRefactor).report()
+    func testTheGapIsNamedInTheReport() async {
+        let report = await spec("unmatched.report", varying: "qtyy").verify(against: makeRefactor).report()
 
         XCTAssertTrue(report.contains("declared domain matched nothing: qtyy"), report)
     }
 
-    func testASweepOfNothingIsNotReportedAsSixtyFourVariants() {
+    func testASweepOfNothingIsNotReportedAsSixtyFourVariants() async {
         // The variant count came from "did the spec declare any domain", which a typo satisfies. The
         // budget then bought 64 generations of the same cassette and the verdict called them variants.
-        let explored = spec("unmatched.variants", varying: "qtyy")
+        let explored = await spec("unmatched.variants", varying: "qtyy")
             .verify(against: makeRefactor).exploration
 
         XCTAssertEqual(explored?.variantsPerOrdering, 1, "nothing can vary, so there is one input")
         XCTAssertFalse(explored?.summary.contains("seam variants") ?? true, explored?.summary ?? "")
     }
 
-    func testADomainSweptOverNothingReportsZeroRatherThanStayingSilent() {
+    func testADomainSweptOverNothingReportsZeroRatherThanStayingSilent() async {
         // The report only appended the domain clause above 0%, which hid exactly the damning case.
-        let report = spec("unmatched.zero", varying: "qtyy").verify(against: makeRefactor).report()
+        let report = await spec("unmatched.zero", varying: "qtyy").verify(against: makeRefactor).report()
 
         XCTAssertTrue(report.contains("domain-swept 0%"), report)
     }
 
-    func testTheUnmatchedKeyCountsAgainstTheDeclaredSurface() {
+    func testTheUnmatchedKeyCountsAgainstTheDeclaredSurface() async {
         // Leaving it out would report a fraction of a surface quietly smaller than the spec describes.
-        let verdict = spec("unmatched.fraction", varying: "qtyy").verify(against: makeRefactor)
+        let verdict = await spec("unmatched.fraction", varying: "qtyy").verify(against: makeRefactor)
 
         XCTAssertTrue(verdict.coverage.declared.contains("qtyy"))
         XCTAssertFalse(verdict.coverage.exercised.contains("qtyy"))
         XCTAssertLessThan(verdict.coverage.fraction ?? 1, 1)
     }
 
-    func testATypedArgumentCannotProduceThisGapAtAll() {
+    func testATypedArgumentCannotProduceThisGapAtAll() async {
         // There is no key to mistype: `.operations` harvests the domain against the key the read uses.
         let typed = Spec<PromoCart>("unmatched.typed")
             .system { GoodCart(center: $0.notifications) }
@@ -90,7 +90,7 @@ final class UnmatchedDomainTests: XCTestCase {
             }
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
 
-        let verdict = typed.verify(against: makeRefactor)
+        let verdict = await typed.verify(against: makeRefactor)
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
         XCTAssertTrue(verdict.coverage.unmatchedDomains.isEmpty)

@@ -110,9 +110,9 @@ final class SpecMarkdownReportTests: XCTestCase {
             }
     }
 
-    func testDivergedMarkdownRendersTablesAndCounterexample() {
-        let plan = cart(system: makeGood).record()
-        let verdict = cart(system: makeRoundBug).verify(replaying: plan)
+    func testDivergedMarkdownRendersTablesAndCounterexample() async {
+        let plan = await cart(system: makeGood).record()
+        let verdict = await cart(system: makeRoundBug).verify(replaying: plan)
         XCTAssertEqual(verdict.verdict, .diverged)
 
         let markdown = verdict.markdownReport()
@@ -134,9 +134,9 @@ final class SpecMarkdownReportTests: XCTestCase {
         XCTAssertTrue(markdown.contains("orderings explored: \(verdict.orderingsExplored)"))
     }
 
-    func testEquivalentMarkdownCarriesCoverageAndDomainCredit() {
-        let plan = cart(system: makeGood).record()
-        let verdict = cart(system: makeRefactor).verify(replaying: plan)
+    func testEquivalentMarkdownCarriesCoverageAndDomainCredit() async {
+        let plan = await cart(system: makeGood).record()
+        let verdict = await cart(system: makeRefactor).verify(replaying: plan)
         XCTAssertEqual(verdict.verdict, .equivalent)
 
         let markdown = verdict.markdownReport()
@@ -146,10 +146,10 @@ final class SpecMarkdownReportTests: XCTestCase {
         XCTAssertTrue(markdown.contains("domain-swept"), "a held replay earns the domain-sweep credit")
     }
 
-    func testIntentSplitRendersIntendedAndCollateralSeparately() {
-        let plan = cart(system: makeGood).record()
+    func testIntentSplitRendersIntendedAndCollateralSeparately() async {
+        let plan = await cart(system: makeGood).record()
         let declared = Intent(expectedNewEvents: ["LoyaltyPointsEarned"])
-        let verdict = cart(system: makeLoyaltyRoundBug).intend(declared).verify(replaying: plan)
+        let verdict = await cart(system: makeLoyaltyRoundBug).intend(declared).verify(replaying: plan)
         XCTAssertEqual(verdict.verdict, .diverged, "the riding regression still gates")
         XCTAssertGreaterThan(verdict.diff.intendedCount, 0)
         XCTAssertGreaterThan(verdict.diff.collateralCount, 0)
@@ -159,8 +159,8 @@ final class SpecMarkdownReportTests: XCTestCase {
         XCTAssertTrue(markdown.contains("**Intended — declared in the intent spec"))
     }
 
-    func testOpDriftAbstentionNamesTheDrift() {
-        let plan = cart(system: makeGood).record()
+    func testOpDriftAbstentionNamesTheDrift() async {
+        let plan = await cart(system: makeGood).record()
         let drifted = Spec<PromoCart>("promo-cart.markdown")
             .system(makeRefactor)
             .operations {
@@ -172,7 +172,7 @@ final class SpecMarkdownReportTests: XCTestCase {
             }
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
 
-        let verdict = drifted.verify(replaying: plan)
+        let verdict = await drifted.verify(replaying: plan)
         XCTAssertEqual(verdict.verdict, .cannotVerify)
 
         let markdown = verdict.markdownReport()
@@ -183,9 +183,9 @@ final class SpecMarkdownReportTests: XCTestCase {
         XCTAssertTrue(markdown.contains("**this check does not pass.**"))
     }
 
-    func testSeamReachAbstentionIsDistinct() {
-        let plan = cart(system: makeGood).record()
-        let verdict = cart(system: makeGreedy).verify(replaying: plan)
+    func testSeamReachAbstentionIsDistinct() async {
+        let plan = await cart(system: makeGood).record()
+        let verdict = await cart(system: makeGreedy).verify(replaying: plan)
         XCTAssertEqual(verdict.verdict, .cannotVerify)
 
         let markdown = verdict.markdownReport()

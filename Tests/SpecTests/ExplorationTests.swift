@@ -74,16 +74,18 @@ final class ExplorationTests: XCTestCase {
 
     // MARK: - Budget
 
-    func testABudgetBoundsTheRunsSpentAcrossBothAxes() throws {
-        let exploration = try XCTUnwrap(wideSpec(budget: 40).verify(against: makeRefactor).exploration)
+    func testABudgetBoundsTheRunsSpentAcrossBothAxes() async throws {
+        let verdict = await wideSpec(budget: 40).verify(against: makeRefactor)
+        let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertLessThanOrEqual(exploration.runs, 40)
         XCTAssertGreaterThan(exploration.orderingsExplored, 1, "the budget must still buy ordering breadth")
         XCTAssertGreaterThan(exploration.variantsPerOrdering, 1, "and still buy seam breadth")
     }
 
-    func testAnUndeclaredBudgetKeepsTheDefaultSurface() throws {
-        let exploration = try XCTUnwrap(wideSpec(orderingMax: 8).verify(against: makeRefactor).exploration)
+    func testAnUndeclaredBudgetKeepsTheDefaultSurface() async throws {
+        let verdict = await wideSpec(orderingMax: 8).verify(against: makeRefactor)
+        let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertEqual(exploration.orderingsExplored, 8)
         XCTAssertEqual(exploration.variantsPerOrdering, 64, "the historical default, now merely the default")
@@ -114,7 +116,7 @@ final class ExplorationTests: XCTestCase {
         XCTAssertEqual(split.variants, 1)
     }
 
-    func testABudgetIsSpentAgainstTheOrderingsThatExistNotTheDeclaredCap() throws {
+    func testABudgetIsSpentAgainstTheOrderingsThatExistNotTheDeclaredCap() async throws {
         // Two free ops and a pinned `checkout` → exactly 2 orderings. Resolving the budget against
         // `Ordering(max: 100)` instead would spend a 200-run budget on 22 runs.
         let spec = Spec<PromoCart>("promo-cart.narrow")
@@ -133,7 +135,8 @@ final class ExplorationTests: XCTestCase {
                 Budget(runs: 200)
             }
 
-        let exploration = try XCTUnwrap(spec.verify(against: makeRefactor).exploration)
+        let verdict = await spec.verify(against: makeRefactor)
+        let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertEqual(exploration.orderingsExplored, 2)
         XCTAssertEqual(exploration.runs, 200)
@@ -141,7 +144,7 @@ final class ExplorationTests: XCTestCase {
 
     // MARK: - Boundary-first generation, end to end
 
-    func testATinyBudgetStillCatchesABugThatOnlyBitesAtTheEdgeOfADomain() {
+    func testATinyBudgetStillCatchesABugThatOnlyBitesAtTheEdgeOfADomain() async {
         // Four runs over `.int(1 ... 20)`. Uniform sampling would hit 20 about a fifth of the time;
         // boundary-first reaches it on the second variant, by construction.
         let spec = Spec<PromoCart>("promo-cart.edge")
@@ -158,7 +161,7 @@ final class ExplorationTests: XCTestCase {
                 Budget(runs: 4)
             }
 
-        let verdict = spec.verify(against: { context in TopOfRangeBugCart(center: context.notifications) })
+        let verdict = await spec.verify(against: { context in TopOfRangeBugCart(center: context.notifications) })
 
         XCTAssertEqual(verdict.verdict, .diverged)
         XCTAssertEqual(
@@ -170,12 +173,12 @@ final class ExplorationTests: XCTestCase {
 
     // MARK: - Independent samples
 
-    func testEachOrderingGetsItsOwnSeamSample() {
+    func testEachOrderingGetsItsOwnSeamSample() async {
         // The defect this pins: one fixed seed per *run* meant every ordering replayed an identical
         // cassette list, so O × V runs explored V distinct inputs.
         let spec = wideSpec(orderingMax: 4)
         let recording = Cassette()
-        _ = spec.capture(make: makeGood, order: spec.explorationOrder(), cassette: recording)
+        _ = await spec.capture(make: makeGood, order: spec.explorationOrder(), cassette: recording)
         let plan = spec.explorationPlan(golden: recording.snapshot())
 
         XCTAssertGreaterThan(plan.orderings.count, 1)
@@ -186,10 +189,10 @@ final class ExplorationTests: XCTestCase {
         )
     }
 
-    func testTheSameOrderingIndexIsReproducible() {
+    func testTheSameOrderingIndexIsReproducible() async {
         let spec = wideSpec(orderingMax: 4)
         let recording = Cassette()
-        _ = spec.capture(make: makeGood, order: spec.explorationOrder(), cassette: recording)
+        _ = await spec.capture(make: makeGood, order: spec.explorationOrder(), cassette: recording)
         let plan = spec.explorationPlan(golden: recording.snapshot())
 
         XCTAssertEqual(plan.cassettes(forOrdering: 2), plan.cassettes(forOrdering: 2))
@@ -305,8 +308,8 @@ final class ExplorationTests: XCTestCase {
 
     // MARK: - Reporting
 
-    func testTheVerdictSaysWhatFractionItSwept() throws {
-        let verdict = wideSpec(orderingMax: 6).verify(against: makeRefactor)
+    func testTheVerdictSaysWhatFractionItSwept() async throws {
+        let verdict = await wideSpec(orderingMax: 6).verify(against: makeRefactor)
         let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertFalse(exploration.isExhaustive)
@@ -318,7 +321,7 @@ final class ExplorationTests: XCTestCase {
         )
     }
 
-    func testAnExhaustiveRunSaysAllRatherThanAFraction() throws {
+    func testAnExhaustiveRunSaysAllRatherThanAFraction() async throws {
         let spec = Spec<PromoCart>("promo-cart.exhaustive")
             .system(makeGood)
             .operations {
@@ -329,16 +332,16 @@ final class ExplorationTests: XCTestCase {
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary { Ordering(max: 100, repeating: 1) }
 
-        let verdict = spec.verify(against: makeRefactor)
+        let verdict = await spec.verify(against: makeRefactor)
         let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertTrue(exploration.isExhaustive)
         XCTAssertTrue(verdict.report().contains("all 2 orderings"), verdict.report())
     }
 
-    func testAVerdictArtifactWithoutAnExplorationStillDecodes() throws {
+    func testAVerdictArtifactWithoutAnExplorationStillDecodes() async throws {
         // Artifacts written before the budget existed carry no such field.
-        let verdict = wideSpec(orderingMax: 2).verify(against: makeRefactor)
+        let verdict = await wideSpec(orderingMax: 2).verify(against: makeRefactor)
         var json = try JSONSerialization.jsonObject(with: verdict.jsonData()) as? [String: Any] ?? [:]
         json.removeValue(forKey: "exploration")
 

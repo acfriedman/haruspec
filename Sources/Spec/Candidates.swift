@@ -60,18 +60,23 @@ public extension Spec {
 
     /// Verify every declared candidate against the baseline, in declaration order. Each candidate's
     /// HTML report is written to `reportsIn`, defaulting to Haruspec's temp `HaruspecReports` folder.
-    func verifyAll(reportsIn directory: URL? = nil) -> [CandidateVerdict] {
-        candidates.map { run($0, reportsIn: directory) }
+    func verifyAll(reportsIn directory: URL? = nil) async -> [CandidateVerdict] {
+        var verdicts: [CandidateVerdict] = []
+        for candidate in candidates {
+            await verdicts.append(run(candidate, reportsIn: directory))
+        }
+        return verdicts
     }
 
     /// Verify a single declared candidate by name. `nil` when no candidate was declared under that
     /// name — a renamed candidate fails the lookup rather than silently verifying nothing.
-    func verify(candidateNamed name: String, reportsIn directory: URL? = nil) -> CandidateVerdict? {
-        candidates.first { $0.name == name }.map { run($0, reportsIn: directory) }
+    func verify(candidateNamed name: String, reportsIn directory: URL? = nil) async -> CandidateVerdict? {
+        guard let candidate = candidates.first(where: { $0.name == name }) else { return nil }
+        return await run(candidate, reportsIn: directory)
     }
 
-    private func run(_ candidate: Candidate<S>, reportsIn directory: URL?) -> CandidateVerdict {
-        verify(candidate.name, expecting: candidate.expected, reportsIn: directory, candidate.make)
+    private func run(_ candidate: Candidate<S>, reportsIn directory: URL?) async -> CandidateVerdict {
+        await verify(candidate.name, expecting: candidate.expected, reportsIn: directory, candidate.make)
     }
 }
 
@@ -83,8 +88,8 @@ public extension SpecProviding {
 
     /// Run one declared port, print its report, and throw unless it earned the verdict its
     /// `Candidate` declared. The declared-list twin of `check(_:expecting:_:)`.
-    func check(candidate: String, reportsIn directory: URL? = nil) throws {
-        guard let verdict = spec.verify(candidateNamed: candidate, reportsIn: directory) else {
+    func check(candidate: String, reportsIn directory: URL? = nil) async throws {
+        guard let verdict = await spec.verify(candidateNamed: candidate, reportsIn: directory) else {
             throw SpecCatalog.CheckFailure(description: "\(candidate) is no longer a declared candidate")
         }
         try verdict.check(in: spec.name)

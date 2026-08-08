@@ -164,19 +164,19 @@ public extension Spec {
     /// Differentially verify a candidate implementation against this spec's baseline: run both
     /// against the *same* generated inputs (call orderings × seam values) and diff. The baseline branch
     /// is the oracle, so no expected output is needed. Stops at (and shrinks) the first divergence.
-    func verify(against candidate: @escaping (SeamContext) -> S) -> SpecVerdict {
+    func verify(against candidate: @escaping (SeamContext) -> S) async -> SpecVerdict {
         // Golden: the declared order under live seams — the template every variation is derived from.
         let recording = Cassette()
-        _ = capture(make: makeSystem, order: explorationOrder(), cassette: recording)
+        _ = await capture(make: makeSystem, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
 
         let plan = explorationPlan(golden: golden)
 
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index) {
-                let run = compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette)
+                let run = await compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette)
                 guard run.diff.isEquivalent else {
-                    let shrunk = shrink(candidate: candidate, failing: order, cassette: cassette)
+                    let shrunk = await shrink(candidate: candidate, failing: order, cassette: cassette)
                     let coverage = coverage(replays: [run.candidateReplay], domainHeld: false)
                     let failing = exploreOrdering ? shrunk.map(\.label) : nil
                     return SpecVerdict(
@@ -191,7 +191,7 @@ public extension Spec {
             }
         }
         // Held across the whole explored surface: the swept seams earn domain-coverage credit.
-        let representative = compare(make: makeSystem, candidate: candidate, order: operations, cassette: golden)
+        let representative = await compare(make: makeSystem, candidate: candidate, order: operations, cassette: golden)
         let coverage = coverage(replays: [representative.candidateReplay], domainHeld: true)
         return SpecVerdict(
             result: VerificationResult(diff: representative.diff, coverage: coverage),
@@ -222,7 +222,7 @@ public extension Spec {
     /// Drive one (system, ordering, cassette) and return its behavior trace — the recorder, interceptor,
     /// and ambient context the developer never touches. (Internal: `record`/`verify(replaying:)` drive
     /// the same primitive across a build boundary.)
-    func capture(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) -> Trace {
+    func capture(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) async -> Trace {
         let recorder = TraceRecorder(name: name, clock: ManualClock())
         let center = observationCenter ?? NotificationCenter()
         let interceptor = NotificationInterceptor(recorder: recorder, center: center, names: notificationNames)
@@ -233,6 +233,12 @@ public extension Spec {
             for operation in order {
                 operation.action(system, context)
             }
+        }
+        // Drain *after* the window, not inside it. Work the ops dispatched carries the recorder the
+        // seam captured at enqueue, so it records whether or not the window is still open — but it has
+        // to have finished, or the snapshot is a race rather than a reading.
+        if await DispatchSeam.quiesce() == false {
+            recorder.marker("⟨haruspec: work still outstanding at snapshot⟩")
         }
         return recorder.trace()
     }
@@ -245,17 +251,17 @@ public extension Spec {
         candidate: (SeamContext) -> S,
         order: [Op<S>],
         cassette: CassetteData
-    ) -> (diff: TraceDiff, candidateReplay: Cassette) {
-        let baseline = capture(make: make, order: order, cassette: Cassette(replaying: cassette))
+    ) async -> (diff: TraceDiff, candidateReplay: Cassette) {
+        let baseline = await capture(make: make, order: order, cassette: Cassette(replaying: cassette))
         let replay = Cassette(replaying: cassette)
-        let candidateTrace = capture(make: candidate, order: order, cassette: replay)
+        let candidateTrace = await capture(make: candidate, order: order, cassette: replay)
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidateTrace, tolerances: tolerances)
             .classified(against: intent)
         return (diff, replay)
     }
 
-    private func diverges(candidate: (SeamContext) -> S, order: [Op<S>], cassette: CassetteData) -> TraceDiff? {
-        let diff = compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette).diff
+    private func diverges(candidate: (SeamContext) -> S, order: [Op<S>], cassette: CassetteData) async -> TraceDiff? {
+        let diff = await compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette).diff
         return diff.isEquivalent ? nil : diff
     }
 
@@ -316,13 +322,17 @@ public extension Spec {
 
     /// Delta-debug the failing call sequence: drop ops that aren't needed to reproduce → the minimal
     /// order that still diverges (the "localize" the north star asks for, applied to sequencing).
-    private func shrink(candidate: @escaping (SeamContext) -> S, failing: [Op<S>], cassette: CassetteData) -> [Op<S>] {
+    private func shrink(
+        candidate: @escaping (SeamContext) -> S,
+        failing: [Op<S>],
+        cassette: CassetteData
+    ) async -> [Op<S>] {
         var minimal = failing
         var index = 0
         while index < minimal.count {
             var trial = minimal
             trial.remove(at: index)
-            if !trial.isEmpty, diverges(candidate: candidate, order: trial, cassette: cassette) != nil {
+            if !trial.isEmpty, await diverges(candidate: candidate, order: trial, cassette: cassette) != nil {
                 minimal = trial // op wasn't needed to reproduce
             } else {
                 index += 1

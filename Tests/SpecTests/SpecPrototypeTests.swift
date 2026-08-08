@@ -221,24 +221,24 @@ final class SpecPrototypeTests: XCTestCase {
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
     }
 
-    func testSpecPrototype() {
+    func testSpecPrototype() async {
         let base = cart() // declared order only
         let explored = base.vary { Ordering(max: 50) } // + call-ordering variation
 
         print("=== SCENARIO PROTOTYPE ===")
 
         print("\n── 1. Good vs Refactor · orderings explored → EQUIVALENT ──")
-        let refactor = explored.verify(against: makeRefactor)
+        let refactor = await explored.verify(against: makeRefactor)
         print(refactor.report())
         XCTAssertEqual(refactor.verdict, .equivalent)
 
         print("\n── 2. Good vs OrderBug · declared order only → EQUIVALENT (bug hidden) ──")
-        let single = base.verify(against: makeOrderBug)
+        let single = await base.verify(against: makeOrderBug)
         print(single.report())
         XCTAssertEqual(single.verdict, .equivalent, "the usual order never triggers the order bug")
 
         print("\n── 3. Good vs OrderBug · orderings explored → DIVERGED (caught) ──")
-        let caught = explored.verify(against: makeOrderBug)
+        let caught = await explored.verify(against: makeOrderBug)
         print(caught.report())
         XCTAssertEqual(caught.verdict, .diverged, "exploring orderings finds the order-dependent regression")
         XCTAssertNotNil(caught.failingOrder)
@@ -248,7 +248,7 @@ final class SpecPrototypeTests: XCTestCase {
 
     /// `.observing(on: .default)` lets a faithful port post to `NotificationCenter.default` exactly
     /// where legacy code does — no injected center. The interceptor must still capture that post.
-    func testObservingOnDefaultCapturesUninjectedPost() {
+    func testObservingOnDefaultCapturesUninjectedPost() async {
         let spec = Spec<DefaultPinger>("default-ping")
             .system { _ in DefaultPinger(posts: true) }
             .operations { Op("ping") { $0.ping() } }
@@ -257,7 +257,7 @@ final class SpecPrototypeTests: XCTestCase {
 
         // Baseline posts to `.default`; a silent candidate omits it. The divergence can only appear
         // if the baseline's post to `.default` — reached via no injected center — was observed.
-        let verdict = spec.verify(against: { _ in DefaultPinger(posts: false) })
+        let verdict = await spec.verify(against: { _ in DefaultPinger(posts: false) })
         XCTAssertEqual(
             verdict.verdict,
             .diverged,
@@ -269,19 +269,19 @@ final class SpecPrototypeTests: XCTestCase {
         )
     }
 
-    func testArgParameterizationCatchesValueBug() {
+    func testArgParameterizationCatchesValueBug() async {
         let base = cart() // golden coffeeQty = 10 → subtotal 9990 (benign)
         let swept = base.vary { Seam("coffeeQty", .int(1 ... 20)) }
 
         print("=== ARG PARAMETERIZATION ===")
 
         print("\n── Good vs RoundBug · fixed qty (10) → EQUIVALENT (bug hidden) ──")
-        let fixed = base.verify(against: makeRoundBug)
+        let fixed = await base.verify(against: makeRoundBug)
         print(fixed.report())
         XCTAssertEqual(fixed.verdict, .equivalent, "9990 is a multiple of 10 — truncation == rounding here")
 
         print("\n── Good vs RoundBug · coffeeQty swept over 1...20 → DIVERGED (caught) ──")
-        let caught = swept.verify(against: makeRoundBug)
+        let caught = await swept.verify(against: makeRoundBug)
         print(caught.report())
         XCTAssertEqual(caught.verdict, .diverged, "some quantity makes truncation ≠ rounding")
 
@@ -297,8 +297,8 @@ final class SpecPrototypeTests: XCTestCase {
 
     /// Capture-all default: a channel the spec never listed (`AnalyticsDidTrack`) is still watched,
     /// so a candidate that drops it diverges as a `missingEvent` — no `.observe` call, no blind spot.
-    func testCaptureAllDefaultSurfacesUnlistedDroppedNotification() {
-        let verdict = analyticsCart().verify(against: makeSilent)
+    func testCaptureAllDefaultSurfacesUnlistedDroppedNotification() async {
+        let verdict = await analyticsCart().verify(against: makeSilent)
         XCTAssertEqual(
             verdict.verdict,
             .diverged,
@@ -312,9 +312,9 @@ final class SpecPrototypeTests: XCTestCase {
 
     /// The opt-out denylist removes a named channel from *both* sides at diff time, so once
     /// `AnalyticsDidTrack` is ignored the two carts match again on the remaining behavior.
-    func testIgnoredNotificationNamesDropsChannelBackOut() {
+    func testIgnoredNotificationNamesDropsChannelBackOut() async {
         // Via the `.ignore(notifications:)` convenience …
-        let viaConvenience = analyticsCart()
+        let viaConvenience = await analyticsCart()
             .ignore(notifications: ["AnalyticsDidTrack"])
             .verify(against: makeSilent)
         XCTAssertEqual(
@@ -324,7 +324,7 @@ final class SpecPrototypeTests: XCTestCase {
         )
 
         // … and equivalently via the raw tolerance field.
-        let viaTolerance = analyticsCart()
+        let viaTolerance = await analyticsCart()
             .tolerate(Tolerance(ignoredNotificationNames: ["AnalyticsDidTrack"]))
             .verify(against: makeSilent)
         XCTAssertEqual(

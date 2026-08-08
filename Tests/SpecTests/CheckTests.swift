@@ -44,12 +44,12 @@ final class CheckTests: XCTestCase {
             .appendingPathComponent("check-\(UUID().uuidString)", isDirectory: true)
     }
 
-    func testASpecThatDeclaresNoCandidatesStillChecksAPort() throws {
-        try PromoCartSpec().check("RefactorCart", reportsIn: scratch(), port(RefactorCart.init))
+    func testASpecThatDeclaresNoCandidatesStillChecksAPort() async throws {
+        try await PromoCartSpec().check("RefactorCart", reportsIn: scratch(), port(RefactorCart.init))
     }
 
-    func testACounterexamplePassesByDivergingExactlyAsTheTestDeclares() throws {
-        try PromoCartSpec().check(
+    func testACounterexamplePassesByDivergingExactlyAsTheTestDeclares() async throws {
+        try await PromoCartSpec().check(
             "RoundBugCart",
             expecting: .diverged,
             reportsIn: scratch(),
@@ -57,8 +57,8 @@ final class CheckTests: XCTestCase {
         )
     }
 
-    func testAnUnmetExpectationThrowsSayingWhichWayItWasSupposedToGo() {
-        XCTAssertThrowsError(
+    func testAnUnmetExpectationThrowsSayingWhichWayItWasSupposedToGo() async {
+        await XCTAssertThrowsErrorAsync(
             // Declared as a counterexample, but it is in fact a faithful port.
             try PromoCartSpec().check(
                 "RefactorCart",
@@ -75,8 +75,8 @@ final class CheckTests: XCTestCase {
         }
     }
 
-    func testAFaithfulPortThatRegressesFailsTheCheck() {
-        XCTAssertThrowsError(
+    func testAFaithfulPortThatRegressesFailsTheCheck() async {
+        await XCTAssertThrowsErrorAsync(
             try PromoCartSpec().check("RoundBugCart", reportsIn: scratch(), port(RoundBugCart.init))
         ) { error in
             XCTAssertTrue(
@@ -87,9 +87,9 @@ final class CheckTests: XCTestCase {
         }
     }
 
-    func testTheReportIsWrittenUnderTheNameTheCheckGaveIt() {
+    func testTheReportIsWrittenUnderTheNameTheCheckGaveIt() async {
         let directory = scratch()
-        let verdict = PromoCartSpec().spec
+        let verdict = await PromoCartSpec().spec
             .verify("RefactorCart", reportsIn: directory, port(RefactorCart.init))
 
         XCTAssertEqual(verdict.actual, .equivalent)

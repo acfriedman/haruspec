@@ -22,8 +22,8 @@ public extension Spec {
         expecting expected: TraceDiff.Verdict = .equivalent,
         reportsIn directory: URL? = nil,
         _ make: @escaping (SeamContext) -> S
-    ) -> CandidateVerdict {
-        let verdict = verify(against: make)
+    ) async -> CandidateVerdict {
+        let verdict = await verify(against: make)
         return CandidateVerdict(
             name: name,
             expected: expected,
@@ -39,8 +39,8 @@ public extension Spec {
         expecting expected: TraceDiff.Verdict = .equivalent,
         reportsIn directory: URL? = nil,
         _ make: @escaping (SeamContext) -> S
-    ) throws {
-        try verify(name, expecting: expected, reportsIn: directory, make).check(in: self.name)
+    ) async throws {
+        try await verify(name, expecting: expected, reportsIn: directory, make).check(in: self.name)
     }
 }
 
@@ -52,8 +52,8 @@ public extension SpecProviding {
         expecting expected: TraceDiff.Verdict = .equivalent,
         reportsIn directory: URL? = nil,
         _ make: @escaping (SeamContext) -> System
-    ) throws {
-        try spec.check(name, expecting: expected, reportsIn: directory, make)
+    ) async throws {
+        try await spec.check(name, expecting: expected, reportsIn: directory, make)
     }
 }
 
