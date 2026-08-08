@@ -21,10 +21,11 @@ import HaruspecCore
 /// Anything that names neither is `.pool`: interchangeable workers whose identity is a scheduling
 /// accident rather than a fact about the behavior.
 enum DomainResolver {
-    /// The cooperative pool's queue label. Reaching this means Swift concurrency scheduled the work
-    /// and no actor isolated it, so there is nothing nominal left to key on.
-    private static let cooperativePoolPrefix = "com.apple.root."
     private static let mainQueueLabel = "com.apple.main-thread"
+    /// Queues Apple owns: the cooperative pool, the main queue, and the rest of the `com.apple.*`
+    /// namespace. A subject never *declares* one of these as its own domain — landing on one says
+    /// where the caller was, not what the code is.
+    private static let systemQueuePrefix = "com.apple."
 
     /// Resolve the current domain. `instanceID` assigns the symbolic id for an actor instance, and is
     /// the recorder's existing subject numbering — so an actor that is also a traced subject keeps one
@@ -37,13 +38,26 @@ enum DomainResolver {
             return .actor(String(describing: type(of: isolation)), instance: instanceID(isolation))
         }
         let label = currentQueueLabel()
-        if label == mainQueueLabel || (label.isEmpty && Thread.isMainThread) {
-            return .main
+
+        // A queue the subject was genuinely handed work on. The seam marks that entry, because
+        // *being* on a queue and *having been dispatched to* one are different facts — the harness is
+        // always on some queue, and reading the label unconditionally is how its context leaked in.
+        if DispatchSeam.isInsideEnteredQueue {
+            if label == mainQueueLabel {
+                return .main
+            }
+            if !label.isEmpty {
+                return .queue(label)
+            }
         }
-        if label.isEmpty || label.hasPrefix(cooperativePoolPrefix) {
-            return .pool
+
+        // An app-owned queue names itself, so being on one is evidence enough without a marker —
+        // this is the `dispatch_sync` path, which the seam deliberately does not wrap.
+        if !label.isEmpty, !label.hasPrefix(systemQueuePrefix) {
+            return .queue(label)
         }
-        return .queue(label)
+
+        return .ambient
     }
 
     /// The label of the queue currently executing, or empty when there is none.

@@ -6,10 +6,10 @@ import HaruspecTrace
 // The Continuous (PR) shape: one class, two *builds*. The Campaign shape (`verify(against:)`) diffs two
 // implementations coexisting as types in one build; a PR has only one — base and branch are separate
 // checkouts. `record()` runs on the base build and pins the whole explored input surface (call
-// orderings × seam cassettes) together with the golden trace each input produced. `await verify(replaying:)`
+// orderings × seam cassettes) together with the golden trace each input produced. `verify(replaying:)`
 // runs on the changed build, replays the *identical* inputs from the plan into the current code, and
 // diffs each run against its stored golden. The plan file is the reproducible PR evidence: a reviewer
-// re-runs `await verify(replaying:)` against it and gets the same verdict, bit for bit.
+// re-runs `verify(replaying:)` against it and gets the same verdict, bit for bit.
 //
 // Soundness across the boundary: inputs the current build can't faithfully reproduce (an op label that
 // no longer exists, a seam read past the recording) surface as `.unrecorded` coverage gaps that
@@ -42,8 +42,11 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// Bumped to 2 when `Scenario` became `Spec`: the plan's `scenarioName` key is now `specName`,
     /// so a version-1 artifact must be re-recorded rather than coerced. Bumped to 3 when a trace
     /// event's `thread` (a first-seen `worker-N`) became a nominal `domain` — a version-2 artifact
-    /// names threads that no longer exist as a concept.
-    public static let supportedSchemaVersion = 3
+    /// names threads that no longer exist as a concept. Bumped to 4 when `pool` became `ambient`: a
+    /// version-3 artifact records where unisolated work *landed*, which the resolver no longer treats
+    /// as a fact about the subject. Without the bump those plans fail on an unrecognized spelling
+    /// rather than on the one message that helps — re-record.
+    public static let supportedSchemaVersion = 4
 
     public var schemaVersion: Int
     public var specName: String

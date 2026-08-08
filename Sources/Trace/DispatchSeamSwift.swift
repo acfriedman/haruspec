@@ -96,7 +96,7 @@ public extension DispatchSeam {
     static func seamWrap(_ work: @escaping @Sendable () -> Void) -> @Sendable () -> Void {
         guard let recorder = acquireForSwift() else { return work }
         return {
-            TraceContext.withThreadRecorder(recorder) { work() }
+            markingQueueEntry { TraceContext.withThreadRecorder(recorder) { work() } }
             finishForSwift()
         }
     }

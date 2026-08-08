@@ -51,7 +51,9 @@ final class AsyncCaptureGapTests: XCTestCase {
         )
         let byLabel = Dictionary(uniqueKeysWithValues: recorder.trace().events.map { ($0.label, $0.domain) })
         XCTAssertEqual(byLabel["on-background-queue"], .queue("com.emporium.catalog"))
-        XCTAssertEqual(byLabel["before-fetch"], .main)
+        // The test body declares no isolation, so the caller-side marker is ambient — where the
+        // harness runs is not a fact about the subject.
+        XCTAssertEqual(byLabel["before-fetch"], .ambient)
     }
 
     /// A traced call and a notification posted from the *same* block now agree. Before the seam the

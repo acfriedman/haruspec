@@ -67,6 +67,25 @@ public enum DispatchSeam {
         return inFlight
     }
 
+    private static let enteredKey = "com.haruspec.trace.enteredQueue"
+
+    /// Whether the current thread is running a block the seam *handed to* a queue, as opposed to
+    /// merely executing on whatever queue the caller occupied. Only the first is a fact about the
+    /// subject; the second is a fact about the harness.
+    public static var isInsideEnteredQueue: Bool {
+        (Thread.current.threadDictionary[enteredKey] as? Int ?? 0) > 0
+    }
+
+    /// Mark the thread as executing dispatched work for the duration of `body`. Nested, because a
+    /// dispatched block may dispatch again before the outer one returns.
+    static func markingQueueEntry<T>(_ body: () -> T) -> T {
+        let dictionary = Thread.current.threadDictionary
+        let depth = dictionary[enteredKey] as? Int ?? 0
+        dictionary[enteredKey] = depth + 1
+        defer { dictionary[enteredKey] = depth }
+        return body()
+    }
+
     /// Internal accessors the Swift-side overloads reach; the C entry points use `acquire`/`finish`.
     static func acquireForSwift() -> TraceRecorder? {
         acquire()
@@ -113,7 +132,7 @@ public func haruspecContextRun(
     _ block: @convention(block) () -> Void
 ) {
     let recorder = Unmanaged<TraceRecorder>.fromOpaque(context).takeUnretainedValue()
-    TraceContext.withThreadRecorder(recorder) { block() }
+    DispatchSeam.markingQueueEntry { TraceContext.withThreadRecorder(recorder) { block() } }
 }
 
 /// Balances `acquire`: releases the handle and marks the work no longer outstanding.

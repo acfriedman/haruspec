@@ -41,7 +41,7 @@ final class ConcurrencyDomainTests: XCTestCase {
         let byLabel = domains(of: recorder)
         XCTAssertEqual(byLabel["onMain"], .main)
         // Nominal type, not a scheduling artifact — the actor runs on the cooperative pool, which the
-        // label rung would have reported as `pool`.
+        // label rung would have reported as `ambient`.
         XCTAssertEqual(byLabel["Ledger.post"], .actor("Ledger", instance: 1))
     }
 
@@ -73,14 +73,14 @@ final class ConcurrencyDomainTests: XCTestCase {
         XCTAssertEqual(byLabel["analytics-work"], .queue("com.emporium.analytics"))
     }
 
-    /// Work the runtime scheduled with nothing nominal to key on is `.pool` — explicitly unordered,
+    /// Work the runtime scheduled with nothing nominal to key on is `.ambient` — explicitly unordered,
     /// rather than a worker number that would differ between runs.
-    func testUnattributedConcurrentWorkIsPool() async {
+    func testUnattributedConcurrentWorkIsAmbient() async {
         let recorder = TraceRecorder(name: "domains")
         await Task.detached { recorder.marker("nonisolated") }.value
 
-        XCTAssertEqual(recorder.trace().events.first?.domain, .pool)
-        XCTAssertFalse(ConcurrencyDomain.pool.isOrdered)
+        XCTAssertEqual(recorder.trace().events.first?.domain, .ambient)
+        XCTAssertFalse(ConcurrencyDomain.ambient.isOrdered)
         XCTAssertTrue(ConcurrencyDomain.queue("q").isOrdered)
     }
 
@@ -108,7 +108,7 @@ final class ConcurrencyDomainCodingTests: XCTestCase {
     func testRoundTripsEveryCase() throws {
         let cases: [ConcurrencyDomain] = [
             .main,
-            .pool,
+            .ambient,
             .queue("com.emporium.checkout"),
             .actor("Ledger", instance: 7)
         ]
@@ -125,7 +125,7 @@ final class ConcurrencyDomainCodingTests: XCTestCase {
             try XCTUnwrap(String(bytes: JSONEncoder().encode(domain), encoding: .utf8))
         }
         XCTAssertEqual(try encoded(.main), "\"main\"")
-        XCTAssertEqual(try encoded(.pool), "\"pool\"")
+        XCTAssertEqual(try encoded(.ambient), "\"ambient\"")
         XCTAssertEqual(try encoded(.queue("com.emporium.checkout")), "\"queue:com.emporium.checkout\"")
         XCTAssertEqual(try encoded(.actor("Ledger", instance: 2)), "\"actor:Ledger#2\"")
     }

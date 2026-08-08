@@ -43,7 +43,7 @@ final class DomainMigrationTests: XCTestCase {
     /// migration it exists to serve.
     func testAMoveAloneDoesNotFailTheVerdict() {
         let baseline = trace("b", [note(0, "CartDidChange", on: .queue("com.emporium.cart"))])
-        let candidate = trace("c", [note(0, "CartDidChange", on: .pool)])
+        let candidate = trace("c", [note(0, "CartDidChange", on: .ambient)])
 
         XCTAssertEqual(BehavioralDiff.compare(baseline: baseline, candidate: candidate).verdict, .equivalent)
     }
@@ -52,7 +52,7 @@ final class DomainMigrationTests: XCTestCase {
     /// distinction the old pairs destroyed.
     func testValuesStillGateAcrossAMove() {
         let baseline = trace("b", [note(0, "CheckoutDidComplete", on: .main, ["totalCents": 1169])])
-        let candidate = trace("c", [note(0, "CheckoutDidComplete", on: .pool, ["totalCents": 1170])])
+        let candidate = trace("c", [note(0, "CheckoutDidComplete", on: .ambient, ["totalCents": 1170])])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
 
@@ -77,7 +77,7 @@ final class DomainMigrationTests: XCTestCase {
     /// test documents what it cost: two divergences saying less than one did.
     func testIgnoredPolicyRestoresTheMissingUnexpectedPair() {
         let baseline = trace("b", [note(0, "CartDidChange", on: .main)])
-        let candidate = trace("c", [note(0, "CartDidChange", on: .pool)])
+        let candidate = trace("c", [note(0, "CartDidChange", on: .ambient)])
         let spec = Tolerance(domainMigration: .ignored)
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec)
@@ -92,7 +92,7 @@ final class DomainMigrationTests: XCTestCase {
             note(0, "CartDidChange", on: .main),
             note(1, "Inventory.reserve", on: .main)
         ])
-        let candidate = trace("c", [note(0, "CartDidChange", on: .pool)])
+        let candidate = trace("c", [note(0, "CartDidChange", on: .ambient)])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
         let byKind = Dictionary(grouping: diff.divergences, by: \.kind)

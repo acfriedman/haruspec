@@ -38,7 +38,8 @@ public enum EventTier: String, Codable, Sendable {
 /// canonicalization exists to remove.
 ///
 /// So identity is taken **nominally**, from what the code declares rather than from where it landed:
-/// the isolating actor when there is one, otherwise the dispatch queue's own label.
+/// the isolating actor when there is one, the dispatch queue the work was genuinely handed to
+/// otherwise, and `ambient` when the code declares nothing at all.
 public enum ConcurrencyDomain: Sendable, Equatable, Hashable, CustomStringConvertible {
     /// The main actor / main thread.
     case main
@@ -47,23 +48,31 @@ public enum ConcurrencyDomain: Sendable, Equatable, Hashable, CustomStringConver
     case actor(String, instance: Int)
     /// A named dispatch queue, keyed by its label — nominal and stable by construction.
     case queue(String)
-    /// The cooperative thread pool, or any context that named neither an actor nor a queue.
-    /// Interchangeable workers: **unattributable**, so the diff treats this domain as unordered.
-    case pool
+    /// The code declares **no isolation of its own** — a plain type, a nonisolated function, an
+    /// unstructured task. It ran wherever its caller happened to be.
+    ///
+    /// This is deliberately *not* "the cooperative pool" or "the main thread". Answering with where the
+    /// work landed would make the harness part of the measurement: the same plain class reads `main`
+    /// when a synchronous test calls it and `pool` when an async one does, having changed in no way.
+    /// That is the `worker-N` failure one level up. Ambient says the only true thing available — the
+    /// code names no domain — and says it identically from every caller.
+    ///
+    /// Unordered, for the same reason `pool` was: there is no single serial context to order within.
+    case ambient
 
     public var description: String {
         switch self {
         case .main: "main"
         case let .actor(type, instance): "actor:\(type)#\(instance)"
         case let .queue(label): "queue:\(label)"
-        case .pool: "pool"
+        case .ambient: "ambient"
         }
     }
 
-    /// Whether events in this domain have a meaningful relative order. Serial contexts do; the
-    /// pool does not, because which worker ran what is not a property of the behavior.
+    /// Whether events in this domain have a meaningful relative order. A serial context does;
+    /// `ambient` does not, because there is no single context to be ordered within.
     public var isOrdered: Bool {
-        self != .pool
+        self != .ambient
     }
 }
 
@@ -73,7 +82,7 @@ extension ConcurrencyDomain: Codable {
         let raw = try container.decode(String.self)
         switch raw {
         case "main": self = .main
-        case "pool": self = .pool
+        case "ambient": self = .ambient
         default:
             if raw.hasPrefix("queue:") {
                 self = .queue(String(raw.dropFirst("queue:".count)))
