@@ -1,5 +1,7 @@
 # SwiftPM / Xcode build artifacts
 .build/
+# Xcode writes here when the package is built through xcodebuild.
+build/
 .swiftpm/
 *.xcodeproj
 DerivedData/

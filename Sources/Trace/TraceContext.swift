@@ -8,10 +8,39 @@ import HaruspecCore
 /// method inside that dynamic scope records to it. Outside a capture window `current` is nil and the
 /// generated code is a cheap nil-check, so instrumentation can ship in production.
 ///
-/// Caveat (v0): a task-local does not automatically cross a manual thread hop (e.g. `DispatchQueue`);
-/// capturing across such hops needs explicit propagation, a later refinement.
+/// A task-local does not cross a manual thread hop on its own. Swift concurrency inherits it — `Task { }`,
+/// `async let`, task groups, and `DispatchQueue.sync`, which never leaves the thread — but a
+/// `dispatch_async` block runs with no task at all. The GCD preprocessing seam
+/// (`Sources/DispatchSeam/haruspec_dispatch.h`) closes that, and `active` is where the two bindings meet.
 public enum TraceContext {
     @TaskLocal public static var current: TraceRecorder?
+
+    private static let threadKey = "com.haruspec.trace.recorder"
+
+    /// The recorder actually in effect, and what every capture site reads.
+    ///
+    /// Two bindings, because two mechanisms are needed. The task-local carries the capture window
+    /// through Swift concurrency, which inherits it across `Task { }`, `async let` and task groups. The
+    /// per-thread binding carries it into a block the GCD seam handed to a thread with no task at all —
+    /// the case a task-local structurally cannot reach.
+    ///
+    /// The seam does not rebind the *task*-local: pushing one from inside a run-loop callback that is
+    /// itself nested in an actor-isolated binding violates the task-local stack discipline and traps.
+    /// A thread-local has no such ordering contract, which is the right shape for work that arrives on
+    /// a borrowed thread.
+    public static var active: TraceRecorder? {
+        current ?? Thread.current.threadDictionary[threadKey] as? TraceRecorder
+    }
+
+    /// Bind `recorder` for the duration of `body` on *this thread only*, restoring whatever was there.
+    /// Used by the GCD seam around each wrapped block.
+    static func withThreadRecorder<T>(_ recorder: TraceRecorder, _ body: () -> T) -> T {
+        let dictionary = Thread.current.threadDictionary
+        let previous = dictionary[threadKey]
+        dictionary[threadKey] = recorder
+        defer { dictionary[threadKey] = previous }
+        return body()
+    }
 }
 
 /// Explicit, ambient-aware hooks for the few things a body macro can't infer from a signature:
@@ -27,7 +56,7 @@ public enum Haruspec {
         isolation: (any Actor)? = #isolation,
         _ body: () throws -> T
     ) rethrows -> T {
-        if let recorder = TraceContext.current {
+        if let recorder = TraceContext.active {
             return try recorder.interval(label, subject: subject, isolation: isolation, body)
         }
         return try body()
@@ -36,7 +65,7 @@ public enum Haruspec {
     /// Advance the capture's deterministic clock to model representative work cost (no-op under a
     /// wall clock or with no active capture). Used to make interval durations reproducible in tests.
     public static func simulateCost(_ ticks: Int64) {
-        TraceContext.current?.advanceClock(ticks)
+        TraceContext.active?.advanceClock(ticks)
     }
 
     /// Record a payload-free **temporal marker** (the semantic tier) against the ambient recorder — a
@@ -46,6 +75,6 @@ public enum Haruspec {
     /// (notification userInfo, return values, KVO), not through instrumentation you authored — so the
     /// oracle checks real behavior, not itself.
     public static func marker(_ label: String, subject: AnyObject? = nil, isolation: (any Actor)? = #isolation) {
-        TraceContext.current?.marker(label, subject: subject, isolation: isolation)
+        TraceContext.active?.marker(label, subject: subject, isolation: isolation)
     }
 }
