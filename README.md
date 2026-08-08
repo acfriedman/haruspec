@@ -26,7 +26,7 @@ The oracle engine is the core capability; migrations and refactors are applicati
 Everything is a caller of one reusable capability:
 
 1. **Capture** — instrumented code records a structured trace of observable behavior.
-2. **Canonicalize** — remove nondeterminism (pointers → symbolic ids, OS threads → logical threads,
+2. **Canonicalize** — remove nondeterminism (pointers → symbolic ids, OS threads → nominal concurrency domains,
    wall time → a logical clock, volatile values → redacted) so two runs are comparable.
 3. **Transform** — an agent (or a human) changes the code.
 4. **Replay + Diff** — re-run the same spec, capture the new trace, and diff within declared
@@ -37,7 +37,7 @@ Everything is a caller of one reusable capability:
 | Module        | Role |
 |---------------|------|
 | `HaruspecCore`  | The evergreen primitive: trace model, canonicalization, tolerance spec, and the LCS-based behavioral diff. Pure, dependency-free, fully unit-tested. |
-| `HaruspecTrace` | The runtime capture library: the `TraceRecorder` (call/ret/stateChange/signpost, thread-safe, injectable clock), the ambient `TraceContext`, zero-code backends — `NotificationInterceptor` records `NotificationCenter` posts, `KVOInterceptor` records observed property changes — and a `Codable → CanonicalValue` bridge for automatic value capture. |
+| `HaruspecTrace` | The runtime capture library: the `TraceRecorder` (call/ret/stateChange/signpost, thread-safe, injectable clock), the ambient `TraceContext`, the injected `RecordingNotificationCenter`, the GCD/`Task` seam that carries capture across a dispatch hop, and a `Codable → CanonicalValue` bridge for automatic value capture. |
 | `HaruspecMacros` | The opt-in `@Traced` / `@TracedMethod` macros for zero-code method capture. Backed by `HaruspecMacroPlugin` (the only SwiftSyntax user); kept out of the engine core. |
 | `HaruspecSeams` | The record/replay **seam** library: the `Cassette` primitive (record once, replay into both branches, misses surfaced not fabricated) plus injected seams — clock, RNG, `UserDefaults`, `URLSession` (via `URLProtocol`, no swizzle), locale/timezone, keychain, file I/O — and `HaruspecSeam`, the ambient provider the `@Seamed` macro rewrites bare `Date()`/`UUID()` into (DEBUG-only) to reach un-injected legacy code. Depends only on `HaruspecCore`. See [`SEAMS.md`](docs/SEAMS.md). |
 | `HaruspecDemo`  | A sample application: a checkout module in four variants — baseline, a behavior-preserving refactor, a subtly-buggy version, and a *feature* change (loyalty points) that also carries a collateral regression — that exercises the engine end-to-end. |
@@ -58,9 +58,15 @@ The goal is that a team turns the oracle on rather than hand-instrumenting for i
   macro records the method's duration as a signpost interval — no hand-written timing region. For a
   *sub-region* of a method (finer than a whole method, which a macro can't express) use
   `Haruspec.interval`.
-- **Runtime interception (live, zero-code).** `NotificationInterceptor` observes a `NotificationCenter`
-  and records every product notification during a capture window — the demo services post ordinary
-  notifications with no oracle awareness. `KVOInterceptor` does the same for observed properties.
+- **Notification capture by injection.** `RecordingNotificationCenter` substitutes for a `NotificationCenter`
+  wherever one is handed in, and records every product notification during a capture window — the demo
+  services post ordinary notifications with no oracle awareness. A center is a collaborator, so it is
+  injected like any other; nothing observes from outside.
+- **Capture across a dispatch hop.** A `dispatch_async` block or an unawaited `Task` runs where a
+  task-local recorder cannot be found, so a seam wraps the *enqueue*: capture reaches the work, the
+  work is counted so a trace is read only after it finishes, and each event is stamped with the
+  isolation domain that caused it — an actor, a named queue, or `ambient` when the code declares none.
+  A seam rather than injection because nobody hands in a dispatch queue.
 - **Automatic value capture (live).** Arguments and return values ride the `Codable → CanonicalValue`
   bridge, so most payloads need no hand-written conversion.
 - **Temporal markers + two tiers (live).** The **structural** tier is internal call mechanics

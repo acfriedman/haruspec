@@ -15,7 +15,7 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
 
 ## Engine — the behavioral-diff primitive
 
-- ✅ **Trace model + canonicalization** — logical clock, symbolic object identity, logical threads,
+- ✅ **Trace model + canonicalization** — logical clock, symbolic object identity, nominal concurrency domains,
   volatile-field redaction. (`HaruspecCore`)
 - ✅ **Behavioral diff v0** — LCS alignment; missing/unexpected/reordered/value/timing divergences;
   declared tolerances (volatile fields, numeric epsilon, timing budgets, unordered groups, ignored
@@ -125,8 +125,10 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   application.
 - ⏳ **Characterization-test generation** — from captured traces, emit runnable XCTest cases pinning
   current behavior (Feathers-style) for legacy code that has no tests.
-- 📋 **Async / actor capture end-to-end** — body macro emits `await`, but async ordering across
-  suspension points / thread hops needs the canonicalization work below.
+- ✅ **Async / actor capture end-to-end** — a spec drives an `actor` (`Op` actions are async), capture
+  crosses a `dispatch_async` / `Task` hop through the GCD seam, and a trace is read only after the work
+  it describes has drained. Events carry the isolation domain that caused them, and a port that moves
+  work between domains reports that move rather than a pile of missing and unexpected events.
 - 📋 **`mutating` / struct-method capture**, selective opt-out (`@Untraced`).
 - 📋 **Deeper capture backends** — Combine publishers, `os_signpost`/`OSLogStore` ingestion,
   lldb Python scripting for un-annotatable (system/third-party) code, and **harvesting the app's existing
@@ -206,6 +208,8 @@ the golden branch, replay the *same* transcript into both branches, and diff. Se
 - ⏳ **Swift 6 strict-concurrency migration ratchet** — one application among several: flip a module,
   triage diagnostics, propose Sendable/actor changes, verify with TSan-under-load + behavioral-diff, lock
   the ratchet, next module. Implement as a plugin/config over the engine — no Swift-6 logic in the core.
+  The engine half is now in place: the dogfood's queue-to-actor port verifies EQUIVALENT against its
+  Obj-C baseline with the domain moves disclosed.
 - 📋 **General parity-preserving refactors** — "refactor freely; the trace is the contract."
 - 📋 **Perf-budget refactoring** — signpost + MetricKit before/after gates (launch, hang, memory).
 - 📋 **Crash / hang reproduction** — ingest `xcresult` / MetricKit → symbolicate → restore sim state →
@@ -215,8 +219,11 @@ the golden branch, replay the *same* transcript into both branches, and diff. Se
 
 ## Open research (the hard core; budget for it)
 
-- 🔬 **Trace canonicalization at scale** — clock jitter, address nondeterminism, dispatch ordering,
-  concurrent partial-order traces. v0 handles the deterministic single-thread case.
+- 🔬 **Concurrent partial-order traces** — a trace is still a total order. Serial queues and actors
+  keep that honest (mutual exclusion gives one sequence), so the open case is genuinely parallel work,
+  where the interleaving is the scheduler's and not the behavior's. Happens-before edges are reachable
+  at the seam's enqueue site but are not yet recorded.
+- 🔬 **Trace canonicalization at scale** — clock jitter, address nondeterminism, dispatch ordering.
 - 🔬 **Replay determinism** — input seeding, sim-state restore, network stubbing so replays compare.
 - 🔬 **Tolerance model depth** — richer declared deltas beyond exact/volatile/timing/unordered.
 - 🔬 **Legacy reach** — ObjC dynamism (KVO/notifications/runtime) capture fidelity vs. pure Swift, and
