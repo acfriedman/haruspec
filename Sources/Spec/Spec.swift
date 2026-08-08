@@ -191,7 +191,6 @@ public struct Spec<S> {
     /// oracle watches all behavior by default. A non-nil set is an explicit allowlist override set via
     /// `.observe(notifications:)`, for callers who want to narrow to a few product channels.
     var notificationNames: Set<String>?
-    var observationCenter: NotificationCenter?
     var tolerances: Tolerance = .strict
     var intent: Intent = .none
     var seamDomains: [String: SeamDomain] = [:]
@@ -260,18 +259,12 @@ public struct Spec<S> {
         return copy
     }
 
-    /// Observe an explicit NotificationCenter (e.g. `.default`) instead of the default isolated one — so
-    /// a SUT that posts to a center you don't control can still be watched with no code change. Notifications
-    /// are an already-decoupled broadcast, so this needs no seam. **Isolation is the caller's job:** the
-    /// default (a fresh per-window `NotificationCenter()` handed through `SeamContext.notifications`) is
-    /// inherently isolated; pointing this at a process-wide center under a *parallel* test runner can let a
-    /// sibling capture's posts leak in (prefer injecting the context center, or serialize the suite).
-    /// Point the capture window at a center the spec does not own — the un-injected holdout, for a
-    /// subject that posts to a process-wide center it was never handed. Everything else is captured by
-    /// injecting a recording center, which is the same path every other event takes.
-    public func observing(on center: NotificationCenter) -> Spec<S> {
-        var copy = self; copy.observationCenter = center; return copy
-    }
+    // Observe an explicit NotificationCenter (e.g. `.default`) instead of the default isolated one — so
+    // a SUT that posts to a center you don't control can still be watched with no code change. Notifications
+    // are an already-decoupled broadcast, so this needs no seam. **Isolation is the caller's job:** the
+    // default (a fresh per-window `NotificationCenter()` handed through `SeamContext.notifications`) is
+    // inherently isolated; pointing this at a process-wide center under a *parallel* test runner can let a
+    // sibling capture's posts leak in (prefer injecting the context center, or serialize the suite).
 
     /// Declared acceptable deltas.
     public func tolerate(_ spec: Tolerance) -> Spec<S> {

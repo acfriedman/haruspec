@@ -57,13 +57,11 @@ final class AsyncCaptureGapTests: XCTestCase {
     }
 
     /// A traced call and a notification posted from the *same* block now agree. Before the seam the
-    /// notification landed and the traced call did not — the interceptor holds the recorder directly
-    /// while `@Traced` looks it up — so a trace could show an effect with none of the work behind it.
+    /// notification landed and the traced call did not, because they were captured by two different
+    /// mechanisms — so a trace could show an effect with none of the work behind it.
     func testTracedCallAndNotificationFromOneBlockAgree() {
         let recorder = TraceRecorder(name: "agree")
-        let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center)
-        interceptor.start(); defer { interceptor.stop() }
+        let center = RecordingNotificationCenter()
 
         let client = LegacyCatalogClient()
         let delivered = expectation(description: "completion")

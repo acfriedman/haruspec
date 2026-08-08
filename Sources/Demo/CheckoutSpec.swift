@@ -9,7 +9,7 @@ public enum CheckoutSpec {
     /// Run the canonical spec, capturing a trace under a deterministic clock.
     ///
     /// Capture is fully ambient and zero-code on the service side: `@Traced` records call/args/return
-    /// against `TraceContext.current` (bound here), and a `NotificationInterceptor` observes a
+    /// against `TraceContext.current` (bound here), and an injected `RecordingNotificationCenter` records a
     /// dedicated `NotificationCenter` (isolated, so parallel runs and system noise can't leak in). The
     /// service is a plain business object with no knowledge of the oracle.
     public static func capture(
@@ -18,14 +18,7 @@ public enum CheckoutSpec {
     ) -> Trace {
         let clock = ManualClock()
         let recorder = TraceRecorder(name: name, clock: clock)
-        let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(
-            recorder: recorder,
-            center: center,
-            names: checkoutNotificationNames
-        )
-        interceptor.start()
-        defer { interceptor.stop() }
+        let center = RecordingNotificationCenter(names: checkoutNotificationNames)
 
         let service = makeService(center)
 

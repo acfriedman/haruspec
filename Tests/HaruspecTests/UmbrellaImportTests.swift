@@ -8,7 +8,7 @@ import XCTest
 // would not compile — which is the test. It deliberately touches one symbol from each module:
 //
 //   HaruspecMacros   — @Traced, @Timed, @Seamed
-//   HaruspecTrace    — Haruspec.marker / Haruspec.interval, TraceRecorder, NotificationInterceptor, ManualClock
+//   HaruspecTrace    — Haruspec.marker / Haruspec.interval, TraceRecorder, RecordingNotificationCenter, ManualClock
 //   HaruspecCore     — Tolerance, TraceDiff.Verdict
 //   HaruspecSeams    — Cassette, Seam, SeamClock, SeamDomain
 //   HaruspecSpec — Spec / Op / Seam / Ordering / .verify(against:)
@@ -140,13 +140,7 @@ final class UmbrellaImportTests: XCTestCase {
     /// `Haruspec.interval` / `Haruspec.marker`, all named through the umbrella.
     func testCaptureSurfaceIsReExported() {
         let recorder = TraceRecorder(name: "umbrella", clock: ManualClock()) // ← TraceRecorder + ManualClock
-        let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(
-            recorder: recorder,
-            center: center, // ← NotificationInterceptor
-            names: ["CartChanged", "CheckoutCompleted"]
-        )
-        interceptor.start(); defer { interceptor.stop() }
+        let center = RecordingNotificationCenter(names: ["CartChanged", "CheckoutCompleted"])
 
         let cart = GoodCart(center: center)
         TraceContext.$current.withValue(recorder) { // ← TraceContext (HaruspecTrace)

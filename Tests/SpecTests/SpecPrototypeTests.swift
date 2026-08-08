@@ -246,29 +246,6 @@ final class SpecPrototypeTests: XCTestCase {
         print("=== SCENARIO PROTOTYPE END ===")
     }
 
-    /// `.observing(on: .default)` lets a faithful port post to `NotificationCenter.default` exactly
-    /// where legacy code does — no injected center. The interceptor must still capture that post.
-    func testObservingOnDefaultCapturesUninjectedPost() async {
-        let spec = Spec<DefaultPinger>("default-ping")
-            .system { _ in DefaultPinger(posts: true) }
-            .operations { Op("ping") { $0.ping() } }
-            .observe(notifications: ["Pinged"])
-            .observing(on: .default)
-
-        // Baseline posts to `.default`; a silent candidate omits it. The divergence can only appear
-        // if the baseline's post to `.default` — reached via no injected center — was observed.
-        let verdict = await spec.verify(against: { _ in DefaultPinger(posts: false) })
-        XCTAssertEqual(
-            verdict.verdict,
-            .diverged,
-            "a post to NotificationCenter.default is observed under .observing(on:)"
-        )
-        XCTAssertTrue(
-            verdict.diff.divergences.contains { $0.kind == .missingEvent && $0.label == "Pinged" },
-            "the captured baseline post shows up as missing in the silent candidate"
-        )
-    }
-
     func testArgParameterizationCatchesValueBug() async {
         let base = cart() // golden coffeeQty = 10 → subtotal 9990 (benign)
         let swept = base.vary { Seam("coffeeQty", .int(1 ... 20)) }

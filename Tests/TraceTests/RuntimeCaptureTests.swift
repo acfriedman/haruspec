@@ -61,15 +61,15 @@ private final class Receipt: NSObject {
     @objc var total: Int = 0
 }
 
-final class NotificationInterceptorTests: XCTestCase {
+final class RecordingNotificationCenterTests: XCTestCase {
     func testCapturesAllowlistedPostsAndFiltersOthers() {
         let recorder = TraceRecorder(name: "t")
-        let center = NotificationCenter()
-        let sut = NotificationInterceptor(recorder: recorder, center: center, names: ["Ping"])
-        sut.start()
-        center.post(name: Notification.Name("Ping"), object: nil, userInfo: ["n": 1])
-        center.post(name: Notification.Name("Unlisted"), object: nil) // filtered
-        sut.stop()
+        let center = RecordingNotificationCenter(names: ["Ping"])
+
+        TraceContext.$current.withValue(recorder) {
+            center.post(name: Notification.Name("Ping"), object: nil, userInfo: ["n": 1])
+            center.post(name: Notification.Name("Unlisted"), object: nil) // filtered
+        }
 
         let events = recorder.trace().events
         XCTAssertEqual(events.count, 1)
@@ -78,55 +78,65 @@ final class NotificationInterceptorTests: XCTestCase {
         XCTAssertEqual(events[0].payload, ["n": 1])
     }
 
-    func testStopEndsCapture() {
+    /// The capture window *is* the lifetime — there is no `start()`/`stop()` to get wrong, because the
+    /// center records only while a recorder is bound.
+    func testPostsOutsideACaptureWindowAreNotRecorded() {
         let recorder = TraceRecorder(name: "t")
-        let center = NotificationCenter()
-        let sut = NotificationInterceptor(recorder: recorder, center: center, names: ["Ping"])
-        sut.start()
-        sut.stop()
+        let center = RecordingNotificationCenter(names: ["Ping"])
+
         center.post(name: Notification.Name("Ping"), object: nil)
+
         XCTAssertTrue(recorder.trace().events.isEmpty)
     }
 
     func testPostsAreCapturedInOrderSynchronously() {
         let recorder = TraceRecorder(name: "t")
-        let center = NotificationCenter()
-        let sut = NotificationInterceptor(recorder: recorder, center: center, names: ["A", "B"])
-        sut.start()
-        center.post(name: Notification.Name("A"), object: nil)
-        center.post(name: Notification.Name("B"), object: nil)
-        sut.stop()
+        let center = RecordingNotificationCenter(names: ["A", "B"])
+
+        TraceContext.$current.withValue(recorder) {
+            center.post(name: Notification.Name("A"), object: nil)
+            center.post(name: Notification.Name("B"), object: nil)
+        }
+
         XCTAssertEqual(recorder.trace().events.map(\.label), ["A", "B"])
     }
 
-    /// Isolation is structural, not filtered: each capture window observes its *own* `NotificationCenter`,
-    /// so a concurrent window's posts never reach it — even across threads. This is how the spec runner
-    /// keeps parallel windows disjoint (a fresh center per window, surfaced as `SeamContext.notifications`),
-    /// replacing the old same-thread guard that papered over a *shared* `.default` center.
+    /// Observers still receive what is posted: recording decorates the center, it does not replace it.
+    func testPostingStillDeliversToObservers() {
+        let center = RecordingNotificationCenter()
+        var received = 0
+        let token = center.addObserver(forName: Notification.Name("Ping"), object: nil, queue: nil) { _ in
+            received += 1
+        }
+        defer { center.removeObserver(token) }
+
+        center.post(name: Notification.Name("Ping"), object: nil)
+
+        XCTAssertEqual(received, 1)
+    }
+
+    /// Isolation is structural: a window records what is posted through *its* center, so a concurrent
+    /// window's posts never reach it — even across threads, and with no filtering to get wrong.
     func testSeparateCentersDoNotCrossPollinate() {
         let recorderA = TraceRecorder(name: "a")
         let recorderB = TraceRecorder(name: "b")
-        let centerA = NotificationCenter()
-        let centerB = NotificationCenter()
-        let interceptorA = NotificationInterceptor(recorder: recorderA, center: centerA, names: ["Ping"])
-        let interceptorB = NotificationInterceptor(recorder: recorderB, center: centerB, names: ["Ping"])
-        interceptorA.start(); interceptorB.start()
+        let centerA = RecordingNotificationCenter(names: ["Ping"])
+        let centerB = RecordingNotificationCenter(names: ["Ping"])
 
-        centerA.post(name: Notification.Name("Ping"), object: nil, userInfo: ["src": 1]) // only A observes centerA
-
+        TraceContext.$current.withValue(recorderA) {
+            centerA.post(name: Notification.Name("Ping"), object: nil, userInfo: ["src": 1])
+        }
         let done = DispatchSemaphore(value: 0)
         Thread.detachNewThread {
-            centerB.post(name: Notification.Name("Ping"), object: nil, userInfo: ["src": 2]) // only B observes centerB
+            TraceContext.$current.withValue(recorderB) {
+                centerB.post(name: Notification.Name("Ping"), object: nil, userInfo: ["src": 2])
+            }
             done.signal()
         }
         done.wait()
 
-        interceptorA.stop(); interceptorB.stop()
-
-        XCTAssertEqual(recorderA.trace().events.map(\.label), ["Ping"], "A's window sees only its own center")
-        XCTAssertEqual(recorderA.trace().events.first?.payload, ["src": 1])
-        XCTAssertEqual(recorderB.trace().events.map(\.label), ["Ping"], "B's window sees only its own center")
-        XCTAssertEqual(recorderB.trace().events.first?.payload, ["src": 2])
+        XCTAssertEqual(recorderA.trace().events.map(\.payload), [["src": 1]])
+        XCTAssertEqual(recorderB.trace().events.map(\.payload), [["src": 2]])
     }
 }
 
