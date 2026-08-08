@@ -99,11 +99,16 @@ public extension DispatchSeam {
         }
     }
 
-    static func seamWrap(_ work: @escaping @Sendable () -> Void) -> @Sendable () -> Void {
+    static func seamWrap(
+        _ work: @escaping @Sendable () -> Void,
+        named: String? = nil
+    ) -> @Sendable () -> Void {
         guard let recorder = acquireForSwift() else { return work }
         let cause = recorder.enclosingCallSeq()
         return {
-            markingQueueEntry { TraceContext.withThreadRecorder(recorder, spawnedBy: cause) { work() } }
+            markingQueueEntry(named: named) {
+                TraceContext.withThreadRecorder(recorder, spawnedBy: cause) { work() }
+            }
             finishForSwift()
         }
     }

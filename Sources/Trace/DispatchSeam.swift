@@ -68,6 +68,7 @@ public enum DispatchSeam {
     }
 
     private static let enteredKey = "com.haruspec.trace.enteredQueue"
+    private static let enteredNameKey = "com.haruspec.trace.enteredQueueName"
 
     /// Whether the current thread is running a block the seam *handed to* a queue, as opposed to
     /// merely executing on whatever queue the caller occupied. Only the first is a fact about the
@@ -76,13 +77,29 @@ public enum DispatchSeam {
         (Thread.current.threadDictionary[enteredKey] as? Int ?? 0) > 0
     }
 
+    /// The name the entered queue should be known by, when it has one worth more than its label.
+    static var enteredQueueName: String? {
+        Thread.current.threadDictionary[enteredNameKey] as? String
+    }
+
     /// Mark the thread as executing dispatched work for the duration of `body`. Nested, because a
     /// dispatched block may dispatch again before the outer one returns.
-    static func markingQueueEntry<T>(_ body: () -> T) -> T {
+    ///
+    /// `named` overrides the label for queues whose label is not nominal. An `OperationQueue`'s
+    /// underlying label embeds its object address — `NSOperationQueue 0x106f4fa00` — which is the
+    /// run-to-run instability domains exist to remove, so its `name` is used instead.
+    static func markingQueueEntry<T>(named: String? = nil, _ body: () -> T) -> T {
         let dictionary = Thread.current.threadDictionary
         let depth = dictionary[enteredKey] as? Int ?? 0
+        let previousName = dictionary[enteredNameKey]
         dictionary[enteredKey] = depth + 1
-        defer { dictionary[enteredKey] = depth }
+        if named != nil {
+            dictionary[enteredNameKey] = named
+        }
+        defer {
+            dictionary[enteredKey] = depth
+            dictionary[enteredNameKey] = previousName
+        }
         return body()
     }
 

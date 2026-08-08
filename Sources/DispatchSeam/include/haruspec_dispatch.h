@@ -69,11 +69,20 @@ static inline void haruspec_dispatch_group_async(dispatch_group_t group,
     dispatch_group_async(group, queue, haruspec_seam_wrap(block));
 }
 
+/// The join. A fan-out ends here, so leaving it unwrapped means the one event that reports the
+/// *result* of concurrent work is the one event not captured.
+static inline void haruspec_dispatch_group_notify(dispatch_group_t group,
+                                                  dispatch_queue_t queue,
+                                                  dispatch_block_t block) {
+    dispatch_group_notify(group, queue, haruspec_seam_wrap(block));
+}
+
 #ifdef HARUSPEC_CAPTURE
 #define dispatch_async haruspec_dispatch_async
 #define dispatch_barrier_async haruspec_dispatch_barrier_async
 #define dispatch_after haruspec_dispatch_after
 #define dispatch_group_async haruspec_dispatch_group_async
+#define dispatch_group_notify haruspec_dispatch_group_notify
 #endif
 
 
