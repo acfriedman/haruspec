@@ -1,7 +1,18 @@
 import Foundation
 import HaruspecCore
 
-/// Captures `NotificationCenter` posts into a `TraceRecorder` with **no changes to app code**.
+/// Observes `NotificationCenter` posts from the outside — retained for **one job**, the un-injected
+/// holdout.
+///
+/// The canonical path is `RecordingNotificationCenter`, injected where the plain center goes. A
+/// notification is a collaborator boundary, and handing one in is ordinary practice, so observing from
+/// outside is not the right default: it makes notifications a second capture path with its own rules,
+/// which is what produced both of the concurrency bugs that cost the most to find.
+///
+/// What survives is the case with no injection point at all: a subject that posts to a process-wide
+/// center it was never handed (`.observing(on: .default)`). Recording a baseline *before* the
+/// injectability refactor needs this, exactly as the one-shot swizzle bootstrap does in `SEAMS.md` —
+/// and like that bootstrap, it is quarantined to the case that has no alternative.
 ///
 /// This is the runtime half of the layered capture model: side effects like notifications are
 /// emitted as ordinary statements inside method bodies, so instead of hand-recording each one, we

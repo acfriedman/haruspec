@@ -224,9 +224,18 @@ public extension Spec {
     /// the same primitive across a build boundary.)
     func capture(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) async -> Trace {
         let recorder = TraceRecorder(name: name, clock: ManualClock())
-        let center = observationCenter ?? NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center, names: notificationNames)
-        interceptor.start(); defer { interceptor.stop() }
+        // Injected by default: the SUT posts through a center that records, so a notification takes
+        // the same path and the same recorder lookup as every other kind of event.
+        //
+        // `.observing(on:)` is the exception, and the only one — a caller pointing the window at a
+        // center the spec does not own, because the subject posts to it without being handed anything.
+        // Nothing can be injected there, so that case keeps observing from the outside.
+        let center = observationCenter ?? RecordingNotificationCenter(names: notificationNames)
+        let uninjected = observationCenter.map {
+            NotificationInterceptor(recorder: recorder, center: $0, names: notificationNames)
+        }
+        uninjected?.start()
+        defer { uninjected?.stop() }
         let context = SeamContext(notifications: center, cassette: cassette)
         let system = make(context)
         // Task-locals are inherited across `await`, so binding once around the whole loop still

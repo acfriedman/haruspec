@@ -266,6 +266,9 @@ public struct Spec<S> {
     /// default (a fresh per-window `NotificationCenter()` handed through `SeamContext.notifications`) is
     /// inherently isolated; pointing this at a process-wide center under a *parallel* test runner can let a
     /// sibling capture's posts leak in (prefer injecting the context center, or serialize the suite).
+    /// Point the capture window at a center the spec does not own — the un-injected holdout, for a
+    /// subject that posts to a process-wide center it was never handed. Everything else is captured by
+    /// injecting a recording center, which is the same path every other event takes.
     public func observing(on center: NotificationCenter) -> Spec<S> {
         var copy = self; copy.observationCenter = center; return copy
     }
