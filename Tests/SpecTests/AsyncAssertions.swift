@@ -1,17 +1,18 @@
 import XCTest
 
-/// `XCTAssertThrowsError` takes a *synchronous* autoclosure, so it cannot hold an `await`. An
-/// autoclosure may itself be `async`, which is all this needs to be the async twin.
+/// The async twin of `XCTAssertThrowsError`, whose autoclosure is synchronous and so cannot hold an
+/// `await`.
 ///
-/// Everything else in these tests hoists the awaited value to a `let` and asserts on that; only the
-/// throwing form genuinely needs a helper, because the expression has to stay unevaluated until the
-/// `do` block runs it.
+/// Takes an ordinary closure rather than an `@autoclosure`, even though an autoclosure may itself be
+/// `async` and would read closer to the XCTest original. SwiftFormat cannot see that such a parameter
+/// is async and strips the `await` inside it as redundant, which then fails to compile — a formatter
+/// that silently breaks the build is worse than a slightly wordier call site.
 func XCTAssertThrowsErrorAsync(
-    _ expression: @autoclosure () async throws -> some Any,
     _ message: String = "expected an error, none was thrown",
     file: StaticString = #filePath,
     line: UInt = #line,
-    _ handler: (Error) -> Void = { _ in }
+    _ expression: () async throws -> some Any,
+    handler: (Error) -> Void = { _ in }
 ) async {
     do {
         _ = try await expression()

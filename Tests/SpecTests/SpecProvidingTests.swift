@@ -55,7 +55,9 @@ final class SpecProvidingTests: XCTestCase {
     }
 
     func testCheckNamesACandidateThatIsNoLongerDeclared() async {
-        await XCTAssertThrowsErrorAsync(try PromoCartSpec().check(candidate: "Renamed")) { error in
+        await XCTAssertThrowsErrorAsync {
+            try await PromoCartSpec().check(candidate: "Renamed")
+        } handler: { error in
             XCTAssertEqual(
                 (error as? SpecCatalog.CheckFailure)?.description,
                 "Renamed is no longer a declared candidate"
@@ -87,9 +89,10 @@ final class SpecProvidingTests: XCTestCase {
     }
 
     func testContinuousReportsAMissingDestinationRatherThanThrowingRaw() async {
-        await XCTAssertThrowsErrorAsync(
-            try PromoCartSpec().checkContinuous(.record, environment: ["HARUSPEC_MODE": "record"])
-        ) { error in
+        await XCTAssertThrowsErrorAsync {
+            try await PromoCartSpec()
+                .checkContinuous(.record, environment: ["HARUSPEC_MODE": "record"])
+        } handler: { error in
             XCTAssertTrue(
                 (error as? SpecCatalog.CheckFailure)?.description.contains("HARUSPEC_PLAN_PATH") ?? false,
                 "\(error)"

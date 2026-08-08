@@ -229,9 +229,11 @@ public extension Spec {
         interceptor.start(); defer { interceptor.stop() }
         let context = SeamContext(notifications: center, cassette: cassette)
         let system = make(context)
-        TraceContext.$current.withValue(recorder) {
+        // Task-locals are inherited across `await`, so binding once around the whole loop still
+        // reaches an operation that suspends — which is what lets an op drive an actor.
+        await TraceContext.$current.withValue(recorder) {
             for operation in order {
-                operation.action(system, context)
+                await operation.action(system, context)
             }
         }
         // Drain *after* the window, not inside it. Work the ops dispatched carries the recorder the

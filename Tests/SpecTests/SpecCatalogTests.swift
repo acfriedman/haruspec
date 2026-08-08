@@ -181,7 +181,9 @@ final class SpecCatalogTests: XCTestCase {
                 .entry()
         )
 
-        await XCTAssertThrowsErrorAsync(try mismatched.check(migrationCase: "promo-cart/RefactorCart")) { error in
+        await XCTAssertThrowsErrorAsync {
+            try await mismatched.check(migrationCase: "promo-cart/RefactorCart")
+        } handler: { error in
             let failure = error as? SpecCatalog.CheckFailure
             XCTAssertTrue(
                 failure?.description.hasPrefix("expected diverged, got equivalent") ?? false,
@@ -191,7 +193,9 @@ final class SpecCatalogTests: XCTestCase {
     }
 
     func testCheckNamesTheCaseWhenItIsNoLongerDeclared() async {
-        await XCTAssertThrowsErrorAsync(try catalog().check(migrationCase: "promo-cart/Renamed")) { error in
+        await XCTAssertThrowsErrorAsync {
+            try await catalog().check(migrationCase: "promo-cart/Renamed")
+        } handler: { error in
             XCTAssertEqual(
                 (error as? SpecCatalog.CheckFailure)?.description,
                 "promo-cart/Renamed is no longer declared"
@@ -200,9 +204,9 @@ final class SpecCatalogTests: XCTestCase {
     }
 
     func testContinuousCheckThrowsWhenNoModeIsSelected() async {
-        await XCTAssertThrowsErrorAsync(
-            try catalog().checkContinuous(spec: "promo-cart", environment: [:])
-        ) { error in
+        await XCTAssertThrowsErrorAsync {
+            try await catalog().checkContinuous(spec: "promo-cart", environment: [:])
+        } handler: { error in
             XCTAssertTrue(
                 (error as? SpecCatalog.CheckFailure)?.description.contains("HARUSPEC_MODE") ?? false
             )

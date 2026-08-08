@@ -58,15 +58,15 @@ final class CheckTests: XCTestCase {
     }
 
     func testAnUnmetExpectationThrowsSayingWhichWayItWasSupposedToGo() async {
-        await XCTAssertThrowsErrorAsync(
+        await XCTAssertThrowsErrorAsync {
             // Declared as a counterexample, but it is in fact a faithful port.
-            try PromoCartSpec().check(
+            try await PromoCartSpec().check(
                 "RefactorCart",
                 expecting: .diverged,
                 reportsIn: scratch(),
                 port(RefactorCart.init)
             )
-        ) { error in
+        } handler: { error in
             XCTAssertTrue(
                 (error as? SpecCatalog.CheckFailure)?
                     .description.hasPrefix("expected diverged, got equivalent") ?? false,
@@ -76,9 +76,10 @@ final class CheckTests: XCTestCase {
     }
 
     func testAFaithfulPortThatRegressesFailsTheCheck() async {
-        await XCTAssertThrowsErrorAsync(
-            try PromoCartSpec().check("RoundBugCart", reportsIn: scratch(), port(RoundBugCart.init))
-        ) { error in
+        await XCTAssertThrowsErrorAsync {
+            try await PromoCartSpec()
+                .check("RoundBugCart", reportsIn: scratch(), port(RoundBugCart.init))
+        } handler: { error in
             XCTAssertTrue(
                 (error as? SpecCatalog.CheckFailure)?
                     .description.hasPrefix("expected equivalent, got diverged") ?? false,

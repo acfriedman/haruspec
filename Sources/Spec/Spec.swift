@@ -35,7 +35,10 @@ public struct SeamContext {
 /// A labeled, typed operation on the system under test, plus ordering constraints. `$0` is the system.
 public struct Op<S> {
     public let label: String
-    let action: (S, SeamContext) -> Void
+    // Async, so an operation may drive an `actor` or any other `async` surface. A synchronous
+    // closure converts to this implicitly — Swift treats sync functions as a subtype of async ones —
+    // so every existing sync `Op { … }` declaration keeps working untouched.
+    let action: (S, SeamContext) async -> Void
     var mustBeLast = false
     /// Soft preconditions: labels this op is *expected* to follow, declared with `.after(_:)`.
     /// Exploration deliberately breaks them in part of its sample rather than filtering them out.
@@ -54,14 +57,14 @@ public struct Op<S> {
     var argumentDomains: [(seam: String, domain: SeamDomain)] = []
 
     /// A simple op.
-    public init(_ label: String, _ action: @escaping (S) -> Void) {
+    public init(_ label: String, _ action: @escaping (S) async -> Void) {
         self.label = label
-        self.action = { system, _ in action(system) }
+        self.action = { system, _ in await action(system) }
     }
 
     /// A *parameterized* op: reads generated values from the seam context, so arguments become
     /// property-varied surface (e.g. `qty: Int(seams.int("coffeeQty", default: 10))`).
-    public init(_ label: String, _ action: @escaping (S, SeamContext) -> Void) {
+    public init(_ label: String, _ action: @escaping (S, SeamContext) async -> Void) {
         self.label = label
         self.action = action
     }
