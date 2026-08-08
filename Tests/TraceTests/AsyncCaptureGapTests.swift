@@ -158,22 +158,34 @@ final class AsyncCaptureGapTests: XCTestCase {
         XCTAssertEqual(labels(recorder), ["on-background-queue", "in-completion"])
     }
 
-    /// The hole the seam does *not* close: Swift has no preprocessor, so an unawaited `Task` is out of
-    /// its reach. Such a task needs no help with reachability — task-locals are inherited — but nothing
-    /// counts it, so it still races the snapshot. Informational: pinning a scheduler-dependent rate
-    /// would itself be a flaky test.
-    func testMeasuresTheRemainingUnawaitedTaskFlapRate() {
-        let attempts = 20
-        var landed = 0
-        for _ in 1 ... attempts {
-            let recorder = TraceRecorder(name: "flap")
+    /// The last hole the seam closes. An unawaited `Task` inherits the recorder, so it was always
+    /// *captured* — nothing marked it outstanding, so whether it beat the snapshot was a race. That
+    /// measured 0–2 of 20 in isolation, and across a spec's thousand-odd probes became a near-certain
+    /// red attributable to nothing.
+    ///
+    /// A task whose value is awaited was never the problem: awaiting it *is* quiescence. Fire-and-forget
+    /// is, and fire-and-forget is `Success == Void` — which is exactly what the overload claims.
+    func testUnawaitedTaskIsCountedAndDrains() async {
+        for _ in 1 ... 20 {
+            let recorder = TraceRecorder(name: "deferred")
             TraceContext.$current.withValue(recorder) {
                 Task { Haruspec.marker("deferred-work") }
             }
-            if recorder.trace().events.contains(where: { $0.label == "deferred-work" }) {
-                landed += 1
-            }
+            let drained = await DispatchSeam.quiesce(timeout: 5)
+            XCTAssertTrue(drained)
+            XCTAssertEqual(labels(recorder), ["deferred-work"])
+            XCTAssertEqual(DispatchSeam.outstanding, 0)
         }
-        print("    ── unawaited Task (outside the seam) beat the snapshot in \(landed)/\(attempts)")
+    }
+
+    /// `Task.detached` inherits nothing, so it needed the wrapper for reachability as well as counting.
+    func testDetachedTaskIsReachedAndCounted() async {
+        let recorder = TraceRecorder(name: "detached")
+        TraceContext.$current.withValue(recorder) {
+            Task.detached { Haruspec.marker("detached-work") }
+        }
+        let drained = await DispatchSeam.quiesce(timeout: 5)
+        XCTAssertTrue(drained)
+        XCTAssertEqual(labels(recorder), ["detached-work"])
     }
 }

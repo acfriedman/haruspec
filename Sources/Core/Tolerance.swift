@@ -81,6 +81,19 @@ public struct VolatileField: Sendable, Equatable, Hashable {
     }
 }
 
+/// How an event that ran on a *different isolation domain* participates in the verdict.
+///
+/// A concurrency migration moves work between domains by definition — a dispatch queue becoming an
+/// actor migrates every event it touches — so gating on the move itself would make the tool red by
+/// construction on the migration it exists to serve. Default `.advisory`: the move is reported, and
+/// the values carried across it still gate. `.gating` for a change that claims to preserve threading;
+/// `.ignored` restores the old behaviour, where a migrated event reads as missing + unexpected.
+public enum DomainMigrationPolicy: String, Codable, Sendable {
+    case advisory // reported, does not fail the verdict
+    case gating // a domain change fails the verdict on its own
+    case ignored // not detected; a migrated event reads as a missing/unexpected pair
+}
+
 public struct Tolerance: Sendable, Equatable {
     /// Payload fields whose values are non-deterministic and must be ignored — e.g.
     /// `.key("orderID")`. Redacted to a placeholder before comparison. See `VolatileField` for the
@@ -110,6 +123,9 @@ public struct Tolerance: Sendable, Equatable {
     /// How the structural (auto-captured) tier participates in the verdict. Defaults to `.strict`.
     public var structuralComparison: StructuralComparison
 
+    /// How an event that moved isolation domains participates in the verdict. Defaults to `.advisory`.
+    public var domainMigration: DomainMigrationPolicy
+
     public init(
         volatileFields: [VolatileField] = [],
         numericEpsilon: Double = 0,
@@ -117,7 +133,8 @@ public struct Tolerance: Sendable, Equatable {
         unorderedGroups: [[String]] = [],
         ignoredKinds: [EventKind] = [],
         ignoredNotificationNames: [String] = [],
-        structuralComparison: StructuralComparison = .strict
+        structuralComparison: StructuralComparison = .strict,
+        domainMigration: DomainMigrationPolicy = .advisory
     ) {
         self.volatileFields = volatileFields
         self.numericEpsilon = numericEpsilon
@@ -126,6 +143,7 @@ public struct Tolerance: Sendable, Equatable {
         self.ignoredKinds = ignoredKinds
         self.ignoredNotificationNames = ignoredNotificationNames
         self.structuralComparison = structuralComparison
+        self.domainMigration = domainMigration
     }
 
     /// The default: exact match on everything (nondeterminism already removed by canonicalization of
@@ -192,7 +210,7 @@ extension VolatileField: Codable {
 extension Tolerance: Codable {
     enum CodingKeys: String, CodingKey {
         case volatileFields, numericEpsilon, timingBudgets, unorderedGroups, ignoredKinds
-        case ignoredNotificationNames, structuralComparison
+        case ignoredNotificationNames, structuralComparison, domainMigration
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -206,6 +224,8 @@ extension Tolerance: Codable {
         ignoredNotificationNames = try container.decodeIfPresent([String].self, forKey: .ignoredNotificationNames) ?? []
         structuralComparison = try container
             .decodeIfPresent(StructuralComparison.self, forKey: .structuralComparison) ?? .strict
+        domainMigration = try container
+            .decodeIfPresent(DomainMigrationPolicy.self, forKey: .domainMigration) ?? .advisory
     }
 }
 

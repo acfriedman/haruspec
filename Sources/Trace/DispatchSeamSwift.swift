@@ -55,11 +55,44 @@ import Foundation
         }
     }
 
+    /// The same lever, applied to `Task`. `Task.init` defaults `priority:`, so an overload claiming
+    /// only `operation:` is preferred at `Task { … }`.
+    ///
+    /// The problem here is **counting**, not reaching: a task inherits task-locals, so the recorder is
+    /// already found — but nothing marks the work outstanding, so an unawaited task races the trace
+    /// snapshot. A task whose value is awaited was never the problem, because awaiting it *is*
+    /// quiescence; fire-and-forget is, and fire-and-forget is `Success == Void`.
+    ///
+    /// `detached` needs the wrapper for both reasons: it inherits nothing, so it is uncounted *and*
+    /// unreachable. One wrapper serves both, since rebinding a recorder a task already inherited is a
+    /// no-op.
+    public extension Task where Failure == Never, Success == Void {
+        init(operation: @escaping @Sendable () async -> Void) {
+            self.init(priority: nil, operation: DispatchSeam.seamWrapTask(operation))
+        }
+
+        static func detached(operation: @escaping @Sendable () async -> Void) -> Task<Void, Never> {
+            Task.detached(priority: nil, operation: DispatchSeam.seamWrapTask(operation))
+        }
+    }
+
 #endif
 
 public extension DispatchSeam {
     /// Wrap a Swift closure so it carries the enqueueing context and counts as outstanding work — the
     /// same contract as the C shim's `haruspec_seam_wrap`, reached from Swift instead of from a block.
+    /// Wrap an unawaited task's body so it counts as outstanding work, and so a *detached* task —
+    /// which inherits nothing — still finds the recorder its spawn site had.
+    static func seamWrapTask(
+        _ operation: @escaping @Sendable () async -> Void
+    ) -> @Sendable () async -> Void {
+        guard let recorder = acquireForSwift() else { return operation }
+        return {
+            await TraceContext.$current.withValue(recorder) { await operation() }
+            finishForSwift()
+        }
+    }
+
     static func seamWrap(_ work: @escaping @Sendable () -> Void) -> @Sendable () -> Void {
         guard let recorder = acquireForSwift() else { return work }
         return {

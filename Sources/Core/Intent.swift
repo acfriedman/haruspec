@@ -45,7 +45,9 @@ public struct Intent: Sendable, Equatable {
         case .valueMismatch:
             guard let fields = expectedValueChanges[divergence.label] else { return false }
             return fields.isEmpty || fields.contains { fieldMatches($0, divergence.detail) }
-        case .reordered, .timingRegression:
+        // A domain move is not declarable yet: `Intent` has no vocabulary for "this work moved to an
+        // actor on purpose". Until it does, the policy on `Tolerance` is the only dial.
+        case .reordered, .timingRegression, .domainMigration:
             return false // not yet expressible as declared intent — always collateral for now
         }
     }

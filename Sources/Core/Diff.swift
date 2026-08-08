@@ -14,6 +14,7 @@ public struct Divergence: Codable, Sendable, Equatable {
         case missingEvent // baseline had an event the candidate never produced
         case unexpectedEvent // candidate produced an event the baseline never had
         case reordered // an event moved, and its order is significant
+        case domainMigration // the same event, on a different isolation domain
         case valueMismatch // an aligned event's payload differs beyond tolerance
         case timingRegression // an aligned interval got slower than its declared budget allows
     }
@@ -93,19 +94,13 @@ public struct TraceDiff: Codable, Sendable, Equatable {
 ///
 /// Pipeline:
 ///  1. Canonicalize both traces under the tolerance spec (redact volatile fields, drop ignored kinds).
-///  2. Align event *signatures* (kind+label+thread) with an LCS — robust to insertions,
+///  2. Align event *signatures* (kind+label+domain) with an LCS — robust to insertions,
 ///     deletions and moves without assuming lockstep positions.
-///  3. Classify the leftovers: matched-and-moved ⇒ reordered, unmatched-baseline ⇒ missing,
-///     unmatched-candidate ⇒ unexpected.
+///  3. Classify the leftovers: matched-and-moved ⇒ reordered, same event on another domain ⇒
+///     domainMigration, unmatched-baseline ⇒ missing, unmatched-candidate ⇒ unexpected.
 ///  4. For every aligned pair, compare payload values (within numeric epsilon) and interval timing
 ///     (within declared budgets).
 public enum BehavioralDiff {
-    private struct Signature: Hashable {
-        let kind: EventKind
-        let label: String
-        let domain: ConcurrencyDomain
-    }
-
     public static func compare(
         baseline rawBaseline: Trace,
         candidate rawCandidate: Trace,
@@ -144,57 +139,19 @@ public enum BehavioralDiff {
             )
         }
 
-        // 3/4b. Reconcile the unmatched: pair equal signatures as moves, rest are missing/unexpected.
-        var unmatchedInsertions = candidate.indices.filter { !matchedCandidate.contains($0) }
-        for baselineIndex in baseline.indices where !matchedBaseline.contains(baselineIndex) {
-            if let slot = unmatchedInsertions.firstIndex(where: { candidateSig[$0] == baselineSig[baselineIndex] }) {
-                let candidateIndex = unmatchedInsertions.remove(at: slot)
-                if !spec.isUnordered(label: baseline[baselineIndex].label) {
-                    divergences.append(
-                        Divergence(
-                            kind: .reordered,
-                            label: baseline[baselineIndex].label,
-                            baselineSeq: baseline[baselineIndex].seq,
-                            candidateSeq: candidate[candidateIndex].seq,
-                            detail: "event order changed (baseline #\(baseline[baselineIndex].seq) "
-                                + "→ candidate #\(candidate[candidateIndex].seq))",
-                            isAdvisory: advisory(baseline[baselineIndex].tier)
-                        )
-                    )
-                }
-                // A moved event can still carry a value/timing regression — check it either way.
-                compareAligned(
-                    baseline[baselineIndex],
-                    candidate[candidateIndex],
-                    spec: spec,
-                    isAdvisory: advisory(baseline[baselineIndex].tier),
-                    into: &divergences
-                )
-            } else {
-                divergences.append(
-                    Divergence(
-                        kind: .missingEvent,
-                        label: baseline[baselineIndex].label,
-                        baselineSeq: baseline[baselineIndex].seq,
-                        candidateSeq: nil,
-                        detail: "\(baseline[baselineIndex].kind.rawValue) present in baseline, absent in candidate",
-                        isAdvisory: advisory(baseline[baselineIndex].tier)
-                    )
-                )
-            }
-        }
-        for candidateIndex in unmatchedInsertions {
-            divergences.append(
-                Divergence(
-                    kind: .unexpectedEvent,
-                    label: candidate[candidateIndex].label,
-                    baselineSeq: nil,
-                    candidateSeq: candidate[candidateIndex].seq,
-                    detail: "\(candidate[candidateIndex].kind.rawValue) present in candidate, absent in baseline",
-                    isAdvisory: advisory(candidate[candidateIndex].tier)
-                )
-            )
-        }
+        reconcileUnmatched(
+            Alignment(
+                baseline: baseline,
+                candidate: candidate,
+                baselineSig: baselineSig,
+                candidateSig: candidateSig,
+                matchedBaseline: matchedBaseline,
+                matchedCandidate: matchedCandidate
+            ),
+            spec: spec,
+            advisory: advisory,
+            into: &divergences
+        )
 
         divergences.sort { lhs, rhs in
             (lhs.baselineSeq ?? lhs.candidateSeq ?? Int.max, lhs.candidateSeq ?? Int.max)
@@ -214,7 +171,7 @@ public enum BehavioralDiff {
 
     // MARK: - Aligned-pair comparison
 
-    private static func compareAligned(
+    static func compareAligned(
         _ baseline: TraceEvent,
         _ candidate: TraceEvent,
         spec: Tolerance,
@@ -303,40 +260,5 @@ public enum BehavioralDiff {
 
     private static func mismatch(_ path: String, _ baseline: CanonicalValue, _ candidate: CanonicalValue) -> String {
         "\(label(path)): baseline=\(baseline.canonicalString) candidate=\(candidate.canonicalString)"
-    }
-
-    private static func signature(_ event: TraceEvent) -> Signature {
-        Signature(kind: event.kind, label: event.label, domain: event.domain)
-    }
-
-    /// Classic O(n·m) LCS, returning the aligned index pairs in increasing order.
-    private static func longestCommonSubsequence<T: Equatable>(_ first: [T], _ second: [T]) -> [(Int, Int)] {
-        let firstCount = first.count, secondCount = second.count
-        guard firstCount > 0, secondCount > 0 else { return [] }
-        // One flat allocation rather than `firstCount + 1` row objects. The table is O(E²) `Int`s and is
-        // the dominant cost of diffing a chatty trace — nested arrays add a retain/release and a second
-        // bounds check to every cell of it.
-        let width = secondCount + 1
-        var table = [Int](repeating: 0, count: (firstCount + 1) * width)
-        for row in stride(from: firstCount - 1, through: 0, by: -1) {
-            let rowBase = row * width, nextBase = rowBase + width
-            for column in stride(from: secondCount - 1, through: 0, by: -1) {
-                table[rowBase + column] = first[row] == second[column]
-                    ? table[nextBase + column + 1] + 1
-                    : Swift.max(table[nextBase + column], table[rowBase + column + 1])
-            }
-        }
-        var pairs: [(Int, Int)] = []
-        var row = 0, column = 0
-        while row < firstCount, column < secondCount {
-            if first[row] == second[column] {
-                pairs.append((row, column)); row += 1; column += 1
-            } else if table[(row + 1) * width + column] >= table[row * width + column + 1] {
-                row += 1
-            } else {
-                column += 1
-            }
-        }
-        return pairs
     }
 }
