@@ -180,25 +180,3 @@ final class IntervalTests: XCTestCase {
         XCTAssertEqual(Haruspec.interval("x") { 7 }, 7) // no recorder bound → just runs the body
     }
 }
-
-final class KVOInterceptorTests: XCTestCase {
-    final class Counter: NSObject {
-        @objc dynamic var count: Int = 0
-    }
-
-    func testCapturesKeyPathChangesAsStateChanges() {
-        let recorder = TraceRecorder(name: "t")
-        let sut = KVOInterceptor(recorder: recorder)
-        let counter = Counter()
-        sut.observe(counter, keyPaths: ["count"])
-        counter.count = 5
-        counter.count = 9
-        sut.stop()
-
-        let events = recorder.trace().events
-        XCTAssertEqual(events.map(\.kind), [.stateChange, .stateChange])
-        XCTAssertEqual(events.map(\.label), ["count", "count"])
-        XCTAssertEqual(events[0].payload, .int(5))
-        XCTAssertEqual(events[1].payload, .int(9))
-    }
-}

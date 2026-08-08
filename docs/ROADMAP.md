@@ -81,8 +81,10 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
 
 ## Capture — toward zero-code adoption
 
-- ✅ **Runtime interception** — `NotificationInterceptor` (auto-captures `NotificationCenter` posts),
-  `KVOInterceptor` (observed property changes). No service-side code.
+- ✅ **Notification capture by injection** — `RecordingNotificationCenter` substitutes for the plain
+  center wherever one is handed in, so posts are captured by the same path and the same recorder lookup
+  as every other event. Observing from outside survives only where nothing can be injected: a subject
+  posting to a center it was never given.
 - ✅ **Collaborator observation (silent side effects)** — closes the blind spot where a SUT hands work
   to a singleton/collaborator that mutates the world but emits *no* other signal (no notification, no
   KVO): the **injectability precondition** (a one-file settable-`.shared`-behind-a-protocol refactor)

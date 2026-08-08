@@ -79,8 +79,8 @@ determinism, and have clean interception points.
 ### System & app services
 | Seam | Mechanism | Record | Replay | Notes |
 |------|-----------|:------:|:------:|-------|
-| `NotificationCenter` posts | `NotificationInterceptor` | ✅ | ⏳ | Record shipped; replay (re-post recorded notifications) is next. |
-| KVO observed changes | `KVOInterceptor` | ✅ | ⏳ | Same — record shipped, replay next. |
+| `NotificationCenter` posts | injected `RecordingNotificationCenter` | ✅ | ⏳ | A center is a collaborator, so it is handed in like any other. `NotificationInterceptor` survives only for a subject that posts to a center it was never given (`.observing(on:)`) — the un-injected holdout, quarantined the way the swizzle bootstrap is. |
+| KVO observed changes | — | 📋 | 📋 | The `KVOInterceptor` scaffold is **removed**: never wired to a spec, and observing from outside is the shape this catalog moved away from. `TraceRecorder.stateChange` remains, so a decorator (or `@Observable`) can emit changes by injection when this is picked up. |
 | Combine publishers | operator tap | 📋 | 📋 | Record emitted values + completion, replay as a fixture publisher. |
 | Locale / TimeZone / Calendar | injected `SeamEnvironment` | ✅ | ✅ | `SeamEnvironment`: locale/timezone/calendar reads recorded/replayed. Cheap and high-value for the UI configuration-sweep application. |
 | Feature flags / remote config | protocol injection | 📋 | 📋 | Usually already behind a protocol — an easy seam. |

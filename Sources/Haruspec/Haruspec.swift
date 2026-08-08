@@ -5,7 +5,7 @@
 //     import Haruspec
 //
 // and gets the whole engine: the `@Traced` / `@Timed` / `@Seamed` macros; runtime capture
-// (`TraceRecorder`, `NotificationInterceptor` / `KVOInterceptor`, the `Haruspec.marker` / `Haruspec.interval`
+// (`TraceRecorder`, `RecordingNotificationCenter`, the `Haruspec.marker` / `Haruspec.interval`
 // signposts); the record-once/replay-into-both seam harness (`Cassette` + the injected value seams);
 // and the `Spec { … }.verify(against:)` DSL — no more juggling HaruspecCore + HaruspecTrace +
 // HaruspecMacros + HaruspecSeams + HaruspecSpec.
