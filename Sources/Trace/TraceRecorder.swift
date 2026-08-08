@@ -20,6 +20,12 @@ public final class TraceRecorder: @unchecked Sendable {
     private var seqCounter = 0
     private var depth = 0
 
+    /// The domain of each traced call still in progress, per thread. An effect emitted inside a call
+    /// belongs to the domain of the work that caused it, even when the machinery that carried it —
+    /// Foundation's notification dispatch, a collaborator decorator — sits one frame away and is
+    /// isolated to nothing itself.
+    private var callDomains: [ObjectIdentifier: [ConcurrencyDomain]] = [:]
+
     // Symbolic identity, assigned in first-seen order for run-stability. Covers traced subjects and
     // actor domain instances alike.
     private var identityMap: [ObjectIdentifier: Int] = [:]
@@ -212,7 +218,7 @@ public final class TraceRecorder: @unchecked Sendable {
             seq: seqCounter,
             kind: kind,
             label: label,
-            domain: domainLocked(isolation),
+            domain: attributedDomainLocked(isolation, kind: kind),
             subject: symbolicIDLocked(subject),
             payload: payload,
             depth: depth,
@@ -232,7 +238,7 @@ public final class TraceRecorder: @unchecked Sendable {
             seq: seqCounter,
             kind: .signpost,
             label: label,
-            domain: domainLocked(isolation),
+            domain: attributedDomainLocked(isolation, kind: .signpost),
             subject: symbolicIDLocked(subject),
             durationTicks: durationTicks,
             depth: depth
@@ -263,5 +269,36 @@ public final class TraceRecorder: @unchecked Sendable {
     /// subject carries one identity in both places.
     private func domainLocked(_ isolation: (any Actor)?) -> ConcurrencyDomain {
         DomainResolver.resolve(isolation: isolation, instanceID: symbolicIDLocked)
+    }
+
+    /// The domain an event is *attributed* to, which is not always the one it executed in.
+    ///
+    /// A notification travels through Foundation and a collaborator call through a decorator; both
+    /// arrive one frame from the subject, isolated to nothing, and would resolve to `ambient` however
+    /// they were captured. But the work that caused them is on the stack, and its domain is the honest
+    /// answer: an effect belongs to whatever emitted it.
+    ///
+    /// Only `ambient` inherits. An event that resolved to an actor or a queue knows its own domain and
+    /// is never overridden by its caller's.
+    private func attributedDomainLocked(_ isolation: (any Actor)?, kind: EventKind) -> ConcurrencyDomain {
+        let key = ObjectIdentifier(Thread.current)
+        var domain = domainLocked(isolation)
+        if domain == .ambient, let enclosing = callDomains[key]?.last {
+            domain = enclosing
+        }
+        switch kind {
+        case .call:
+            callDomains[key, default: []].append(domain)
+        case .ret:
+            // Defensive rather than symmetric: an async traced call may resume on another thread,
+            // leaving this one's stack short. Popping what is not there would attribute later events
+            // to a caller that has already returned.
+            if callDomains[key]?.isEmpty == false {
+                callDomains[key]?.removeLast()
+            }
+        default:
+            break
+        }
+        return domain
     }
 }
