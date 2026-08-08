@@ -32,14 +32,57 @@ public enum TraceContext {
         current ?? Thread.current.threadDictionary[threadKey] as? TraceRecorder
     }
 
+    private static let spawnKey = "com.haruspec.trace.spawnedBy"
+
     /// Bind `recorder` for the duration of `body` on *this thread only*, restoring whatever was there.
     /// Used by the GCD seam around each wrapped block.
-    static func withThreadRecorder<T>(_ recorder: TraceRecorder, _ body: () -> T) -> T {
+    ///
+    /// `spawnedBy` is the call that enqueued this work, carried from the enqueue site so the first
+    /// event recorded inside claims it as its cause. Program order carries the rest of the block.
+    static func withThreadRecorder<T>(_ recorder: TraceRecorder, spawnedBy: Int?, _ body: () -> T) -> T {
         let dictionary = Thread.current.threadDictionary
-        let previous = dictionary[threadKey]
+        let previousRecorder = dictionary[threadKey]
+        let previousSpawn = dictionary[spawnKey]
         dictionary[threadKey] = recorder
-        defer { dictionary[threadKey] = previous }
+        dictionary[spawnKey] = spawnedBy
+        defer {
+            dictionary[threadKey] = previousRecorder
+            dictionary[spawnKey] = previousSpawn
+        }
         return body()
+    }
+
+    /// A cause that has not been claimed yet. A box rather than a value because a task-local cannot be
+    /// cleared once bound, and the edge belongs to the block's *first* event — so consuming has to
+    /// mutate something the binding merely points at.
+    final class SpawnCause: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cause: Int?
+
+        init(_ cause: Int?) {
+            self.cause = cause
+        }
+
+        func take() -> Int? {
+            lock.lock(); defer { lock.unlock() }
+            defer { cause = nil }
+            return cause
+        }
+    }
+
+    /// The task path carries the cause in a task-local, which follows the task across suspension —
+    /// `Thread.current` is unavailable in an async context, and would be the wrong unit anyway.
+    @TaskLocal static var pendingSpawnCause: SpawnCause?
+
+    /// Take the pending spawn cause, if this is the first event since the block began. Consumed rather
+    /// than read: the edge belongs to the block's first event, and program order does the rest.
+    static func consumePendingSpawnCause() -> Int? {
+        let dictionary = Thread.current.threadDictionary
+        if let cause = dictionary[spawnKey] as? Int {
+            dictionary[spawnKey] = nil
+            return cause
+        }
+        return pendingSpawnCause?.take()
     }
 }
 

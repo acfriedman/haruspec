@@ -24,7 +24,7 @@ public final class TraceRecorder: @unchecked Sendable {
     /// belongs to the domain of the work that caused it, even when the machinery that carried it —
     /// Foundation's notification dispatch, a collaborator decorator — sits one frame away and is
     /// isolated to nothing itself.
-    private var callDomains: [ObjectIdentifier: [ConcurrencyDomain]] = [:]
+    private var callDomains: [ObjectIdentifier: [(seq: Int, domain: ConcurrencyDomain)]] = [:]
 
     // Symbolic identity, assigned in first-seen order for run-stability. Covers traced subjects and
     // actor domain instances alike.
@@ -187,6 +187,14 @@ public final class TraceRecorder: @unchecked Sendable {
         (clock as? ManualClock)?.advance(ticks)
     }
 
+    /// The traced call in progress on this thread, if any — the cause a seam records when it hands
+    /// work to another queue or task. Read at the *enqueue*, which is the only moment both ends of the
+    /// edge are known.
+    public func enclosingCallSeq() -> Int? {
+        lock.lock(); defer { lock.unlock() }
+        return callDomains[ObjectIdentifier(Thread.current)]?.last?.seq
+    }
+
     /// The current clock reading, in ticks. Used by `@Timed` macro-generated timing.
     public func now() -> Int64 {
         clock.now()
@@ -222,7 +230,8 @@ public final class TraceRecorder: @unchecked Sendable {
             subject: symbolicIDLocked(subject),
             payload: payload,
             depth: depth,
-            tier: tier
+            tier: tier,
+            spawnedBy: TraceContext.consumePendingSpawnCause()
         ))
     }
 
@@ -241,7 +250,8 @@ public final class TraceRecorder: @unchecked Sendable {
             domain: attributedDomainLocked(isolation, kind: .signpost),
             subject: symbolicIDLocked(subject),
             durationTicks: durationTicks,
-            depth: depth
+            depth: depth,
+            spawnedBy: TraceContext.consumePendingSpawnCause()
         ))
     }
 
@@ -283,12 +293,12 @@ public final class TraceRecorder: @unchecked Sendable {
     private func attributedDomainLocked(_ isolation: (any Actor)?, kind: EventKind) -> ConcurrencyDomain {
         let key = ObjectIdentifier(Thread.current)
         var domain = domainLocked(isolation)
-        if domain == .ambient, let enclosing = callDomains[key]?.last {
+        if domain == .ambient, let enclosing = callDomains[key]?.last?.domain {
             domain = enclosing
         }
         switch kind {
         case .call:
-            callDomains[key, default: []].append(domain)
+            callDomains[key, default: []].append((seq: seqCounter, domain: domain))
         case .ret:
             // Defensive rather than symmetric: an async traced call may resume on another thread,
             // leaving this one's stack short. Popping what is not there would attribute later events

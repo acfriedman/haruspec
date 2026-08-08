@@ -88,3 +88,94 @@ final class CausalDomainAttributionTests: XCTestCase {
         XCTAssertEqual(marker?.domain, .queue("com.emporium.cart"))
     }
 }
+
+/// The one happens-before edge the runtime hands over for free: work that arrived by dispatch or task
+/// rather than by being called, and the call that put it there.
+final class SpawnEdgeTests: XCTestCase {
+    private func cause(of label: String, in recorder: TraceRecorder) -> Int?? {
+        recorder.trace().events.first { $0.label == label }.map(\.spawnedBy)
+    }
+
+    /// Read at the enqueue, which is the only moment both ends are known — by the time the block runs,
+    /// the call that spawned it may already have returned.
+    func testDispatchedWorkNamesTheCallThatEnqueuedIt() async {
+        let recorder = TraceRecorder(name: "spawn")
+        let queue = DispatchQueue(label: "com.emporium.cart")
+
+        TraceContext.$current.withValue(recorder) {
+            recorder.call("Cart.checkout")
+            queue.async { recorder.marker("reserve-stock") }
+            recorder.ret("Cart.checkout")
+        }
+        let drained = await DispatchSeam.quiesce(timeout: 5)
+        XCTAssertTrue(drained)
+
+        let checkoutSeq = recorder.trace().events.first { $0.label == "Cart.checkout" }?.seq
+        XCTAssertEqual(cause(of: "reserve-stock", in: recorder), checkoutSeq)
+    }
+
+    /// Program order carries the rest: one edge to the block's first event says the whole block
+    /// happens after the enqueue, so a second event inside claims nothing.
+    func testOnlyTheFirstEventInABlockCarriesTheEdge() async {
+        let recorder = TraceRecorder(name: "spawn")
+        let queue = DispatchQueue(label: "com.emporium.cart")
+
+        TraceContext.$current.withValue(recorder) {
+            recorder.call("Cart.checkout")
+            queue.async {
+                recorder.marker("first")
+                recorder.marker("second")
+            }
+            recorder.ret("Cart.checkout")
+        }
+        _ = await DispatchSeam.quiesce(timeout: 5)
+
+        XCTAssertNotNil(cause(of: "first", in: recorder) ?? nil)
+        XCTAssertNil(cause(of: "second", in: recorder) ?? nil)
+    }
+
+    /// An unawaited `Task` is a spawn too, and the task path carries the cause in a task-local rather
+    /// than a thread-local — `Thread.current` is unavailable where that binding has to be made.
+    func testAnUnawaitedTaskAlsoNamesItsCause() async {
+        let recorder = TraceRecorder(name: "spawn-task")
+
+        TraceContext.$current.withValue(recorder) {
+            recorder.call("Cart.checkout")
+            Task { recorder.marker("deferred") }
+            recorder.ret("Cart.checkout")
+        }
+        _ = await DispatchSeam.quiesce(timeout: 5)
+
+        XCTAssertEqual(cause(of: "deferred", in: recorder), recorder.trace().events.first?.seq)
+    }
+
+    /// Canonicalization re-densifies every `seq`, and an edge *is* a `seq`. Dropping a kind must move
+    /// the edges with it rather than leave them pointing at whichever event inherited the number.
+    func testEdgesSurviveCanonicalRenumbering() {
+        let raw = Trace(name: "t", events: [
+            TraceEvent(seq: 0, kind: .custom, label: "noise"),
+            TraceEvent(seq: 1, kind: .call, label: "Cart.checkout"),
+            TraceEvent(seq: 2, kind: .marker, label: "reserve", tier: .semantic, spawnedBy: 1)
+        ])
+
+        let canonical = Canonicalizer.canonicalize(raw, spec: Tolerance(ignoredKinds: [.custom]))
+
+        let checkout = canonical.events.first { $0.label == "Cart.checkout" }
+        let reserve = canonical.events.first { $0.label == "reserve" }
+        XCTAssertEqual(checkout?.seq, 0, "the dropped event's number was reclaimed")
+        XCTAssertEqual(reserve?.spawnedBy, 0, "and the edge followed its cause rather than the number")
+    }
+
+    /// An edge whose cause was filtered out is dropped, not left dangling — a fabricated causal claim
+    /// is worse than a missing one.
+    func testAnEdgeToAFilteredCauseIsDropped() {
+        let raw = Trace(name: "t", events: [
+            TraceEvent(seq: 0, kind: .custom, label: "spawner"),
+            TraceEvent(seq: 1, kind: .marker, label: "spawned", tier: .semantic, spawnedBy: 0)
+        ])
+
+        let canonical = Canonicalizer.canonicalize(raw, spec: Tolerance(ignoredKinds: [.custom]))
+
+        XCTAssertNil(canonical.events.first?.spawnedBy)
+    }
+}

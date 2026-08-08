@@ -87,16 +87,23 @@ public extension DispatchSeam {
         _ operation: @escaping @Sendable () async -> Void
     ) -> @Sendable () async -> Void {
         guard let recorder = acquireForSwift() else { return operation }
+        // Read at the enqueue: this is the only moment both ends of the edge are in hand.
+        let cause = recorder.enclosingCallSeq()
         return {
-            await TraceContext.$current.withValue(recorder) { await operation() }
+            await TraceContext.$current.withValue(recorder) {
+                await TraceContext.$pendingSpawnCause.withValue(TraceContext.SpawnCause(cause)) {
+                    await operation()
+                }
+            }
             finishForSwift()
         }
     }
 
     static func seamWrap(_ work: @escaping @Sendable () -> Void) -> @Sendable () -> Void {
         guard let recorder = acquireForSwift() else { return work }
+        let cause = recorder.enclosingCallSeq()
         return {
-            markingQueueEntry { TraceContext.withThreadRecorder(recorder) { work() } }
+            markingQueueEntry { TraceContext.withThreadRecorder(recorder, spawnedBy: cause) { work() } }
             finishForSwift()
         }
     }

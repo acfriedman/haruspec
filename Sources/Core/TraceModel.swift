@@ -129,6 +129,16 @@ public struct TraceEvent: Sendable, Equatable {
     /// (notifications, state changes) and markers are `.semantic`.
     public var tier: EventTier
 
+    /// The `seq` of the traced call that *spawned* this work, when it arrived by a dispatch or a task
+    /// rather than by being called — a **happens-before edge**, and the only kind the runtime hands
+    /// over for free.
+    ///
+    /// Set on the first event inside a seam-wrapped block, because program order carries the rest: the
+    /// whole block happens after the enqueue, so one edge to its first event says all of it. The cause
+    /// is the enclosing *call*, not the last event recorded, because "which unit of work spawned this"
+    /// is both more meaningful and more stable than "what happened to be recorded a moment before".
+    public var spawnedBy: Int?
+
     public init(
         seq: Int,
         kind: EventKind,
@@ -138,7 +148,8 @@ public struct TraceEvent: Sendable, Equatable {
         payload: CanonicalValue? = nil,
         durationTicks: Int64? = nil,
         depth: Int = 0,
-        tier: EventTier = .structural
+        tier: EventTier = .structural,
+        spawnedBy: Int? = nil
     ) {
         self.seq = seq
         self.kind = kind
@@ -149,12 +160,13 @@ public struct TraceEvent: Sendable, Equatable {
         self.durationTicks = durationTicks
         self.depth = depth
         self.tier = tier
+        self.spawnedBy = spawnedBy
     }
 }
 
 extension TraceEvent: Codable {
     enum CodingKeys: String, CodingKey {
-        case seq, kind, label, domain, subject, payload, durationTicks, depth, tier
+        case seq, kind, label, domain, subject, payload, durationTicks, depth, tier, spawnedBy
     }
 
     public init(from decoder: Decoder) throws {
@@ -168,6 +180,7 @@ extension TraceEvent: Codable {
         durationTicks = try container.decodeIfPresent(Int64.self, forKey: .durationTicks)
         depth = try container.decodeIfPresent(Int.self, forKey: .depth) ?? 0
         tier = try container.decodeIfPresent(EventTier.self, forKey: .tier) ?? .structural
+        spawnedBy = try container.decodeIfPresent(Int.self, forKey: .spawnedBy)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -183,6 +196,7 @@ extension TraceEvent: Codable {
         if tier != .structural {
             try container.encode(tier, forKey: .tier)
         } // omit the default for clean JSON
+        try container.encodeIfPresent(spawnedBy, forKey: .spawnedBy)
     }
 }
 

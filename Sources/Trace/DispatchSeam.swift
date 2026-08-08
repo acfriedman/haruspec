@@ -86,6 +86,26 @@ public enum DispatchSeam {
         return body()
     }
 
+    /// The C shim passes only an opaque recorder handle across the hop, so the cause rides alongside it
+    /// rather than through the block. Keyed by enqueue order per recorder: dispatch delivers a serial
+    /// queue's blocks in the order they were enqueued, and a concurrent queue's causes are
+    /// interchangeable only in the sense that any of them is a true edge from the same call.
+    private nonisolated(unsafe) static var stashedCauses: [ObjectIdentifier: [Int?]] = [:]
+
+    static func stashSpawnCause(_ cause: Int?, for recorder: TraceRecorder) {
+        lock.lock(); defer { lock.unlock() }
+        stashedCauses[ObjectIdentifier(recorder), default: []].append(cause)
+    }
+
+    static func takeSpawnCause(for recorder: TraceRecorder) -> Int? {
+        lock.lock(); defer { lock.unlock() }
+        let key = ObjectIdentifier(recorder)
+        guard var queued = stashedCauses[key], queued.isEmpty == false else { return nil }
+        let cause = queued.removeFirst()
+        stashedCauses[key] = queued
+        return cause
+    }
+
     /// Internal accessors the Swift-side overloads reach; the C entry points use `acquire`/`finish`.
     static func acquireForSwift() -> TraceRecorder? {
         acquire()
@@ -121,6 +141,8 @@ public enum DispatchSeam {
 @_cdecl("haruspec_context_acquire")
 public func haruspecContextAcquire() -> UnsafeMutableRawPointer? {
     guard let recorder = DispatchSeam.acquire() else { return nil }
+    // The cause is read here, at the enqueue, and stashed against the recorder for the block to claim.
+    DispatchSeam.stashSpawnCause(recorder.enclosingCallSeq(), for: recorder)
     return Unmanaged.passRetained(recorder).toOpaque()
 }
 
@@ -132,7 +154,10 @@ public func haruspecContextRun(
     _ block: @convention(block) () -> Void
 ) {
     let recorder = Unmanaged<TraceRecorder>.fromOpaque(context).takeUnretainedValue()
-    DispatchSeam.markingQueueEntry { TraceContext.withThreadRecorder(recorder) { block() } }
+    let cause = DispatchSeam.takeSpawnCause(for: recorder)
+    DispatchSeam.markingQueueEntry {
+        TraceContext.withThreadRecorder(recorder, spawnedBy: cause) { block() }
+    }
 }
 
 /// Balances `acquire`: releases the handle and marks the work no longer outstanding.

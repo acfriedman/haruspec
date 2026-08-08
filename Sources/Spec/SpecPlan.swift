@@ -45,8 +45,10 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// names threads that no longer exist as a concept. Bumped to 4 when `pool` became `ambient`: a
     /// version-3 artifact records where unisolated work *landed*, which the resolver no longer treats
     /// as a fact about the subject. Without the bump those plans fail on an unrecognized spelling
-    /// rather than on the one message that helps — re-record.
-    public static let supportedSchemaVersion = 4
+    /// rather than on the one message that helps — re-record. Bumped to 5 when events began carrying
+    /// `spawnedBy`: a version-4 plan has no happens-before edges, and a replay against one would read
+    /// their absence as the subject having stopped spawning work.
+    public static let supportedSchemaVersion = 5
 
     public var schemaVersion: Int
     public var specName: String
