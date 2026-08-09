@@ -149,7 +149,7 @@ final class SpecMarkdownReportTests: XCTestCase {
     func testIntentSplitRendersIntendedAndCollateralSeparately() async {
         let plan = await cart(system: makeGood).record()
         let declared = Intent(expectedNewEvents: ["LoyaltyPointsEarned"])
-        let verdict = await cart(system: makeLoyaltyRoundBug).intend(declared).verify(replaying: plan)
+        let verdict = await cart(system: makeLoyaltyRoundBug).verify(replaying: plan, declaring: declared)
         XCTAssertEqual(verdict.verdict, .diverged, "the riding regression still gates")
         XCTAssertGreaterThan(verdict.diff.intendedCount, 0)
         XCTAssertGreaterThan(verdict.diff.collateralCount, 0)

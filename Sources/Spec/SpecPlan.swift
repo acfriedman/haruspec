@@ -210,7 +210,7 @@ public extension Spec {
     /// intent-declared deltas are absorbed and the residual collateral gates. Inputs the current build
     /// can't reproduce (a renamed/removed op, a seam read past the recording) downgrade an otherwise
     /// EQUIVALENT verdict to CANNOT-VERIFY via `.unrecorded` coverage gaps.
-    func verify(replaying plan: SpecPlan) async -> SpecVerdict {
+    func verify(replaying plan: SpecPlan, declaring intent: Intent = .none) async -> SpecVerdict {
         let opsByLabel = Dictionary(uniqueKeysWithValues: operations.map { ($0.label, $0) })
         let planOps = orderedUnion(plan.probes.map(\.ordering))
         let missingOps = planOps.filter { opsByLabel[$0] == nil }
@@ -280,8 +280,8 @@ public extension Spec {
     }
 
     /// `verify(replaying:)` against a plan artifact on disk.
-    func verify(replayingContentsOf url: URL) async throws -> SpecVerdict {
-        try await verify(replaying: SpecPlan(contentsOf: url))
+    func verify(replayingContentsOf url: URL, declaring intent: Intent = .none) async throws -> SpecVerdict {
+        try await verify(replaying: SpecPlan(contentsOf: url), declaring: intent)
     }
 
     // MARK: - Machinery

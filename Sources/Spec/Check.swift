@@ -16,14 +16,17 @@ import HaruspecSeams
 public extension Spec {
     /// Verify one build against this spec's baseline, returning the verdict paired with the expectation
     /// it was held to. `name` titles the console banner and the HTML report written to `reportsIn`
-    /// (Haruspec's temp `HaruspecReports` folder by default).
+    /// (Haruspec's temp `HaruspecReports` folder by default). `declaring` is this build's intent —
+    /// the deltas *this port* is meant to produce — which lives here, next to the build it describes,
+    /// because a declaration on the spec would leak one port's excuses to every other candidate.
     func verify(
         _ name: String,
         expecting expected: TraceDiff.Verdict = .equivalent,
+        declaring intent: Intent = .none,
         reportsIn directory: URL? = nil,
         _ make: @escaping (SeamContext) -> S
     ) async -> CandidateVerdict {
-        let verdict = await verify(against: make)
+        let verdict = await verify(against: make, declaring: intent)
         return CandidateVerdict(
             name: name,
             expected: expected,
@@ -37,10 +40,12 @@ public extension Spec {
     func check(
         _ name: String,
         expecting expected: TraceDiff.Verdict = .equivalent,
+        declaring intent: Intent = .none,
         reportsIn directory: URL? = nil,
         _ make: @escaping (SeamContext) -> S
     ) async throws {
-        try await verify(name, expecting: expected, reportsIn: directory, make).check(in: self.name)
+        try await verify(name, expecting: expected, declaring: intent, reportsIn: directory, make)
+            .check(in: self.name)
     }
 }
 
@@ -50,10 +55,11 @@ public extension SpecProviding {
     func check(
         _ name: String,
         expecting expected: TraceDiff.Verdict = .equivalent,
+        declaring intent: Intent = .none,
         reportsIn directory: URL? = nil,
         _ make: @escaping (SeamContext) -> System
     ) async throws {
-        try await spec.check(name, expecting: expected, reportsIn: directory, make)
+        try await spec.check(name, expecting: expected, declaring: intent, reportsIn: directory, make)
     }
 }
 

@@ -12,21 +12,27 @@ import HaruspecSeams
 // constructor — `(SeamContext) -> S`, the same shape `.system` takes. Nothing about it survives a
 // round-trip through JSON, and keeping it in Swift keeps rename-safety and autocomplete.
 
-/// One build to interrogate against the spec's baseline, and the verdict it is expected to earn.
+/// One build to interrogate against the spec's baseline, the verdict it is expected to earn, and the
+/// deltas it declares — expectation and intent both travel with the candidate, because both are facts
+/// about *this* build, not about the behavior being specified.
 public struct Candidate<S> {
     public let name: String
     /// What this candidate *should* produce. Defaults to `.equivalent` — the ordinary case, a port
     /// meant to be indistinguishable from the baseline.
     public let expected: TraceDiff.Verdict
+    /// The deltas this candidate is meant to produce (`Intent.none` = parity: it declares nothing).
+    public let declared: Intent
     let make: (SeamContext) -> S
 
     public init(
         _ name: String,
         expecting expected: TraceDiff.Verdict = .equivalent,
+        declaring intent: Intent = .none,
         _ make: @escaping (SeamContext) -> S
     ) {
         self.name = name
         self.expected = expected
+        declared = intent
         self.make = make
     }
 }
@@ -76,7 +82,13 @@ public extension Spec {
     }
 
     private func run(_ candidate: Candidate<S>, reportsIn directory: URL?) async -> CandidateVerdict {
-        await verify(candidate.name, expecting: candidate.expected, reportsIn: directory, candidate.make)
+        await verify(
+            candidate.name,
+            expecting: candidate.expected,
+            declaring: candidate.declared,
+            reportsIn: directory,
+            candidate.make
+        )
     }
 }
 

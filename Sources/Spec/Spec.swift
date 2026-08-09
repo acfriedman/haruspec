@@ -192,7 +192,6 @@ public struct Spec<S> {
     /// `.observe(notifications:)`, for callers who want to narrow to a few product channels.
     var notificationNames: Set<String>?
     var tolerances: Tolerance = .strict
-    var intent: Intent = .none
     var seamDomains: [String: SeamDomain] = [:]
     /// Which of `seamDomains` came from a typed op argument — so a `Seam(_:_:)` that collides with one
     /// traps instead of quietly redefining an argument's domain from a distance.
@@ -269,13 +268,6 @@ public struct Spec<S> {
     /// Declared acceptable deltas.
     public func tolerate(_ spec: Tolerance) -> Spec<S> {
         var copy = self; copy.tolerances = spec; return copy
-    }
-
-    /// Extension mode: declare the deltas the change was *meant* to make. Declared divergences are
-    /// reported as `intended` and don't gate; the verdict gates on the residual collateral. The default
-    /// (`Intent.none`) is parity mode — every divergence gates. See `Intent`.
-    public func intend(_ spec: Intent) -> Spec<S> {
-        var copy = self; copy.intent = spec; return copy
     }
 
     /// What to vary — seam domains and/or call ordering.

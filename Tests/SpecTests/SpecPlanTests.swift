@@ -212,12 +212,12 @@ final class SpecPlanTests: XCTestCase {
 
         // Declared: the same delta under an intent spec is absorbed…
         let declared = Intent(expectedNewEvents: ["LoyaltyPointsEarned"])
-        let extended = await cart(system: makeLoyalty).intend(declared).verify(replaying: plan)
+        let extended = await cart(system: makeLoyalty).verify(replaying: plan, declaring: declared)
         XCTAssertEqual(extended.verdict, .equivalent, "the declared feature delta doesn't gate")
         XCTAssertGreaterThan(extended.diff.intendedCount, 0, "…but is still reported, labeled intended")
 
         // …while an *undeclared* regression riding along still gates.
-        let riding = await cart(system: makeRoundBug).intend(declared).verify(replaying: plan)
+        let riding = await cart(system: makeRoundBug).verify(replaying: plan, declaring: declared)
         XCTAssertEqual(riding.verdict, .diverged, "intent never excuses collateral")
     }
 

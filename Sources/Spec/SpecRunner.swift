@@ -162,7 +162,14 @@ public extension Spec {
     /// Differentially verify a candidate implementation against this spec's baseline: run both
     /// against the *same* generated inputs (call orderings × seam values) and diff. The baseline branch
     /// is the oracle, so no expected output is needed. Stops at (and shrinks) the first divergence.
-    func verify(against candidate: @escaping (SeamContext) -> S) async -> SpecVerdict {
+    ///
+    /// `declaring` is the *candidate's* intent — the deltas this particular port is meant to produce.
+    /// It rides the verification call rather than the spec because the spec declares the subject's
+    /// behavior, which every candidate shares; what a given port changes is a fact about that port.
+    func verify(
+        against candidate: @escaping (SeamContext) -> S,
+        declaring intent: Intent = .none
+    ) async -> SpecVerdict {
         // Golden: the declared order under live seams — the template every variation is derived from.
         let recording = Cassette()
         _ = await capture(make: makeSystem, order: explorationOrder(), cassette: recording)
@@ -172,9 +179,20 @@ public extension Spec {
 
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index) {
-                let run = await compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette)
+                let run = await compare(
+                    make: makeSystem,
+                    candidate: candidate,
+                    order: order,
+                    cassette: cassette,
+                    declaring: intent
+                )
                 guard run.diff.isEquivalent else {
-                    let shrunk = await shrink(candidate: candidate, failing: order, cassette: cassette)
+                    let shrunk = await shrink(
+                        candidate: candidate,
+                        failing: order,
+                        cassette: cassette,
+                        declaring: intent
+                    )
                     let coverage = coverage(replays: [run.candidateReplay], domainHeld: false)
                     let failing = exploreOrdering ? shrunk.map(\.label) : nil
                     return SpecVerdict(
@@ -189,7 +207,13 @@ public extension Spec {
             }
         }
         // Held across the whole explored surface: the swept seams earn domain-coverage credit.
-        let representative = await compare(make: makeSystem, candidate: candidate, order: operations, cassette: golden)
+        let representative = await compare(
+            make: makeSystem,
+            candidate: candidate,
+            order: operations,
+            cassette: golden,
+            declaring: intent
+        )
         let coverage = coverage(replays: [representative.candidateReplay], domainHeld: true)
         return SpecVerdict(
             result: VerificationResult(diff: representative.diff, coverage: coverage),
@@ -250,7 +274,8 @@ public extension Spec {
         make: (SeamContext) -> S,
         candidate: (SeamContext) -> S,
         order: [Op<S>],
-        cassette: CassetteData
+        cassette: CassetteData,
+        declaring intent: Intent
     ) async -> (diff: TraceDiff, candidateReplay: Cassette) {
         let baseline = await capture(make: make, order: order, cassette: Cassette(replaying: cassette))
         let replay = Cassette(replaying: cassette)
@@ -260,8 +285,19 @@ public extension Spec {
         return (diff, replay)
     }
 
-    private func diverges(candidate: (SeamContext) -> S, order: [Op<S>], cassette: CassetteData) async -> TraceDiff? {
-        let diff = await compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette).diff
+    private func diverges(
+        candidate: (SeamContext) -> S,
+        order: [Op<S>],
+        cassette: CassetteData,
+        declaring intent: Intent
+    ) async -> TraceDiff? {
+        let diff = await compare(
+            make: makeSystem,
+            candidate: candidate,
+            order: order,
+            cassette: cassette,
+            declaring: intent
+        ).diff
         return diff.isEquivalent ? nil : diff
     }
 
@@ -325,14 +361,20 @@ public extension Spec {
     private func shrink(
         candidate: @escaping (SeamContext) -> S,
         failing: [Op<S>],
-        cassette: CassetteData
+        cassette: CassetteData,
+        declaring intent: Intent
     ) async -> [Op<S>] {
         var minimal = failing
         var index = 0
         while index < minimal.count {
             var trial = minimal
             trial.remove(at: index)
-            if !trial.isEmpty, await diverges(candidate: candidate, order: trial, cassette: cassette) != nil {
+            if !trial.isEmpty, await diverges(
+                candidate: candidate,
+                order: trial,
+                cassette: cassette,
+                declaring: intent
+            ) != nil {
                 minimal = trial // op wasn't needed to reproduce
             } else {
                 index += 1
