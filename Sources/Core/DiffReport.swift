@@ -100,6 +100,8 @@ public extension TraceDiff {
         case .reordered: "↔"
         case .domainMigration: "⇄"
         case .orderingRelaxed: "⤳"
+        case .orderingLost: "⊘"
+        case .orderingAdded: "⊕"
         case .valueMismatch: "≠"
         case .timingRegression: "⏱"
         }

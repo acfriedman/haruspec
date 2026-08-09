@@ -38,7 +38,7 @@ extension BehavioralDiff {
         baseline: [TraceEvent],
         candidate: [TraceEvent],
         spec: Tolerance,
-        into divergences: inout [Divergence]
+        into scratch: inout DiffScratch
     ) {
         var domains: [ConcurrencyDomain] = []
         var seen = Set<ConcurrencyDomain>()
@@ -66,7 +66,7 @@ extension BehavioralDiff {
                     bucketBaseline,
                     bucketCandidate,
                     spec: spec,
-                    into: &divergences,
+                    into: &scratch,
                     leftovers: &leftovers
                 )
             } else {
@@ -74,13 +74,13 @@ extension BehavioralDiff {
                     bucketBaseline,
                     bucketCandidate,
                     spec: spec,
-                    into: &divergences,
+                    into: &scratch,
                     leftovers: &leftovers
                 )
             }
         }
 
-        reconcileAcrossDomains(leftovers, spec: spec, into: &divergences)
+        reconcileAcrossDomains(leftovers, spec: spec, into: &scratch)
     }
 
     /// The structural-tier advisory rule, derived from the spec — the projection's spelling of the
@@ -97,7 +97,7 @@ extension BehavioralDiff {
         _ baseline: [TraceEvent],
         _ candidate: [TraceEvent],
         spec: Tolerance,
-        into divergences: inout [Divergence],
+        into scratch: inout DiffScratch,
         leftovers: inout Leftovers
     ) {
         let baselineSig = baseline.map(signature)
@@ -112,7 +112,7 @@ extension BehavioralDiff {
                 candidate[candidateIndex],
                 spec: spec,
                 isAdvisory: isAdvisory(baseline[baselineIndex].tier, under: spec),
-                into: &divergences
+                into: &scratch
             )
         }
 
@@ -121,7 +121,7 @@ extension BehavioralDiff {
             if let slot = unmatchedInsertions.firstIndex(where: { candidateSig[$0] == baselineSig[baselineIndex] }) {
                 let candidateIndex = unmatchedInsertions.remove(at: slot)
                 if !spec.isUnordered(label: baseline[baselineIndex].label) {
-                    divergences.append(
+                    scratch.divergences.append(
                         Divergence(
                             kind: .reordered,
                             label: baseline[baselineIndex].label,
@@ -139,7 +139,7 @@ extension BehavioralDiff {
                     candidate[candidateIndex],
                     spec: spec,
                     isAdvisory: isAdvisory(baseline[baselineIndex].tier, under: spec),
-                    into: &divergences
+                    into: &scratch
                 )
             } else {
                 leftovers.baseline.append(baseline[baselineIndex])
@@ -158,7 +158,7 @@ extension BehavioralDiff {
         _ baseline: [TraceEvent],
         _ candidate: [TraceEvent],
         spec: Tolerance,
-        into divergences: inout [Divergence],
+        into scratch: inout DiffScratch,
         leftovers: inout Leftovers
     ) {
         var candidateBySignature: [Signature: [TraceEvent]] = [:]
@@ -196,7 +196,7 @@ extension BehavioralDiff {
                     candidateEvent,
                     spec: spec,
                     isAdvisory: isAdvisory(baselineEvent.tier, under: spec),
-                    into: &divergences
+                    into: &scratch
                 )
             }
             leftovers.baseline.append(contentsOf: unpaired)
@@ -215,7 +215,7 @@ extension BehavioralDiff {
     private static func reconcileAcrossDomains(
         _ leftovers: Leftovers,
         spec: Tolerance,
-        into divergences: inout [Divergence]
+        into scratch: inout DiffScratch
     ) {
         var relaxations: [Relaxation] = []
         var unmatched = leftovers.candidate.sorted { $0.seq < $1.seq }
@@ -230,9 +230,9 @@ extension BehavioralDiff {
                    signature($0).ignoringDomain == eventSig && payloadsMatch(event, $0, spec: spec)
                }) ?? unmatched.firstIndex(where: { signature($0).ignoringDomain == eventSig }) {
                 let counterpart = unmatched.remove(at: slot)
-                recordMigration(event, counterpart, spec: spec, into: &divergences, relaxations: &relaxations)
+                recordMigration(event, counterpart, spec: spec, into: &scratch, relaxations: &relaxations)
             } else {
-                divergences.append(
+                scratch.divergences.append(
                     Divergence(
                         kind: .missingEvent,
                         label: event.label,
@@ -245,7 +245,7 @@ extension BehavioralDiff {
             }
         }
         for event in unmatched {
-            divergences.append(
+            scratch.divergences.append(
                 Divergence(
                     kind: .unexpectedEvent,
                     label: event.label,
@@ -261,7 +261,7 @@ extension BehavioralDiff {
         // domain, not of any one event, and the migration that carried it is advisory precisely
         // because this divergence is the one that isn't. `Intent` is the way to green.
         for relaxation in relaxations {
-            divergences.append(
+            scratch.divergences.append(
                 Divergence(
                     kind: .orderingRelaxed,
                     label: relaxation.origin.declaredName,
@@ -280,10 +280,10 @@ extension BehavioralDiff {
         _ event: TraceEvent,
         _ counterpart: TraceEvent,
         spec: Tolerance,
-        into divergences: inout [Divergence],
+        into scratch: inout DiffScratch,
         relaxations: inout [Relaxation]
     ) {
-        divergences.append(
+        scratch.divergences.append(
             Divergence(
                 kind: .domainMigration,
                 label: event.label,
@@ -298,7 +298,7 @@ extension BehavioralDiff {
             counterpart,
             spec: spec,
             isAdvisory: isAdvisory(event.tier, under: spec),
-            into: &divergences
+            into: &scratch
         )
         guard event.domain.isOrdered, !counterpart.domain.isOrdered else { return }
         if let index = relaxations.firstIndex(where: {

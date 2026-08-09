@@ -41,7 +41,7 @@ extension BehavioralDiff {
         _ alignment: Alignment,
         spec: Tolerance,
         advisory: (EventTier) -> Bool,
-        into divergences: inout [Divergence]
+        into scratch: inout DiffScratch
     ) {
         let (baseline, candidate) = (alignment.baseline, alignment.candidate)
         let (baselineSig, candidateSig) = (alignment.baselineSig, alignment.candidateSig)
@@ -52,7 +52,7 @@ extension BehavioralDiff {
             if let slot = unmatchedInsertions.firstIndex(where: { candidateSig[$0] == baselineSig[baselineIndex] }) {
                 let candidateIndex = unmatchedInsertions.remove(at: slot)
                 if !spec.isUnordered(label: baseline[baselineIndex].label) {
-                    divergences.append(
+                    scratch.divergences.append(
                         Divergence(
                             kind: .reordered,
                             label: baseline[baselineIndex].label,
@@ -70,7 +70,7 @@ extension BehavioralDiff {
                     candidate[candidateIndex],
                     spec: spec,
                     isAdvisory: advisory(baseline[baselineIndex].tier),
-                    into: &divergences
+                    into: &scratch
                 )
             } else if spec.domainMigration != .ignored,
                       let slot = unmatchedInsertions.firstIndex(where: {
@@ -81,7 +81,7 @@ extension BehavioralDiff {
                 // queue to an actor migrates *every* event it touches, and pairs would bury the values
                 // — which are what actually say whether behavior survived the move.
                 let candidateIndex = unmatchedInsertions.remove(at: slot)
-                divergences.append(
+                scratch.divergences.append(
                     Divergence(
                         kind: .domainMigration,
                         label: baseline[baselineIndex].label,
@@ -99,10 +99,10 @@ extension BehavioralDiff {
                     candidate[candidateIndex],
                     spec: spec,
                     isAdvisory: advisory(baseline[baselineIndex].tier),
-                    into: &divergences
+                    into: &scratch
                 )
             } else {
-                divergences.append(
+                scratch.divergences.append(
                     Divergence(
                         kind: .missingEvent,
                         label: baseline[baselineIndex].label,
@@ -115,7 +115,7 @@ extension BehavioralDiff {
             }
         }
         for candidateIndex in unmatchedInsertions {
-            divergences.append(
+            scratch.divergences.append(
                 Divergence(
                     kind: .unexpectedEvent,
                     label: candidate[candidateIndex].label,

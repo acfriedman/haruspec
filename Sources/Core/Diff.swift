@@ -16,6 +16,8 @@ public struct Divergence: Codable, Sendable, Equatable {
         case reordered // an event moved, and its order is significant
         case domainMigration // the same event, on a different isolation domain
         case orderingRelaxed // work left an ordered domain for an unordered one — a guarantee was dropped
+        case orderingLost // a happens-before constraint held in baseline; the candidate leaves the pair concurrent
+        case orderingAdded // the candidate constrains a pair the baseline left concurrent — new synchronization
         case valueMismatch // an aligned event's payload differs beyond tolerance
         case timingRegression // an aligned interval got slower than its declared budget allows
     }
@@ -86,6 +88,15 @@ public struct TraceDiff: Codable, Sendable, Equatable {
 ///  4. For every aligned pair, compare payload values (within numeric epsilon) and interval timing
 ///     (within declared budgets).
 public enum BehavioralDiff {
+    /// Working state one comparison accumulates: the divergences found so far, and every aligned
+    /// (baseline, candidate) pair — recorded at the single choke point every matcher runs through
+    /// (`compareAligned`), so the spawn-edge pass can read the finished alignment whichever
+    /// concurrency mode produced it.
+    struct DiffScratch {
+        var divergences: [Divergence] = []
+        var alignedPairs: [(baseline: TraceEvent, candidate: TraceEvent)] = []
+    }
+
     public static func compare(
         baseline rawBaseline: Trace,
         candidate rawCandidate: Trace,
@@ -104,7 +115,7 @@ public enum BehavioralDiff {
             spec.structuralComparison == .advisory && tier == .structural
         }
 
-        var divergences: [Divergence] = []
+        var scratch = DiffScratch()
 
         switch spec.concurrency {
         case .totalOrder:
@@ -113,7 +124,7 @@ public enum BehavioralDiff {
                 candidate: candidate,
                 spec: spec,
                 advisory: advisory,
-                into: &divergences
+                into: &scratch
             )
         case .perDomain:
             // The projection: one comparison per domain (sequence where order is a guarantee,
@@ -122,23 +133,27 @@ public enum BehavioralDiff {
                 baseline: baseline,
                 candidate: candidate,
                 spec: spec,
-                into: &divergences
+                into: &scratch
             )
         }
 
-        divergences.sort { lhs, rhs in
+        // The happens-before pass: with alignment settled, compare the *constraints* the recorded
+        // spawn edges imply. `DiffSpawnEdges.swift`.
+        compareSpawnEdges(baseline: baseline, candidate: candidate, spec: spec, into: &scratch)
+
+        scratch.divergences.sort { lhs, rhs in
             (lhs.baselineSeq ?? lhs.candidateSeq ?? Int.max, lhs.candidateSeq ?? Int.max)
                 < (rhs.baselineSeq ?? rhs.candidateSeq ?? Int.max, rhs.candidateSeq ?? Int.max)
         }
 
         // Only gating divergences decide the verdict (non-advisory, and — after an optional intent
         // pass — not a declared, intended change).
-        let diverged = divergences.contains(where: \.isGating)
+        let diverged = scratch.divergences.contains(where: \.isGating)
         return TraceDiff(
             verdict: diverged ? .diverged : .equivalent,
             baselineName: rawBaseline.name,
             candidateName: rawCandidate.name,
-            divergences: divergences
+            divergences: scratch.divergences
         )
     }
 
@@ -149,7 +164,7 @@ public enum BehavioralDiff {
         candidate: [TraceEvent],
         spec: Tolerance,
         advisory: (EventTier) -> Bool,
-        into divergences: inout [Divergence]
+        into scratch: inout DiffScratch
     ) {
         let baselineSig = baseline.map(signature)
         let candidateSig = candidate.map(signature)
@@ -165,7 +180,7 @@ public enum BehavioralDiff {
                 candidate[candidateIndex],
                 spec: spec,
                 isAdvisory: advisory(baseline[baselineIndex].tier),
-                into: &divergences
+                into: &scratch
             )
         }
 
@@ -180,7 +195,7 @@ public enum BehavioralDiff {
             ),
             spec: spec,
             advisory: advisory,
-            into: &divergences
+            into: &scratch
         )
     }
 
@@ -191,10 +206,12 @@ public enum BehavioralDiff {
         _ candidate: TraceEvent,
         spec: Tolerance,
         isAdvisory: Bool,
-        into out: inout [Divergence]
+        into scratch: inout DiffScratch
     ) {
+        // Every matcher funnels its pairs through here, so this is where the alignment is recorded.
+        scratch.alignedPairs.append((baseline, candidate))
         for path in valueDivergences(baseline.payload ?? .null, candidate.payload ?? .null, path: "", spec: spec) {
-            out.append(
+            scratch.divergences.append(
                 Divergence(
                     kind: .valueMismatch,
                     label: baseline.label,
@@ -207,7 +224,7 @@ public enum BehavioralDiff {
         }
         if let budget = spec.timingBudget(for: baseline.label),
            let base = baseline.durationTicks, let cand = candidate.durationTicks, cand - base > budget {
-            out.append(
+            scratch.divergences.append(
                 Divergence(
                     kind: .timingRegression,
                     label: baseline.label,

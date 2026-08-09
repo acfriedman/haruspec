@@ -115,6 +115,20 @@ public enum ConcurrencyComparison: String, Codable, Sendable {
     case perDomain // project by domain: ordered ⇒ sequence, unordered ⇒ multiset, cross-domain order dropped
 }
 
+/// How the recorded spawn edges participate in the verdict.
+///
+/// The edge pass compares happens-before *constraints* (see `DiffSpawnEdges.swift`): a baseline
+/// constraint the candidate can no longer prove is `orderingLost` — a dropped synchronization,
+/// detected structurally from a passing run. The captured edge set is an honest under-approximation
+/// and the pass does not chase transitive chains, so it can over-report; `.advisory` is the default
+/// until that rate is measured on real subjects. `orderingAdded` is always advisory — new
+/// synchronization is frequently the migration's point.
+public enum SpawnEdgePolicy: String, Codable, Sendable {
+    case advisory // constraint changes are reported, but do not fail the verdict
+    case gating // a lost constraint fails the verdict unless declared via Intent
+    case ignored // spawn edges are not compared at all
+}
+
 public struct Tolerance: Sendable, Equatable {
     /// Payload fields whose values are non-deterministic and must be ignored — e.g.
     /// `.key("orderID")`. Redacted to a placeholder before comparison. See `VolatileField` for the
@@ -152,6 +166,9 @@ public struct Tolerance: Sendable, Equatable {
     /// treated as behavior.
     public var concurrency: ConcurrencyComparison
 
+    /// How spawn-edge constraint changes participate in the verdict. Defaults to `.advisory`.
+    public var spawnEdges: SpawnEdgePolicy
+
     public init(
         volatileFields: [VolatileField] = [],
         numericEpsilon: Double = 0,
@@ -161,7 +178,8 @@ public struct Tolerance: Sendable, Equatable {
         ignoredNotificationNames: [String] = [],
         structuralComparison: StructuralComparison = .strict,
         domainMigration: DomainMigrationPolicy = .advisory,
-        concurrency: ConcurrencyComparison = .totalOrder
+        concurrency: ConcurrencyComparison = .totalOrder,
+        spawnEdges: SpawnEdgePolicy = .advisory
     ) {
         self.volatileFields = volatileFields
         self.numericEpsilon = numericEpsilon
@@ -172,6 +190,7 @@ public struct Tolerance: Sendable, Equatable {
         self.structuralComparison = structuralComparison
         self.domainMigration = domainMigration
         self.concurrency = concurrency
+        self.spawnEdges = spawnEdges
     }
 
     /// The default: exact match on everything (nondeterminism already removed by canonicalization of
@@ -238,7 +257,7 @@ extension VolatileField: Codable {
 extension Tolerance: Codable {
     enum CodingKeys: String, CodingKey {
         case volatileFields, numericEpsilon, timingBudgets, unorderedGroups, ignoredKinds
-        case ignoredNotificationNames, structuralComparison, domainMigration, concurrency
+        case ignoredNotificationNames, structuralComparison, domainMigration, concurrency, spawnEdges
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -256,6 +275,8 @@ extension Tolerance: Codable {
             .decodeIfPresent(DomainMigrationPolicy.self, forKey: .domainMigration) ?? .advisory
         concurrency = try container
             .decodeIfPresent(ConcurrencyComparison.self, forKey: .concurrency) ?? .totalOrder
+        spawnEdges = try container
+            .decodeIfPresent(SpawnEdgePolicy.self, forKey: .spawnEdges) ?? .advisory
     }
 }
 

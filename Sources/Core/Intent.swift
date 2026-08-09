@@ -28,16 +28,23 @@ public struct Intent: Sendable, Equatable {
     /// is the point of the PR, so it is declarable — and `orderingRelaxed` gates until it is.
     public var expectedOrderingRelaxations: [String]
 
+    /// Events (by label) whose happens-before constraint the change deliberately drops — the
+    /// `orderingLost` counterpart of a relaxation. Only consulted when `Tolerance.spawnEdges` is
+    /// `.gating`; a gate with no declarable exit would veto the work instead of checking it.
+    public var expectedOrderingLosses: [String]
+
     public init(
         expectedNewEvents: [String] = [],
         expectedRemovedEvents: [String] = [],
         expectedValueChanges: [String: [String]] = [:],
-        expectedOrderingRelaxations: [String] = []
+        expectedOrderingRelaxations: [String] = [],
+        expectedOrderingLosses: [String] = []
     ) {
         self.expectedNewEvents = expectedNewEvents
         self.expectedRemovedEvents = expectedRemovedEvents
         self.expectedValueChanges = expectedValueChanges
         self.expectedOrderingRelaxations = expectedOrderingRelaxations
+        self.expectedOrderingLosses = expectedOrderingLosses
     }
 
     /// The empty spec: nothing was declared, so every divergence stays collateral. This is parity mode.
@@ -55,9 +62,12 @@ public struct Intent: Sendable, Equatable {
             return fields.isEmpty || fields.contains { fieldMatches($0, divergence.detail) }
         case .orderingRelaxed:
             return expectedOrderingRelaxations.contains(divergence.label)
+        case .orderingLost:
+            return expectedOrderingLosses.contains(divergence.label)
         // A domain move is not declarable yet: `Intent` has no vocabulary for "this work moved to an
         // actor on purpose". Until it does, the policy on `Tolerance` is the only dial.
-        case .reordered, .timingRegression, .domainMigration:
+        // `orderingAdded` is always advisory, so declaring it would change nothing.
+        case .reordered, .timingRegression, .domainMigration, .orderingAdded:
             return false // not yet expressible as declared intent — always collateral for now
         }
     }
@@ -95,7 +105,8 @@ public extension TraceDiff {
 
 extension Intent: Codable {
     enum CodingKeys: String, CodingKey {
-        case expectedNewEvents, expectedRemovedEvents, expectedValueChanges, expectedOrderingRelaxations
+        case expectedNewEvents, expectedRemovedEvents, expectedValueChanges
+        case expectedOrderingRelaxations, expectedOrderingLosses
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -107,6 +118,8 @@ extension Intent: Codable {
             .decodeIfPresent([String: [String]].self, forKey: .expectedValueChanges) ?? [:]
         expectedOrderingRelaxations = try container
             .decodeIfPresent([String].self, forKey: .expectedOrderingRelaxations) ?? []
+        expectedOrderingLosses = try container
+            .decodeIfPresent([String].self, forKey: .expectedOrderingLosses) ?? []
     }
 }
 
