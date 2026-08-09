@@ -18,6 +18,27 @@ public extension SpecVerdict {
     /// `report()`. Leads with the shrunk counterexample, then one card per divergence (or a clean panel).
     func htmlReport() -> String {
         let name = diff.candidateName
+        // On UNSTABLE the delta panel leads regardless of run 1's own divergences — a flapping green
+        // has none, and a flapping red's cards describe one pass, not the finding.
+        let body: String = if verdict == .unstable {
+            unstablePanel + (diff.divergences.isEmpty ? "" : HTML.divergenceSection(diff.divergences))
+        } else if diff.divergences.isEmpty {
+            cleanPanel
+        } else {
+            HTML.divergenceSection(diff.divergences)
+        }
+
+        return HTML.page(title: "Haruspec · \(name)", sections: [
+            HTML.hero(verdict, title: name, baseline: diff.baselineName, candidate: name),
+            HTML.statSection(statTiles),
+            HTML.counterexampleSection(seams: counterexampleSeamPairs, order: failingOrder),
+            body
+        ])
+    }
+
+    /// The stat row: verdict, exploration, divergence count, then the qualifiers that only apply when
+    /// measured (coverage, stability, counterexample).
+    private var statTiles: [String] {
         var tiles = [
             HTML.tile(label: "Verdict", value: HTML.shortVerdict(verdict), accent: HTML.accent(verdict)),
             HTML.tile(
@@ -42,6 +63,17 @@ public extension SpecVerdict {
                 )
             )
         }
+        if stability.replays > 1 {
+            tiles.append(
+                HTML.tile(
+                    label: "Stability",
+                    value: stability.isStable
+                        ? "\(stability.replays)/\(stability.replays) identical"
+                        : "\(stability.outcomes.count) outcomes / \(stability.replays) replays",
+                    accent: stability.isStable ? "ok" : "warn"
+                )
+            )
+        }
         let seams = counterexampleSeamPairs
         if !seams.isEmpty {
             tiles.append(
@@ -52,17 +84,24 @@ public extension SpecVerdict {
                 )
             )
         }
+        return tiles
+    }
 
-        let body: String = diff.divergences.isEmpty
-            ? cleanPanel
-            : HTML.divergenceSection(diff.divergences)
-
-        return HTML.page(title: "Haruspec · \(name)", sections: [
-            HTML.hero(verdict, title: name, baseline: diff.baselineName, candidate: name),
-            HTML.statSection(tiles),
-            HTML.counterexampleSection(seams: seams, order: failingOrder),
-            body
-        ])
+    /// The run-to-run delta as the leading panel: each distinct outcome with the passes that produced
+    /// it. Run 1 may have had no divergences at all (a flapping green) — the finding is the delta.
+    private var unstablePanel: String {
+        let delta = stability.outcomes.map { outcome in
+            let runs = outcome.runs.map(String.init).joined(separator: ", ")
+            let inventory = outcome.inventory.isEmpty
+                ? "no divergences"
+                : outcome.inventory.joined(separator: " ⸱ ")
+            return "runs \(runs) → \(outcome.verdict.rawValue): \(inventory)"
+        }
+        .joined(separator: " — ")
+        return HTML.abstentionSection(
+            reason: "\(stability.replays) replays of identical inputs disagreed (\(delta)). "
+                + "An unmodeled nondeterministic axis; a verdict that cannot be reproduced cannot gate."
+        )
     }
 
     private var cleanPanel: String {

@@ -24,6 +24,8 @@ public extension SpecVerdict {
             sections.append(contentsOf: divergedBody)
         case .cannotVerify:
             sections.append(contentsOf: abstentionBody)
+        case .unstable:
+            sections.append(contentsOf: unstableBody)
         }
         sections.append(footer)
         return sections.joined(separator: "\n\n")
@@ -129,11 +131,42 @@ public extension SpecVerdict {
         return sections
     }
 
+    private var unstableBody: [String] {
+        var sections = [
+            "The plan was replayed **\(stability.replays) times over identical recorded inputs** and "
+                + "the passes disagreed — \(stability.outcomes.count) distinct outcomes. Identical "
+                + "inputs leave a disagreement only one explanation: an axis of nondeterminism the "
+                + "spec does not model (a missing tolerance, projection, or seam). Neither outcome "
+                + "below is the verdict; the *difference between them* points at the unmodeled axis."
+        ]
+        for outcome in stability.outcomes {
+            let runs = outcome.runs.map(String.init).joined(separator: ", ")
+            let noun = outcome.runs.count == 1 ? "Run" : "Runs"
+            var lines = ["**\(noun) \(runs) — \(TraceDiff.banner(outcome.verdict))**"]
+            if outcome.inventory.isEmpty {
+                lines.append("")
+                lines.append("No divergences.")
+            } else {
+                lines.append("")
+                lines += outcome.inventory.prefix(divergenceRowCap).map { "- \(tableCell($0))" }
+                if outcome.inventory.count > divergenceRowCap {
+                    lines.append("- …and \(outcome.inventory.count - divergenceRowCap) more")
+                }
+            }
+            sections.append(lines.joined(separator: "\n"))
+        }
+        sections.append("A verdict that cannot be reproduced cannot gate — **this check does not pass.**")
+        return sections
+    }
+
     private var footer: String {
         let explored = exploration.isExhaustive
             ? "\(orderingsExplored) (exhaustive)"
             : "\(orderingsExplored) of \(exploration.orderingsAreExact ? "" : "≥")\(exploration.orderingsAvailable)"
         var parts = ["Haruspec continuous verification", "orderings explored: \(explored)"]
+        if stability.replays > 1, stability.isStable {
+            parts.append("stability: \(stability.replays)/\(stability.replays) identical replays")
+        }
         if verdict != .diverged, let coverageSummary = coverageFooterSummary {
             parts.append(coverageSummary)
         }

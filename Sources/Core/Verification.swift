@@ -27,7 +27,9 @@ public struct VerificationResult: Codable, Sendable, Equatable {
     ///    to `CANNOT-VERIFY` rather than emit a pass the engine can't stand behind.
     public static func resolve(diff: TraceDiff, coverage: Coverage) -> TraceDiff.Verdict {
         switch diff.verdict {
-        case .diverged, .cannotVerify:
+        // `.unstable` is resolved a layer further out (replay repetition, not coverage) and never
+        // produced by a comparison; a diff carrying it stands as-is, like a DIVERGED.
+        case .diverged, .cannotVerify, .unstable:
             diff.verdict
         case .equivalent:
             coverage.trustsEquivalent ? .equivalent : .cannotVerify

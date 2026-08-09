@@ -69,12 +69,16 @@ public struct Divergence: Codable, Sendable, Equatable {
 
 /// The oracle's verdict: does the new behavior trace match the old within declared tolerances?
 public struct TraceDiff: Codable, Sendable, Equatable {
-    /// Three-tier by design (see `VerificationResult`): a pure trace comparison only ever *produces*
+    /// Four-tier by design (see `VerificationResult`): a pure trace comparison only ever *produces*
     /// `.equivalent` / `.diverged` — `BehavioralDiff.compare` never emits `.cannotVerify`, because a
     /// diff has no notion of coverage. `.cannotVerify` is the *resolved* verdict a `VerificationResult`
     /// reaches when isolation was incomplete, so it downgrades an untrustworthy EQUIVALENT rather than
-    /// emit a false pass. The case lives here so both types speak one verdict vocabulary.
-    public enum Verdict: String, Codable, Sendable { case equivalent, diverged, cannotVerify }
+    /// emit a false pass. `.unstable` is likewise resolved, one layer further out: identical replays
+    /// that disagree (`Spec.verify(replaying:)` runs the plan more than once) prove an unmodeled
+    /// nondeterministic axis, and neither of the disagreeing verdicts can be stood behind — a flapping
+    /// red presented as red would be a coin flip wearing a verdict. The cases live here so every layer
+    /// speaks one verdict vocabulary.
+    public enum Verdict: String, Codable, Sendable { case equivalent, diverged, cannotVerify, unstable }
 
     public var verdict: Verdict
     public var baselineName: String

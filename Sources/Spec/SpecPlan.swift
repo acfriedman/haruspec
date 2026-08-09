@@ -210,7 +210,28 @@ public extension Spec {
     /// intent-declared deltas are absorbed and the residual collateral gates. Inputs the current build
     /// can't reproduce (a renamed/removed op, a seam read past the recording) downgrade an otherwise
     /// EQUIVALENT verdict to CANNOT-VERIFY via `.unrecorded` coverage gaps.
-    func verify(replaying plan: SpecPlan, declaring intent: Intent = .none) async -> SpecVerdict {
+    ///
+    /// The whole replay runs `replays` times (see `Stability.defaultReplays`), and every pass must
+    /// reach the same verdict with the same divergence inventory. Identical recorded inputs leave a
+    /// disagreement only one explanation — an unmodeled nondeterministic axis — so it flips the verdict
+    /// to UNSTABLE and carries the run-to-run delta rather than presenting either pass as the answer.
+    /// The passes are sequential and share nothing but the immutable plan; run 1's verdict is the
+    /// representative the artifact keeps.
+    func verify(
+        replaying plan: SpecPlan,
+        declaring intent: Intent = .none,
+        replays: Int = Stability.defaultReplays
+    ) async -> SpecVerdict {
+        precondition(replays >= 1, "verify(replaying:) needs at least one replay pass, got \(replays)")
+        var passes: [SpecVerdict] = []
+        for _ in 0 ..< replays {
+            await passes.append(verifyOnce(replaying: plan, declaring: intent))
+        }
+        return passes[0].qualified(by: .measured(over: passes))
+    }
+
+    /// One replay pass — the primitive `verify(replaying:)` repeats and compares.
+    private func verifyOnce(replaying plan: SpecPlan, declaring intent: Intent) async -> SpecVerdict {
         let opsByLabel = Dictionary(uniqueKeysWithValues: operations.map { ($0.label, $0) })
         let planOps = orderedUnion(plan.probes.map(\.ordering))
         let missingOps = planOps.filter { opsByLabel[$0] == nil }
@@ -280,8 +301,12 @@ public extension Spec {
     }
 
     /// `verify(replaying:)` against a plan artifact on disk.
-    func verify(replayingContentsOf url: URL, declaring intent: Intent = .none) async throws -> SpecVerdict {
-        try await verify(replaying: SpecPlan(contentsOf: url), declaring: intent)
+    func verify(
+        replayingContentsOf url: URL,
+        declaring intent: Intent = .none,
+        replays: Int = Stability.defaultReplays
+    ) async throws -> SpecVerdict {
+        try await verify(replaying: SpecPlan(contentsOf: url), declaring: intent, replays: replays)
     }
 
     // MARK: - Machinery

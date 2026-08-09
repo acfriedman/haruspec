@@ -12,18 +12,21 @@ import HaruspecTrace
 //   haruspec report <result.json> [--markdown] [--html <path>] [--agent]
 //
 // Exit codes:  0 ok / equivalent · 1 runtime error · 2 usage error · 3 behavioral divergence ·
-//              4 cannot-verify (the oracle abstained — an uncovered/un-isolable surface).
-// A CI gate should treat BOTH 3 and 4 as non-pass; only 0 is green.
+//              4 cannot-verify (the oracle abstained — an uncovered/un-isolable surface) ·
+//              5 unstable (identical replays disagreed — the verdict cannot be reproduced).
+// A CI gate should treat 3, 4 AND 5 as non-pass; only 0 is green.
 
-enum ExitCode: Int32 { case success = 0, runtime = 1, usage = 2, diverged = 3, cannotVerify = 4 }
+enum ExitCode: Int32 { case success = 0, runtime = 1, usage = 2, diverged = 3, cannotVerify = 4, unstable = 5 }
 
-/// Map a three-tier verdict to the process exit code. The bare two-file `diff` path never produces
-/// `.cannotVerify` (it makes no coverage claim); this is shared so the replay/MCP paths stay honest.
+/// Map a four-tier verdict to the process exit code. The bare two-file `diff` path never produces
+/// `.cannotVerify` or `.unstable` (it makes no coverage or repetition claim); this is shared so the
+/// replay/MCP paths stay honest.
 func exitCode(for verdict: TraceDiff.Verdict) -> ExitCode {
     switch verdict {
     case .equivalent: .success
     case .diverged: .diverged
     case .cannotVerify: .cannotVerify
+    case .unstable: .unstable
     }
 }
 
@@ -217,7 +220,18 @@ func runReport(_ rest: [String]) -> Never {
         let markdown = flags["markdown"] != nil
         print(markdown ? verdict.markdownReport() : verdict.report())
         if flags["agent"] != nil {
-            let brief = verdict.result.agentBrief()
+            // `result` is run 1's single pass; on UNSTABLE its gate (PASS/FAIL) is exactly what the
+            // repetition disproved, so the brief must not be relayed as-is.
+            let brief = verdict.verdict == .unstable
+                ? """
+                ── FOR THE AGENT · how to relay this verdict ──
+                • Gate: UNSTABLE (exit code 5) — \(verdict.stability.replays) replays of identical \
+                recorded inputs disagreed. This check does NOT pass.
+                • Do NOT relay any single run's outcome as the verdict; the finding is the run-to-run \
+                delta printed above, which points at an unmodeled nondeterministic axis (a missing \
+                tolerance, projection, or seam).
+                """
+                : verdict.result.agentBrief()
             // In markdown mode the brief is machine-facing text, not prose — fence it.
             print(markdown ? "\n```text\n\(brief)\n```" : "\n" + brief)
         }

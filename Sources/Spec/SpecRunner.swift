@@ -24,6 +24,9 @@ public struct SpecVerdict: Codable, Sendable {
     public let counterexample: CassetteData?
     /// The budget spent and the surface it covered.
     public let exploration: Exploration
+    /// How the verdict behaved across repeated replays. `.singleRun` where repetition never happened
+    /// (the live differential, a one-pass replay) — reported as unmeasured, never as reproduced.
+    public let stability: Stability
 
     public init(
         result: VerificationResult,
@@ -31,7 +34,8 @@ public struct SpecVerdict: Codable, Sendable {
         failingOrder: [String]?,
         counterexample: CassetteData?,
         exploration: Exploration,
-        violatedPreconditions: [String]? = nil
+        violatedPreconditions: [String]? = nil,
+        stability: Stability = .singleRun
     ) {
         self.result = result
         self.orderingsExplored = orderingsExplored
@@ -39,10 +43,14 @@ public struct SpecVerdict: Codable, Sendable {
         self.counterexample = counterexample
         self.exploration = exploration
         self.violatedPreconditions = violatedPreconditions
+        self.stability = stability
     }
 
+    /// The resolved verdict, with stability applied above coverage: disagreeing replays flip *any*
+    /// underlying verdict to UNSTABLE — a coin flip reported as red (or green) would spend the gate's
+    /// credibility on noise. `result.verdict` keeps run 1's underlying verdict for forensics.
     public var verdict: TraceDiff.Verdict {
-        result.verdict
+        stability.isStable ? result.verdict : .unstable
     }
 
     public var diff: TraceDiff {
@@ -56,13 +64,9 @@ public struct SpecVerdict: Codable, Sendable {
 
     /// A compact rendering built from the diff's public surface (a caller / LLM would print this).
     public func report() -> String {
-        let banner = switch verdict {
-        case .equivalent: "✅ EQUIVALENT"
-        case .diverged: "❌ DIVERGED"
-        case .cannotVerify: "⚠️ CANNOT-VERIFY"
-        }
-        var lines = ["\(banner)  \(diff.baselineName) → \(diff.candidateName)",
+        var lines = ["\(TraceDiff.banner(verdict))  \(diff.baselineName) → \(diff.candidateName)",
                      "  explored: \(exploration.summary)"]
+        lines += stabilityLines
         if let fraction = coverage.fraction {
             var line = "  coverage: \(Int((fraction * 100).rounded()))% "
                 + "of \(coverage.declared.count) declared boundaries"
