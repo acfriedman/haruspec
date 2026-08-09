@@ -22,17 +22,15 @@ public struct SpecVerdict: Codable, Sendable {
     public let violatedPreconditions: [String]?
     /// The generated input that triggered a divergence (its varied seam values are the counterexample).
     public let counterexample: CassetteData?
-    /// The budget spent and the surface it covered. Optional because artifacts written before the
-    /// budget existed carry no such field — an old `result.json` still decodes, it just can't say what
-    /// fraction it swept.
-    public let exploration: Exploration?
+    /// The budget spent and the surface it covered.
+    public let exploration: Exploration
 
     public init(
         result: VerificationResult,
         orderingsExplored: Int,
         failingOrder: [String]?,
         counterexample: CassetteData?,
-        exploration: Exploration? = nil,
+        exploration: Exploration,
         violatedPreconditions: [String]? = nil
     ) {
         self.result = result
@@ -64,7 +62,7 @@ public struct SpecVerdict: Codable, Sendable {
         case .cannotVerify: "⚠️ CANNOT-VERIFY"
         }
         var lines = ["\(banner)  \(diff.baselineName) → \(diff.candidateName)",
-                     "  explored: \(exploration?.summary ?? "\(orderingsExplored) orderings")"]
+                     "  explored: \(exploration.summary)"]
         if let fraction = coverage.fraction {
             var line = "  coverage: \(Int((fraction * 100).rounded()))% "
                 + "of \(coverage.declared.count) declared boundaries"
@@ -164,19 +162,37 @@ public extension Spec {
     /// Differentially verify a candidate implementation against this spec's baseline: run both
     /// against the *same* generated inputs (call orderings × seam values) and diff. The baseline branch
     /// is the oracle, so no expected output is needed. Stops at (and shrinks) the first divergence.
-    func verify(against candidate: @escaping (SeamContext) -> S) -> SpecVerdict {
+    ///
+    /// `declaring` is the *candidate's* intent — the deltas this particular port is meant to produce.
+    /// It rides the verification call rather than the spec because the spec declares the subject's
+    /// behavior, which every candidate shares; what a given port changes is a fact about that port.
+    func verify(
+        against candidate: @escaping (SeamContext) -> S,
+        declaring intent: Intent = .none
+    ) async -> SpecVerdict {
         // Golden: the declared order under live seams — the template every variation is derived from.
         let recording = Cassette()
-        _ = capture(make: makeSystem, order: explorationOrder(), cassette: recording)
+        _ = await capture(make: makeSystem, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
 
         let plan = explorationPlan(golden: golden)
 
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index) {
-                let run = compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette)
+                let run = await compare(
+                    make: makeSystem,
+                    candidate: candidate,
+                    order: order,
+                    cassette: cassette,
+                    declaring: intent
+                )
                 guard run.diff.isEquivalent else {
-                    let shrunk = shrink(candidate: candidate, failing: order, cassette: cassette)
+                    let shrunk = await shrink(
+                        candidate: candidate,
+                        failing: order,
+                        cassette: cassette,
+                        declaring: intent
+                    )
                     let coverage = coverage(replays: [run.candidateReplay], domainHeld: false)
                     let failing = exploreOrdering ? shrunk.map(\.label) : nil
                     return SpecVerdict(
@@ -191,7 +207,13 @@ public extension Spec {
             }
         }
         // Held across the whole explored surface: the swept seams earn domain-coverage credit.
-        let representative = compare(make: makeSystem, candidate: candidate, order: operations, cassette: golden)
+        let representative = await compare(
+            make: makeSystem,
+            candidate: candidate,
+            order: operations,
+            cassette: golden,
+            declaring: intent
+        )
         let coverage = coverage(replays: [representative.candidateReplay], domainHeld: true)
         return SpecVerdict(
             result: VerificationResult(diff: representative.diff, coverage: coverage),
@@ -222,17 +244,25 @@ public extension Spec {
     /// Drive one (system, ordering, cassette) and return its behavior trace — the recorder, interceptor,
     /// and ambient context the developer never touches. (Internal: `record`/`verify(replaying:)` drive
     /// the same primitive across a build boundary.)
-    func capture(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) -> Trace {
+    func capture(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) async -> Trace {
         let recorder = TraceRecorder(name: name, clock: ManualClock())
-        let center = observationCenter ?? NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center, names: notificationNames)
-        interceptor.start(); defer { interceptor.stop() }
+        // The SUT posts through a center that records, so a notification takes the same path and the
+        // same recorder lookup as every other kind of event. There is no second mechanism.
+        let center = RecordingNotificationCenter(names: notificationNames)
         let context = SeamContext(notifications: center, cassette: cassette)
         let system = make(context)
-        TraceContext.$current.withValue(recorder) {
+        // Task-locals are inherited across `await`, so binding once around the whole loop still
+        // reaches an operation that suspends — which is what lets an op drive an actor.
+        await TraceContext.$current.withValue(recorder) {
             for operation in order {
-                operation.action(system, context)
+                await operation.action(system, context)
             }
+        }
+        // Drain *after* the window, not inside it. Work the ops dispatched carries the recorder the
+        // seam captured at enqueue, so it records whether or not the window is still open — but it has
+        // to have finished, or the snapshot is a race rather than a reading.
+        if await DispatchSeam.quiesce() == false {
+            recorder.marker("⟨haruspec: work still outstanding at snapshot⟩")
         }
         return recorder.trace()
     }
@@ -244,18 +274,30 @@ public extension Spec {
         make: (SeamContext) -> S,
         candidate: (SeamContext) -> S,
         order: [Op<S>],
-        cassette: CassetteData
-    ) -> (diff: TraceDiff, candidateReplay: Cassette) {
-        let baseline = capture(make: make, order: order, cassette: Cassette(replaying: cassette))
+        cassette: CassetteData,
+        declaring intent: Intent
+    ) async -> (diff: TraceDiff, candidateReplay: Cassette) {
+        let baseline = await capture(make: make, order: order, cassette: Cassette(replaying: cassette))
         let replay = Cassette(replaying: cassette)
-        let candidateTrace = capture(make: candidate, order: order, cassette: replay)
+        let candidateTrace = await capture(make: candidate, order: order, cassette: replay)
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidateTrace, tolerances: tolerances)
             .classified(against: intent)
         return (diff, replay)
     }
 
-    private func diverges(candidate: (SeamContext) -> S, order: [Op<S>], cassette: CassetteData) -> TraceDiff? {
-        let diff = compare(make: makeSystem, candidate: candidate, order: order, cassette: cassette).diff
+    private func diverges(
+        candidate: (SeamContext) -> S,
+        order: [Op<S>],
+        cassette: CassetteData,
+        declaring intent: Intent
+    ) async -> TraceDiff? {
+        let diff = await compare(
+            make: makeSystem,
+            candidate: candidate,
+            order: order,
+            cassette: cassette,
+            declaring: intent
+        ).diff
         return diff.isEquivalent ? nil : diff
     }
 
@@ -316,13 +358,23 @@ public extension Spec {
 
     /// Delta-debug the failing call sequence: drop ops that aren't needed to reproduce → the minimal
     /// order that still diverges (the "localize" the north star asks for, applied to sequencing).
-    private func shrink(candidate: @escaping (SeamContext) -> S, failing: [Op<S>], cassette: CassetteData) -> [Op<S>] {
+    private func shrink(
+        candidate: @escaping (SeamContext) -> S,
+        failing: [Op<S>],
+        cassette: CassetteData,
+        declaring intent: Intent
+    ) async -> [Op<S>] {
         var minimal = failing
         var index = 0
         while index < minimal.count {
             var trial = minimal
             trial.remove(at: index)
-            if !trial.isEmpty, diverges(candidate: candidate, order: trial, cassette: cassette) != nil {
+            if !trial.isEmpty, await diverges(
+                candidate: candidate,
+                order: trial,
+                cassette: cassette,
+                declaring: intent
+            ) != nil {
                 minimal = trial // op wasn't needed to reproduce
             } else {
                 index += 1

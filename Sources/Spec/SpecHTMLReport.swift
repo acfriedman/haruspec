@@ -22,12 +22,10 @@ public extension SpecVerdict {
             HTML.tile(label: "Verdict", value: HTML.shortVerdict(verdict), accent: HTML.accent(verdict)),
             HTML.tile(
                 label: "Orderings explored",
-                value: exploration.map { exploration in
-                    exploration.isExhaustive
-                        ? "\(orderingsExplored)"
-                        : "\(orderingsExplored)/\(exploration.orderingsAreExact ? "" : "≥")"
-                        + "\(exploration.orderingsAvailable)"
-                } ?? "\(orderingsExplored)"
+                value: exploration.isExhaustive
+                    ? "\(orderingsExplored)"
+                    : "\(orderingsExplored)/\(exploration.orderingsAreExact ? "" : "≥")"
+                    + "\(exploration.orderingsAvailable)"
             ),
             HTML.tile(
                 label: "Divergences",
@@ -72,8 +70,7 @@ public extension SpecVerdict {
         if verdict == .cannotVerify {
             return HTML.abstentionSection(reason: "The oracle could not faithfully isolate this change.")
         }
-        let scope = exploration.map { $0.isExhaustive ? "All \(orderingsExplored)" : "\(orderingsExplored) sampled" }
-            ?? "All \(orderingsExplored)"
+        let scope = exploration.isExhaustive ? "All \(orderingsExplored)" : "\(orderingsExplored) sampled"
         return HTML.cleanSection(
             summary: "Behavior matched across everything explored",
             detail: "\(scope) call ordering\(plural) — and every generated seam value — produced "

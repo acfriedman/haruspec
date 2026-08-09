@@ -24,9 +24,7 @@ final class SeamHarnessEndToEndTests: XCTestCase {
         pricing: (_ subtotal: Int, _ bucket: Int) -> Int
     ) -> Trace {
         let recorder = TraceRecorder(name: "session", clock: ManualClock())
-        let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center, names: Self.names)
-        interceptor.start(); defer { interceptor.stop() }
+        let center = RecordingNotificationCenter(names: Self.names)
 
         let clock = SeamClock(cassette: cassette)
         var rng = SeamRNG(cassette: cassette)

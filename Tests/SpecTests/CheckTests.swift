@@ -44,12 +44,12 @@ final class CheckTests: XCTestCase {
             .appendingPathComponent("check-\(UUID().uuidString)", isDirectory: true)
     }
 
-    func testASpecThatDeclaresNoCandidatesStillChecksAPort() throws {
-        try PromoCartSpec().check("RefactorCart", reportsIn: scratch(), port(RefactorCart.init))
+    func testASpecThatDeclaresNoCandidatesStillChecksAPort() async throws {
+        try await PromoCartSpec().check("RefactorCart", reportsIn: scratch(), port(RefactorCart.init))
     }
 
-    func testACounterexamplePassesByDivergingExactlyAsTheTestDeclares() throws {
-        try PromoCartSpec().check(
+    func testACounterexamplePassesByDivergingExactlyAsTheTestDeclares() async throws {
+        try await PromoCartSpec().check(
             "RoundBugCart",
             expecting: .diverged,
             reportsIn: scratch(),
@@ -57,16 +57,16 @@ final class CheckTests: XCTestCase {
         )
     }
 
-    func testAnUnmetExpectationThrowsSayingWhichWayItWasSupposedToGo() {
-        XCTAssertThrowsError(
+    func testAnUnmetExpectationThrowsSayingWhichWayItWasSupposedToGo() async {
+        await XCTAssertThrowsErrorAsync {
             // Declared as a counterexample, but it is in fact a faithful port.
-            try PromoCartSpec().check(
+            try await PromoCartSpec().check(
                 "RefactorCart",
                 expecting: .diverged,
                 reportsIn: scratch(),
                 port(RefactorCart.init)
             )
-        ) { error in
+        } handler: { error in
             XCTAssertTrue(
                 (error as? SpecCatalog.CheckFailure)?
                     .description.hasPrefix("expected diverged, got equivalent") ?? false,
@@ -75,10 +75,11 @@ final class CheckTests: XCTestCase {
         }
     }
 
-    func testAFaithfulPortThatRegressesFailsTheCheck() {
-        XCTAssertThrowsError(
-            try PromoCartSpec().check("RoundBugCart", reportsIn: scratch(), port(RoundBugCart.init))
-        ) { error in
+    func testAFaithfulPortThatRegressesFailsTheCheck() async {
+        await XCTAssertThrowsErrorAsync {
+            try await PromoCartSpec()
+                .check("RoundBugCart", reportsIn: scratch(), port(RoundBugCart.init))
+        } handler: { error in
             XCTAssertTrue(
                 (error as? SpecCatalog.CheckFailure)?
                     .description.hasPrefix("expected equivalent, got diverged") ?? false,
@@ -87,9 +88,9 @@ final class CheckTests: XCTestCase {
         }
     }
 
-    func testTheReportIsWrittenUnderTheNameTheCheckGaveIt() {
+    func testTheReportIsWrittenUnderTheNameTheCheckGaveIt() async {
         let directory = scratch()
-        let verdict = PromoCartSpec().spec
+        let verdict = await PromoCartSpec().spec
             .verify("RefactorCart", reportsIn: directory, port(RefactorCart.init))
 
         XCTAssertEqual(verdict.actual, .equivalent)

@@ -145,9 +145,7 @@ final class PositionalBoundaryTests: XCTestCase {
     /// reproduction.
     private func runTwoAdds(cassette: Cassette, clamp: Bool) -> Trace {
         let recorder = TraceRecorder(name: "cart", clock: ManualClock())
-        let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(recorder: recorder, center: center, names: ["CartTotal"])
-        interceptor.start(); defer { interceptor.stop() }
+        let center = RecordingNotificationCenter(names: ["CartTotal"])
 
         TraceContext.$current.withValue(recorder) {
             let first = cassette.int(seam: "qty", live: { 1 })

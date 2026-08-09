@@ -37,11 +37,11 @@ final class SpecPlanArtifactTests: XCTestCase {
 
     // MARK: - Gzip plan artifacts
 
-    func testGzipPlanRoundTripsAndShrinks() throws {
+    func testGzipPlanRoundTripsAndShrinks() async throws {
         let url = artifactURL("plan", suffix: "plan.json.gz")
         defer { try? FileManager.default.removeItem(at: url) }
 
-        let written = try cart().record(to: url)
+        let written = await try cart().record(to: url)
         let reloaded = try SpecPlan(contentsOf: url)
         XCTAssertEqual(reloaded, written, "compression must be invisible to replay")
 
@@ -72,27 +72,29 @@ final class SpecPlanArtifactTests: XCTestCase {
         }
     }
 
-    func testThePlanNamesItsSpec() throws {
-        let json = try XCTUnwrap(String(data: cart().record().jsonData(), encoding: .utf8))
+    func testThePlanNamesItsSpec() async throws {
+        let data = try await cart().record().jsonData()
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
 
         XCTAssertTrue(json.contains("\"specName\""))
         XCTAssertFalse(json.contains("\"scenarioName\""))
-        XCTAssertEqual(try SpecPlan(jsonData: cart().record().jsonData()).specName, "promo-cart.artifact")
+        let roundTripped = try await SpecPlan(jsonData: cart().record().jsonData())
+        XCTAssertEqual(roundTripped.specName, "promo-cart.artifact")
     }
 
-    func testGzipDetectionIsByContentNotFilename() throws {
+    func testGzipDetectionIsByContentNotFilename() async throws {
         // A renamed artifact (plan.json holding gzip bytes) still replays — sniffing the magic, not
         // trusting the extension.
         let url = artifactURL("renamed")
         defer { try? FileManager.default.removeItem(at: url) }
 
-        let plan = cart().record()
+        let plan = await cart().record()
         try Gzip.compress(plan.jsonData()).write(to: url)
         XCTAssertEqual(try SpecPlan(contentsOf: url), plan)
     }
 
-    func testGzipArchivesAreDeterministic() throws {
-        let payload = try cart().record().jsonData()
+    func testGzipArchivesAreDeterministic() async throws {
+        let payload = await try cart().record().jsonData()
         XCTAssertEqual(
             try Gzip.compress(payload),
             try Gzip.compress(payload),
@@ -119,8 +121,8 @@ final class SpecPlanArtifactTests: XCTestCase {
 
     // MARK: - Schema gate
 
-    func testUnsupportedSchemaVersionIsRejected() throws {
-        var plan = cart().record()
+    func testUnsupportedSchemaVersionIsRejected() async throws {
+        var plan = await cart().record()
         plan.schemaVersion = 99
         let bytes = try plan.jsonData()
 

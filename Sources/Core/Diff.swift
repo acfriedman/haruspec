@@ -14,6 +14,10 @@ public struct Divergence: Codable, Sendable, Equatable {
         case missingEvent // baseline had an event the candidate never produced
         case unexpectedEvent // candidate produced an event the baseline never had
         case reordered // an event moved, and its order is significant
+        case domainMigration // the same event, on a different isolation domain
+        case orderingRelaxed // work left an ordered domain for an unordered one — a guarantee was dropped
+        case orderingLost // a happens-before constraint held in baseline; the candidate leaves the pair concurrent
+        case orderingAdded // the candidate constrains a pair the baseline left concurrent — new synchronization
         case valueMismatch // an aligned event's payload differs beyond tolerance
         case timingRegression // an aligned interval got slower than its declared budget allows
     }
@@ -23,6 +27,11 @@ public struct Divergence: Codable, Sendable, Equatable {
     public var baselineSeq: Int?
     public var candidateSeq: Int?
     public var detail: String
+    /// For a divergence that is *about* domains (`domainMigration`, `orderingRelaxed`): where the
+    /// work was, and where it went — carried structurally so `Intent` can match a declared move
+    /// without parsing prose out of `detail`.
+    public var fromDomain: String?
+    public var toDomain: String?
     /// True when this divergence is reported but does not fail the verdict (a structural divergence
     /// under `structuralComparison == .advisory`).
     public var isAdvisory: Bool
@@ -41,6 +50,8 @@ public struct Divergence: Codable, Sendable, Equatable {
         baselineSeq: Int?,
         candidateSeq: Int?,
         detail: String,
+        fromDomain: String? = nil,
+        toDomain: String? = nil,
         isAdvisory: Bool = false,
         classification: DivergenceClass = .collateral
     ) {
@@ -49,24 +60,10 @@ public struct Divergence: Codable, Sendable, Equatable {
         self.baselineSeq = baselineSeq
         self.candidateSeq = candidateSeq
         self.detail = detail
+        self.fromDomain = fromDomain
+        self.toDomain = toDomain
         self.isAdvisory = isAdvisory
         self.classification = classification
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case kind, label, baselineSeq, candidateSeq, detail, isAdvisory, classification
-    }
-
-    /// Tolerant decode so older diff JSON (written before `classification` existed) still loads.
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        kind = try container.decode(Kind.self, forKey: .kind)
-        label = try container.decode(String.self, forKey: .label)
-        baselineSeq = try container.decodeIfPresent(Int.self, forKey: .baselineSeq)
-        candidateSeq = try container.decodeIfPresent(Int.self, forKey: .candidateSeq)
-        detail = try container.decode(String.self, forKey: .detail)
-        isAdvisory = try container.decodeIfPresent(Bool.self, forKey: .isAdvisory) ?? false
-        classification = try container.decodeIfPresent(DivergenceClass.self, forKey: .classification) ?? .collateral
     }
 }
 
@@ -93,17 +90,20 @@ public struct TraceDiff: Codable, Sendable, Equatable {
 ///
 /// Pipeline:
 ///  1. Canonicalize both traces under the tolerance spec (redact volatile fields, drop ignored kinds).
-///  2. Align event *signatures* (kind+label+thread) with an LCS — robust to insertions,
+///  2. Align event *signatures* (kind+label+domain) with an LCS — robust to insertions,
 ///     deletions and moves without assuming lockstep positions.
-///  3. Classify the leftovers: matched-and-moved ⇒ reordered, unmatched-baseline ⇒ missing,
-///     unmatched-candidate ⇒ unexpected.
+///  3. Classify the leftovers: matched-and-moved ⇒ reordered, same event on another domain ⇒
+///     domainMigration, unmatched-baseline ⇒ missing, unmatched-candidate ⇒ unexpected.
 ///  4. For every aligned pair, compare payload values (within numeric epsilon) and interval timing
 ///     (within declared budgets).
 public enum BehavioralDiff {
-    private struct Signature: Hashable {
-        let kind: EventKind
-        let label: String
-        let thread: LogicalThread
+    /// Working state one comparison accumulates: the divergences found so far, and every aligned
+    /// (baseline, candidate) pair — recorded at the single choke point every matcher runs through
+    /// (`compareAligned`), so the spawn-edge pass can read the finished alignment whichever
+    /// concurrency mode produced it.
+    struct DiffScratch {
+        var divergences: [Divergence] = []
+        var alignedPairs: [(baseline: TraceEvent, candidate: TraceEvent)] = []
     }
 
     public static func compare(
@@ -124,14 +124,63 @@ public enum BehavioralDiff {
             spec.structuralComparison == .advisory && tier == .structural
         }
 
+        var scratch = DiffScratch()
+
+        switch spec.concurrency {
+        case .totalOrder:
+            compareTotalOrder(
+                baseline: baseline,
+                candidate: candidate,
+                spec: spec,
+                advisory: advisory,
+                into: &scratch
+            )
+        case .perDomain:
+            // The projection: one comparison per domain (sequence where order is a guarantee,
+            // multiset where it is scheduler noise), cross-domain order dropped. `DiffProjection.swift`.
+            comparePerDomain(
+                baseline: baseline,
+                candidate: candidate,
+                spec: spec,
+                into: &scratch
+            )
+        }
+
+        // The happens-before pass: with alignment settled, compare the *constraints* the recorded
+        // spawn edges imply. `DiffSpawnEdges.swift`.
+        compareSpawnEdges(baseline: baseline, candidate: candidate, spec: spec, into: &scratch)
+
+        scratch.divergences.sort { lhs, rhs in
+            (lhs.baselineSeq ?? lhs.candidateSeq ?? Int.max, lhs.candidateSeq ?? Int.max)
+                < (rhs.baselineSeq ?? rhs.candidateSeq ?? Int.max, rhs.candidateSeq ?? Int.max)
+        }
+
+        // Only gating divergences decide the verdict (non-advisory, and — after an optional intent
+        // pass — not a declared, intended change).
+        let diverged = scratch.divergences.contains(where: \.isGating)
+        return TraceDiff(
+            verdict: diverged ? .diverged : .equivalent,
+            baselineName: rawBaseline.name,
+            candidateName: rawCandidate.name,
+            divergences: scratch.divergences
+        )
+    }
+
+    /// The `.totalOrder` comparison: one LCS over the whole interleaving, then reconciliation of
+    /// whatever failed to align. This is the original pipeline (steps 2–4), unchanged.
+    private static func compareTotalOrder(
+        baseline: [TraceEvent],
+        candidate: [TraceEvent],
+        spec: Tolerance,
+        advisory: (EventTier) -> Bool,
+        into scratch: inout DiffScratch
+    ) {
         let baselineSig = baseline.map(signature)
         let candidateSig = candidate.map(signature)
 
         let matched = longestCommonSubsequence(baselineSig, candidateSig)
         let matchedBaseline = Set(matched.map(\.0))
         let matchedCandidate = Set(matched.map(\.1))
-
-        var divergences: [Divergence] = []
 
         // 4a. Aligned (in-order) pairs: compare values + timing.
         for (baselineIndex, candidateIndex) in matched {
@@ -140,89 +189,38 @@ public enum BehavioralDiff {
                 candidate[candidateIndex],
                 spec: spec,
                 isAdvisory: advisory(baseline[baselineIndex].tier),
-                into: &divergences
+                into: &scratch
             )
         }
 
-        // 3/4b. Reconcile the unmatched: pair equal signatures as moves, rest are missing/unexpected.
-        var unmatchedInsertions = candidate.indices.filter { !matchedCandidate.contains($0) }
-        for baselineIndex in baseline.indices where !matchedBaseline.contains(baselineIndex) {
-            if let slot = unmatchedInsertions.firstIndex(where: { candidateSig[$0] == baselineSig[baselineIndex] }) {
-                let candidateIndex = unmatchedInsertions.remove(at: slot)
-                if !spec.isUnordered(label: baseline[baselineIndex].label) {
-                    divergences.append(
-                        Divergence(
-                            kind: .reordered,
-                            label: baseline[baselineIndex].label,
-                            baselineSeq: baseline[baselineIndex].seq,
-                            candidateSeq: candidate[candidateIndex].seq,
-                            detail: "event order changed (baseline #\(baseline[baselineIndex].seq) "
-                                + "→ candidate #\(candidate[candidateIndex].seq))",
-                            isAdvisory: advisory(baseline[baselineIndex].tier)
-                        )
-                    )
-                }
-                // A moved event can still carry a value/timing regression — check it either way.
-                compareAligned(
-                    baseline[baselineIndex],
-                    candidate[candidateIndex],
-                    spec: spec,
-                    isAdvisory: advisory(baseline[baselineIndex].tier),
-                    into: &divergences
-                )
-            } else {
-                divergences.append(
-                    Divergence(
-                        kind: .missingEvent,
-                        label: baseline[baselineIndex].label,
-                        baselineSeq: baseline[baselineIndex].seq,
-                        candidateSeq: nil,
-                        detail: "\(baseline[baselineIndex].kind.rawValue) present in baseline, absent in candidate",
-                        isAdvisory: advisory(baseline[baselineIndex].tier)
-                    )
-                )
-            }
-        }
-        for candidateIndex in unmatchedInsertions {
-            divergences.append(
-                Divergence(
-                    kind: .unexpectedEvent,
-                    label: candidate[candidateIndex].label,
-                    baselineSeq: nil,
-                    candidateSeq: candidate[candidateIndex].seq,
-                    detail: "\(candidate[candidateIndex].kind.rawValue) present in candidate, absent in baseline",
-                    isAdvisory: advisory(candidate[candidateIndex].tier)
-                )
-            )
-        }
-
-        divergences.sort { lhs, rhs in
-            (lhs.baselineSeq ?? lhs.candidateSeq ?? Int.max, lhs.candidateSeq ?? Int.max)
-                < (rhs.baselineSeq ?? rhs.candidateSeq ?? Int.max, rhs.candidateSeq ?? Int.max)
-        }
-
-        // Only gating divergences decide the verdict (non-advisory, and — after an optional intent
-        // pass — not a declared, intended change).
-        let diverged = divergences.contains(where: \.isGating)
-        return TraceDiff(
-            verdict: diverged ? .diverged : .equivalent,
-            baselineName: rawBaseline.name,
-            candidateName: rawCandidate.name,
-            divergences: divergences
+        reconcileUnmatched(
+            Alignment(
+                baseline: baseline,
+                candidate: candidate,
+                baselineSig: baselineSig,
+                candidateSig: candidateSig,
+                matchedBaseline: matchedBaseline,
+                matchedCandidate: matchedCandidate
+            ),
+            spec: spec,
+            advisory: advisory,
+            into: &scratch
         )
     }
 
     // MARK: - Aligned-pair comparison
 
-    private static func compareAligned(
+    static func compareAligned(
         _ baseline: TraceEvent,
         _ candidate: TraceEvent,
         spec: Tolerance,
         isAdvisory: Bool,
-        into out: inout [Divergence]
+        into scratch: inout DiffScratch
     ) {
+        // Every matcher funnels its pairs through here, so this is where the alignment is recorded.
+        scratch.alignedPairs.append((baseline, candidate))
         for path in valueDivergences(baseline.payload ?? .null, candidate.payload ?? .null, path: "", spec: spec) {
-            out.append(
+            scratch.divergences.append(
                 Divergence(
                     kind: .valueMismatch,
                     label: baseline.label,
@@ -235,7 +233,7 @@ public enum BehavioralDiff {
         }
         if let budget = spec.timingBudget(for: baseline.label),
            let base = baseline.durationTicks, let cand = candidate.durationTicks, cand - base > budget {
-            out.append(
+            scratch.divergences.append(
                 Divergence(
                     kind: .timingRegression,
                     label: baseline.label,
@@ -249,7 +247,8 @@ public enum BehavioralDiff {
     }
 
     /// Structural, tolerance-aware value comparison. Returns one message per differing leaf path.
-    private static func valueDivergences(
+    /// Internal rather than private: the projection's multiset matching uses it as its predicate.
+    static func valueDivergences(
         _ baseline: CanonicalValue,
         _ candidate: CanonicalValue,
         path: String,
@@ -303,40 +302,5 @@ public enum BehavioralDiff {
 
     private static func mismatch(_ path: String, _ baseline: CanonicalValue, _ candidate: CanonicalValue) -> String {
         "\(label(path)): baseline=\(baseline.canonicalString) candidate=\(candidate.canonicalString)"
-    }
-
-    private static func signature(_ event: TraceEvent) -> Signature {
-        Signature(kind: event.kind, label: event.label, thread: event.thread)
-    }
-
-    /// Classic O(n·m) LCS, returning the aligned index pairs in increasing order.
-    private static func longestCommonSubsequence<T: Equatable>(_ first: [T], _ second: [T]) -> [(Int, Int)] {
-        let firstCount = first.count, secondCount = second.count
-        guard firstCount > 0, secondCount > 0 else { return [] }
-        // One flat allocation rather than `firstCount + 1` row objects. The table is O(E²) `Int`s and is
-        // the dominant cost of diffing a chatty trace — nested arrays add a retain/release and a second
-        // bounds check to every cell of it.
-        let width = secondCount + 1
-        var table = [Int](repeating: 0, count: (firstCount + 1) * width)
-        for row in stride(from: firstCount - 1, through: 0, by: -1) {
-            let rowBase = row * width, nextBase = rowBase + width
-            for column in stride(from: secondCount - 1, through: 0, by: -1) {
-                table[rowBase + column] = first[row] == second[column]
-                    ? table[nextBase + column + 1] + 1
-                    : Swift.max(table[nextBase + column], table[rowBase + column + 1])
-            }
-        }
-        var pairs: [(Int, Int)] = []
-        var row = 0, column = 0
-        while row < firstCount, column < secondCount {
-            if first[row] == second[column] {
-                pairs.append((row, column)); row += 1; column += 1
-            } else if table[(row + 1) * width + column] >= table[row * width + column + 1] {
-                row += 1
-            } else {
-                column += 1
-            }
-        }
-        return pairs
     }
 }

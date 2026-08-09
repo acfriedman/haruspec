@@ -62,28 +62,29 @@ final class CandidatesTests: XCTestCase {
         XCTAssertEqual(cart().candidateNames, ["RefactorCart", "RoundBugCart"])
     }
 
-    func testEveryCandidateIsVerifiedAgainstTheSameBaseline() {
-        let verdicts = cart().verifyAll(reportsIn: reportsDirectory())
+    func testEveryCandidateIsVerifiedAgainstTheSameBaseline() async {
+        let verdicts = await cart().verifyAll(reportsIn: reportsDirectory())
 
         XCTAssertEqual(verdicts.map(\.name), ["RefactorCart", "RoundBugCart"])
         XCTAssertEqual(verdicts[0].actual, .equivalent)
         XCTAssertEqual(verdicts[1].actual, .diverged)
     }
 
-    func testADeclaredCounterexampleMeetsItsExpectationByDiverging() {
-        let verdicts = cart().verifyAll(reportsIn: reportsDirectory())
+    func testADeclaredCounterexampleMeetsItsExpectationByDiverging() async {
+        let verdicts = await cart().verifyAll(reportsIn: reportsDirectory())
 
         // Both pass: one by matching the baseline, one by diverging exactly as declared.
         XCTAssertTrue(verdicts.allSatisfy(\.metExpectation), verdicts.map { $0.report() }.joined())
     }
 
-    func testAnUnmetExpectationSaysWhichWayItWasSupposedToGo() throws {
+    func testAnUnmetExpectationSaysWhichWayItWasSupposedToGo() async throws {
         let spec = cart().candidates {
             // Declared as a counterexample, but it is in fact a faithful port.
             Candidate("RefactorCart", expecting: .diverged, makeRefactor)
         }
 
-        let verdict = try XCTUnwrap(spec.verify(candidateNamed: "RefactorCart"))
+        let named = await spec.verify(candidateNamed: "RefactorCart")
+        let verdict = try XCTUnwrap(named)
 
         XCTAssertEqual(verdict.actual, .equivalent)
         XCTAssertFalse(verdict.metExpectation)
@@ -93,9 +94,9 @@ final class CandidatesTests: XCTestCase {
         )
     }
 
-    func testEachCandidateGetsItsOwnNamedReport() {
+    func testEachCandidateGetsItsOwnNamedReport() async {
         let directory = reportsDirectory()
-        let verdicts = cart().verifyAll(reportsIn: directory)
+        let verdicts = await cart().verifyAll(reportsIn: directory)
 
         XCTAssertEqual(
             verdicts.compactMap(\.htmlReportPath),
@@ -103,14 +104,15 @@ final class CandidatesTests: XCTestCase {
         )
     }
 
-    func testAnUndeclaredNameFailsTheLookup() {
-        XCTAssertNil(cart().verify(candidateNamed: "SwiftCartRenamed"))
+    func testAnUndeclaredNameFailsTheLookup() async {
+        let renamed = await cart().verify(candidateNamed: "SwiftCartRenamed")
+        XCTAssertNil(renamed)
     }
 
     /// The table form an adopting app writes: one line per port, unapplied initializer references
     /// bound through a single wiring helper. Proves the generic inference and the existential return.
-    func testCandidatesReadAsATableOfInitializerReferences() {
-        let verdicts = cart()
+    func testCandidatesReadAsATableOfInitializerReferences() async {
+        let verdicts = await cart()
             .candidates {
                 Candidate("RefactorCart", port(RefactorCart.init))
                 Candidate("RoundBugCart", expecting: .diverged, port(RoundBugCart.init))

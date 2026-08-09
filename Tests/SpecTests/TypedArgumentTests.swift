@@ -131,10 +131,10 @@ final class TypedArgumentTests: XCTestCase {
 
     // MARK: - The sweep
 
-    func testATypedArgumentIsActuallySweptOverItsDomain() {
+    func testATypedArgumentIsActuallySweptOverItsDomain() async {
         let spec = addSpec("typed.sweep").vary { Ordering(max: 4, repeating: 2) }
         let recording = Cassette()
-        _ = spec.capture(make: spec.makeSystem, order: spec.explorationOrder(), cassette: recording)
+        _ = await spec.capture(make: spec.makeSystem, order: spec.explorationOrder(), cassette: recording)
         let plan = spec.explorationPlan(golden: recording.snapshot())
 
         let quantities = Set(plan.cassettes(forOrdering: 0).flatMap { cassette in
@@ -154,24 +154,24 @@ final class TypedArgumentTests: XCTestCase {
         XCTAssertEqual(skus.count, 3, "every declared SKU is a boundary value")
     }
 
-    func testABugAtTheTopOfATypedArgumentsRangeIsCaught() {
+    func testABugAtTheTopOfATypedArgumentsRangeIsCaught() async {
         let spec = addSpec("typed.catch").vary { Ordering(max: 2, repeating: 2) }
 
-        let verdict = spec.verify(against: makeTopOfRangeBug)
+        let verdict = await spec.verify(against: makeTopOfRangeBug)
 
         XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
     }
 
-    func testASweptTypedArgumentEarnsDomainCoverageWhenItHolds() {
+    func testASweptTypedArgumentEarnsDomainCoverageWhenItHolds() async {
         let spec = addSpec("typed.coverage").vary { Ordering(max: 2, repeating: 2) }
 
-        let verdict = spec.verify(against: makeGood)
+        let verdict = await spec.verify(against: makeGood)
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
         XCTAssertEqual(verdict.coverage.domainExercised, ["add.0", "add.1"])
     }
 
-    func testACounterexampleNamesTheArgumentRatherThanAStringKey() {
+    func testACounterexampleNamesTheArgumentRatherThanAStringKey() async {
         let spec = Spec<TypedCart>("typed.counterexample")
             .system(makeGood)
             .operations {
@@ -187,7 +187,7 @@ final class TypedArgumentTests: XCTestCase {
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary { Ordering(max: 2, repeating: 2) }
 
-        let verdict = spec.verify(against: makeTopOfRangeBug)
+        let verdict = await spec.verify(against: makeTopOfRangeBug)
 
         XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
         XCTAssertTrue(

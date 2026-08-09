@@ -98,6 +98,10 @@ public extension TraceDiff {
         case .missingEvent: "−"
         case .unexpectedEvent: "+"
         case .reordered: "↔"
+        case .domainMigration: "⇄"
+        case .orderingRelaxed: "⤳"
+        case .orderingLost: "⊘"
+        case .orderingAdded: "⊕"
         case .valueMismatch: "≠"
         case .timingRegression: "⏱"
         }

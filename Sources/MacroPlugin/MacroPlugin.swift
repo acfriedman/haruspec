@@ -127,7 +127,7 @@ private func tracedBody(
         + "{ __oracle.signpost(\(label), subject: self, durationTicks: __oracle.now() - __oracleStart) }"
 
     var lines: [String] = [
-        "let __oracle = TraceContext.current",
+        "let __oracle = TraceContext.active",
         "__oracle?.call(\(label), subject: self\(callArgs))",
         "\(nestedSignature) { \(innerBody)",
         "}"

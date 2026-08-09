@@ -111,33 +111,33 @@ public extension Spec {
     /// not a silent pass — gate the test on `ContinuousMode.fromEnvironment()` so it never gets called.
     func runContinuous(
         environment: [String: String] = ProcessInfo.processInfo.environment
-    ) -> ContinuousOutcome {
+    ) async -> ContinuousOutcome {
         do {
             guard let run = try ContinuousRun.fromEnvironment(environment) else {
                 return .failed("no \(ContinuousMode.environmentKey) set — nothing to run")
             }
-            return runContinuous(run)
+            return await runContinuous(run)
         } catch {
             return .failed("\(error)")
         }
     }
 
-    func runContinuous(_ run: ContinuousRun) -> ContinuousOutcome {
+    func runContinuous(_ run: ContinuousRun) async -> ContinuousOutcome {
         switch run {
         case let .record(planURL):
-            recordContinuous(to: planURL)
+            await recordContinuous(to: planURL)
         case let .replay(planURL, resultsDirectory):
-            replayContinuous(plan: planURL, into: resultsDirectory)
+            await replayContinuous(plan: planURL, into: resultsDirectory)
         }
     }
 
-    private func recordContinuous(to planURL: URL) -> ContinuousOutcome {
+    private func recordContinuous(to planURL: URL) async -> ContinuousOutcome {
         do {
             try FileManager.default.createDirectory(
                 at: planURL.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            let plan = try record(to: planURL)
+            let plan = try await record(to: planURL)
             return ContinuousOutcome(
                 succeeded: true,
                 summary: "recorded \(plan.probes.count) probes "
@@ -150,10 +150,10 @@ public extension Spec {
         }
     }
 
-    private func replayContinuous(plan planURL: URL, into resultsDirectory: URL) -> ContinuousOutcome {
+    private func replayContinuous(plan planURL: URL, into resultsDirectory: URL) async -> ContinuousOutcome {
         do {
             try FileManager.default.createDirectory(at: resultsDirectory, withIntermediateDirectories: true)
-            let verdict = try verify(replayingContentsOf: planURL)
+            let verdict = try await verify(replayingContentsOf: planURL)
             let resultURL = resultsDirectory.appendingPathComponent("result.json")
             try verdict.write(to: resultURL)
             // HTML is best-effort visual evidence; result.json is the load-bearing artifact.

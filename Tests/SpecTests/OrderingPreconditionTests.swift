@@ -146,7 +146,7 @@ final class OrderingPreconditionTests: XCTestCase {
         )
     }
 
-    func testTheVerdictSaysHowMuchOfTheSweepWasOutOfOrder() throws {
+    func testTheVerdictSaysHowMuchOfTheSweepWasOutOfOrder() async throws {
         let spec = Spec<PromoCart>("promo-cart.preconditions")
             .system(makeGood)
             .operations {
@@ -159,7 +159,7 @@ final class OrderingPreconditionTests: XCTestCase {
             .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary { Ordering(max: 40) }
 
-        let verdict = spec.verify(against: makeRefactor)
+        let verdict = await spec.verify(against: makeRefactor)
         let exploration = try XCTUnwrap(verdict.exploration)
         let outOfOrder = try XCTUnwrap(exploration.outOfOrderExplored)
 
@@ -168,9 +168,10 @@ final class OrderingPreconditionTests: XCTestCase {
         XCTAssertTrue(verdict.report().contains("\(outOfOrder) out-of-order"), verdict.report())
     }
 
-    func testASweepWithNoPreconditionsReportsNoOutOfOrderStratum() throws {
+    func testASweepWithNoPreconditionsReportsNoOutOfOrderStratum() async throws {
         let spec = unconstrainedSpec(orderingMax: 6)
-        let exploration = try XCTUnwrap(spec.verify(against: makeRefactor).exploration)
+        let verdict = await spec.verify(against: makeRefactor)
+        let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertEqual(exploration.outOfOrderExplored, 0)
         XCTAssertFalse(exploration.summary.contains("out-of-order"), exploration.summary)
@@ -190,6 +191,13 @@ final class OrderingPreconditionTests: XCTestCase {
             orderingsExplored: 40,
             failingOrder: ["remove", "add"],
             counterexample: nil,
+            exploration: Exploration(
+                orderingsExplored: 40,
+                orderingsAvailable: 40,
+                orderingsAreExact: true,
+                variantsPerOrdering: 1,
+                outOfOrderExplored: 12
+            ),
             violatedPreconditions: ["remove after add"]
         )
 
@@ -199,19 +207,17 @@ final class OrderingPreconditionTests: XCTestCase {
         )
     }
 
-    func testAnArtifactPredatingTheOutOfOrderStratumStillDecodes() throws {
-        // Written before `.after` went soft: neither field exists on disk.
-        let verdict = unconstrainedSpec(orderingMax: 2).verify(against: makeRefactor)
+    func testAnArtifactPredatingTheOutOfOrderStratumIsRefused() async throws {
+        // Pre-release stance: no tolerant decoders, no migrations. An artifact from before the
+        // sample was stratified fails to decode — the fix is re-recording, not coercion.
+        let verdict = await unconstrainedSpec(orderingMax: 2).verify(against: makeRefactor)
         var json = try JSONSerialization.jsonObject(with: verdict.jsonData()) as? [String: Any] ?? [:]
-        json.removeValue(forKey: "violatedPreconditions")
         var exploration = json["exploration"] as? [String: Any] ?? [:]
         exploration.removeValue(forKey: "outOfOrderExplored")
         json["exploration"] = exploration
 
-        let reloaded = try SpecVerdict(jsonData: JSONSerialization.data(withJSONObject: json))
-
-        XCTAssertNil(reloaded.violatedPreconditions)
-        XCTAssertNil(reloaded.exploration?.outOfOrderExplored)
-        XCTAssertFalse(reloaded.report().contains("out-of-order"), reloaded.report())
+        XCTAssertThrowsError(
+            try SpecVerdict(jsonData: JSONSerialization.data(withJSONObject: json))
+        )
     }
 }

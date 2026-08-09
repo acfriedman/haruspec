@@ -3,16 +3,26 @@
     "schemaVersion" : 1,
     "tracks" : {
       "coffeeQty" : [
+        1,
         1
       ]
     }
   },
+  "exploration" : {
+    "orderingsAreExact" : true,
+    "orderingsAvailable" : 7,
+    "orderingsExplored" : 7,
+    "outOfOrderExplored" : 0,
+    "variantsPerOrdering" : 55
+  },
   "failingOrder" : [
     "addCoffee",
+    "addCoffee",
+    "promo",
     "promo",
     "checkout"
   ],
-  "orderingsExplored" : 2,
+  "orderingsExplored" : 7,
   "result" : {
     "coverage" : {
       "declared" : [
@@ -39,19 +49,19 @@
       "candidateName" : "promo-cart.artifact",
       "divergences" : [
         {
-          "baselineSeq" : 6,
-          "candidateSeq" : 6,
+          "baselineSeq" : 11,
+          "candidateSeq" : 11,
           "classification" : "collateral",
-          "detail" : "total: baseline=899 candidate=900",
+          "detail" : "total: baseline=1798 candidate=1799",
           "isAdvisory" : false,
           "kind" : "valueMismatch",
           "label" : "CheckoutCompleted"
         },
         {
-          "baselineSeq" : 8,
-          "candidateSeq" : 8,
+          "baselineSeq" : 13,
+          "candidateSeq" : 13,
           "classification" : "collateral",
-          "detail" : "value: baseline=899 candidate=900",
+          "detail" : "value: baseline=1798 candidate=1799",
           "isAdvisory" : false,
           "kind" : "valueMismatch",
           "label" : "PromoCart.checkout"
@@ -60,5 +70,8 @@
       "verdict" : "diverged"
     },
     "verdict" : "diverged"
-  }
+  },
+  "violatedPreconditions" : [
+
+  ]
 }

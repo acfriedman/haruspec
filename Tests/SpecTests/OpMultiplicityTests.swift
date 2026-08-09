@@ -102,7 +102,7 @@ final class OpMultiplicityTests: XCTestCase {
         XCTAssertTrue(counted.exact)
     }
 
-    func testTheSpecReportsTheSummedDenominator() {
+    func testTheSpecReportsTheSummedDenominator() async {
         let spec = Spec<PromoCart>("promo-cart.ranged")
             .system { GoodCart(center: $0.notifications) }
             .operations {
@@ -121,7 +121,7 @@ final class OpMultiplicityTests: XCTestCase {
         XCTAssertEqual(available.count, 19)
         XCTAssertTrue(available.exact)
 
-        let verdict = spec.verify(against: { RefactorCart(center: $0.notifications) })
+        let verdict = await spec.verify(against: { RefactorCart(center: $0.notifications) })
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
 }

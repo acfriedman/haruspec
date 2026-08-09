@@ -8,20 +8,99 @@ import HaruspecCore
 /// method inside that dynamic scope records to it. Outside a capture window `current` is nil and the
 /// generated code is a cheap nil-check, so instrumentation can ship in production.
 ///
-/// Caveat (v0): a task-local does not automatically cross a manual thread hop (e.g. `DispatchQueue`);
-/// capturing across such hops needs explicit propagation, a later refinement.
+/// A task-local does not cross a manual thread hop on its own. Swift concurrency inherits it — `Task { }`,
+/// `async let`, task groups, and `DispatchQueue.sync`, which never leaves the thread — but a
+/// `dispatch_async` block runs with no task at all. The GCD preprocessing seam
+/// (`Sources/DispatchSeam/haruspec_dispatch.h`) closes that, and `active` is where the two bindings meet.
 public enum TraceContext {
     @TaskLocal public static var current: TraceRecorder?
+
+    private static let threadKey = "com.haruspec.trace.recorder"
+
+    /// The recorder actually in effect, and what every capture site reads.
+    ///
+    /// Two bindings, because two mechanisms are needed. The task-local carries the capture window
+    /// through Swift concurrency, which inherits it across `Task { }`, `async let` and task groups. The
+    /// per-thread binding carries it into a block the GCD seam handed to a thread with no task at all —
+    /// the case a task-local structurally cannot reach.
+    ///
+    /// The seam does not rebind the *task*-local: pushing one from inside a run-loop callback that is
+    /// itself nested in an actor-isolated binding violates the task-local stack discipline and traps.
+    /// A thread-local has no such ordering contract, which is the right shape for work that arrives on
+    /// a borrowed thread.
+    public static var active: TraceRecorder? {
+        current ?? Thread.current.threadDictionary[threadKey] as? TraceRecorder
+    }
+
+    private static let spawnKey = "com.haruspec.trace.spawnedBy"
+
+    /// Bind `recorder` for the duration of `body` on *this thread only*, restoring whatever was there.
+    /// Used by the GCD seam around each wrapped block.
+    ///
+    /// `spawnedBy` is the call that enqueued this work, carried from the enqueue site so the first
+    /// event recorded inside claims it as its cause. Program order carries the rest of the block.
+    static func withThreadRecorder<T>(_ recorder: TraceRecorder, spawnedBy: Int?, _ body: () -> T) -> T {
+        let dictionary = Thread.current.threadDictionary
+        let previousRecorder = dictionary[threadKey]
+        let previousSpawn = dictionary[spawnKey]
+        dictionary[threadKey] = recorder
+        dictionary[spawnKey] = spawnedBy
+        defer {
+            dictionary[threadKey] = previousRecorder
+            dictionary[spawnKey] = previousSpawn
+        }
+        return body()
+    }
+
+    /// A cause that has not been claimed yet. A box rather than a value because a task-local cannot be
+    /// cleared once bound, and the edge belongs to the block's *first* event — so consuming has to
+    /// mutate something the binding merely points at.
+    final class SpawnCause: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cause: Int?
+
+        init(_ cause: Int?) {
+            self.cause = cause
+        }
+
+        func take() -> Int? {
+            lock.lock(); defer { lock.unlock() }
+            defer { cause = nil }
+            return cause
+        }
+    }
+
+    /// The task path carries the cause in a task-local, which follows the task across suspension —
+    /// `Thread.current` is unavailable in an async context, and would be the wrong unit anyway.
+    @TaskLocal static var pendingSpawnCause: SpawnCause?
+
+    /// Take the pending spawn cause, if this is the first event since the block began. Consumed rather
+    /// than read: the edge belongs to the block's first event, and program order does the rest.
+    static func consumePendingSpawnCause() -> Int? {
+        let dictionary = Thread.current.threadDictionary
+        if let cause = dictionary[spawnKey] as? Int {
+            dictionary[spawnKey] = nil
+            return cause
+        }
+        return pendingSpawnCause?.take()
+    }
 }
 
 /// Explicit, ambient-aware hooks for the few things a body macro can't infer from a signature:
 /// timing regions and temporal markers. Each is a no-op when no capture is active.
 public enum Haruspec {
     /// Measure a region as a signpost interval, recording to the ambient recorder if present.
+    /// `isolation` is forwarded rather than defaulted again inside, so the domain resolves to the
+    /// *app's* call site — defaulting it here would resolve every interval to this file's context.
     @discardableResult
-    public static func interval<T>(_ label: String, subject: AnyObject? = nil, _ body: () throws -> T) rethrows -> T {
-        if let recorder = TraceContext.current {
-            return try recorder.interval(label, subject: subject, body)
+    public static func interval<T>(
+        _ label: String,
+        subject: AnyObject? = nil,
+        isolation: (any Actor)? = #isolation,
+        _ body: () throws -> T
+    ) rethrows -> T {
+        if let recorder = TraceContext.active {
+            return try recorder.interval(label, subject: subject, isolation: isolation, body)
         }
         return try body()
     }
@@ -29,7 +108,7 @@ public enum Haruspec {
     /// Advance the capture's deterministic clock to model representative work cost (no-op under a
     /// wall clock or with no active capture). Used to make interval durations reproducible in tests.
     public static func simulateCost(_ ticks: Int64) {
-        TraceContext.current?.advanceClock(ticks)
+        TraceContext.active?.advanceClock(ticks)
     }
 
     /// Record a payload-free **temporal marker** (the semantic tier) against the ambient recorder — a
@@ -38,7 +117,7 @@ public enum Haruspec {
     /// reactive). It carries no payload by design: verify *values* through production seams
     /// (notification userInfo, return values, KVO), not through instrumentation you authored — so the
     /// oracle checks real behavior, not itself.
-    public static func marker(_ label: String, subject: AnyObject? = nil) {
-        TraceContext.current?.marker(label, subject: subject)
+    public static func marker(_ label: String, subject: AnyObject? = nil, isolation: (any Actor)? = #isolation) {
+        TraceContext.active?.marker(label, subject: subject, isolation: isolation)
     }
 }

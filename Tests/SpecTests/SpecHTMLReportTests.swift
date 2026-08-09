@@ -98,9 +98,9 @@ final class SpecHTMLReportTests: XCTestCase {
         XCTAssertTrue(html.contains("<!doctype html>"), file: file, line: line)
     }
 
-    func testDivergedSpecLeadsWithCounterexample() {
+    func testDivergedSpecLeadsWithCounterexample() async {
         let swept = till().vary { Seam("coffeeQty", .int(1 ... 20)) }
-        let verdict = swept.verify(against: makeRoundBug)
+        let verdict = await swept.verify(against: makeRoundBug)
         XCTAssertEqual(verdict.verdict, .diverged)
 
         let html = verdict.htmlReport()
@@ -113,8 +113,8 @@ final class SpecHTMLReportTests: XCTestCase {
         XCTAssertTrue(html.contains("seam values"), "the counterexample hero lists the shrunk seam values")
     }
 
-    func testEquivalentSpecRendersCleanPanel() {
-        let verdict = till().verify(against: makeGood)
+    func testEquivalentSpecRendersCleanPanel() async {
+        let verdict = await till().verify(against: makeGood)
         XCTAssertEqual(verdict.verdict, .equivalent)
         let html = verdict.htmlReport()
         assertSelfContained(html)

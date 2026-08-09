@@ -167,9 +167,9 @@ public enum HTML {
         }
 
         return """
-        <article class="card \(kindClass(divergence.kind))">
+        <article class="card \(divergence.kind.cssClass)">
           <header>
-            <span class="kind"><span class="glyph">\(glyph(divergence.kind))</span>\(kindLabel(divergence.kind))</span>
+            <span class="kind"><span class="glyph">\(divergence.kind.glyph)</span>\(divergence.kind.label)</span>
             <span class="label">\(esc(divergence.label))</span>
             \(classificationBadge(divergence, intentInPlay: intentInPlay))
             \(locationChips(divergence))
@@ -259,36 +259,6 @@ public enum HTML {
         case .equivalent: "ok"
         case .diverged: "bad"
         case .cannotVerify: "warn"
-        }
-    }
-
-    private static func glyph(_ kind: Divergence.Kind) -> String {
-        switch kind {
-        case .missingEvent: "−"
-        case .unexpectedEvent: "+"
-        case .reordered: "↔"
-        case .valueMismatch: "≠"
-        case .timingRegression: "⏱"
-        }
-    }
-
-    private static func kindLabel(_ kind: Divergence.Kind) -> String {
-        switch kind {
-        case .missingEvent: "missing event"
-        case .unexpectedEvent: "unexpected event"
-        case .reordered: "reordered"
-        case .valueMismatch: "value mismatch"
-        case .timingRegression: "timing regression"
-        }
-    }
-
-    private static func kindClass(_ kind: Divergence.Kind) -> String {
-        switch kind {
-        case .missingEvent: "k-missing"
-        case .unexpectedEvent: "k-unexpected"
-        case .reordered: "k-reordered"
-        case .valueMismatch: "k-value"
-        case .timingRegression: "k-timing"
         }
     }
 
@@ -574,3 +544,45 @@ public extension HTMLReporting {
 
 extension TraceDiff: HTMLReporting {}
 extension VerificationResult: HTMLReporting {}
+
+/// Per-kind presentation, kept on the kind rather than inside the report builder — three parallel
+/// switches over one enum belong next to it, and the builder was over its size budget carrying them.
+private extension Divergence.Kind {
+    var glyph: String {
+        switch self {
+        case .missingEvent: "−"
+        case .unexpectedEvent: "+"
+        case .reordered: "↔"
+        case .domainMigration: "⇄"
+        case .orderingRelaxed: "⤳"
+        case .orderingLost: "⊘"
+        case .orderingAdded: "⊕"
+        case .valueMismatch: "≠"
+        case .timingRegression: "⏱"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .missingEvent: "missing event"
+        case .unexpectedEvent: "unexpected event"
+        case .reordered: "reordered"
+        case .domainMigration: "domain migration"
+        case .orderingRelaxed: "ordering relaxed"
+        case .orderingLost: "ordering lost"
+        case .orderingAdded: "ordering added"
+        case .valueMismatch: "value mismatch"
+        case .timingRegression: "timing regression"
+        }
+    }
+
+    var cssClass: String {
+        switch self {
+        case .missingEvent: "k-missing"
+        case .unexpectedEvent: "k-unexpected"
+        case .reordered, .domainMigration, .orderingRelaxed, .orderingLost, .orderingAdded: "k-reordered"
+        case .valueMismatch: "k-value"
+        case .timingRegression: "k-timing"
+        }
+    }
+}

@@ -109,11 +109,11 @@ public extension Op {
     init<A>(
         _ label: String,
         varying first: ArgumentDomain<A>,
-        _ action: @escaping (S, A) -> Void
+        _ action: @escaping (S, A) async -> Void
     ) {
         let keys = Self.keys(label, [first.name])
         self.init(label) { system, seams in
-            action(system, first.read(seams, seam: keys[0]))
+            await action(system, first.read(seams, seam: keys[0]))
         }
         argumentDomains = [(seam: keys[0], domain: first.domain)]
     }
@@ -129,11 +129,11 @@ public extension Op {
         _ label: String,
         varying first: ArgumentDomain<A>,
         _ second: ArgumentDomain<B>,
-        _ action: @escaping (S, A, B) -> Void
+        _ action: @escaping (S, A, B) async -> Void
     ) {
         let keys = Self.keys(label, [first.name, second.name])
         self.init(label) { system, seams in
-            action(system, first.read(seams, seam: keys[0]), second.read(seams, seam: keys[1]))
+            await action(system, first.read(seams, seam: keys[0]), second.read(seams, seam: keys[1]))
         }
         argumentDomains = [
             (seam: keys[0], domain: first.domain),
@@ -146,11 +146,11 @@ public extension Op {
         varying first: ArgumentDomain<A>,
         _ second: ArgumentDomain<B>,
         _ third: ArgumentDomain<C>,
-        _ action: @escaping (S, A, B, C) -> Void
+        _ action: @escaping (S, A, B, C) async -> Void
     ) {
         let keys = Self.keys(label, [first.name, second.name, third.name])
         self.init(label) { system, seams in
-            action(
+            await action(
                 system,
                 first.read(seams, seam: keys[0]),
                 second.read(seams, seam: keys[1]),

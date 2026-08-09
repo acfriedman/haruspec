@@ -6,7 +6,7 @@ import HaruspecTrace
 /// Baseline implementation — the "golden" behavior every change is verified against.
 ///
 /// Look how little the oracle intrudes: `@Traced` instruments every method (call/args/return) with no
-/// per-method code, `NotificationInterceptor` captures the posted notifications, and the only explicit
+/// per-method code, the injected `RecordingNotificationCenter` records the posted notifications, and the only explicit
 /// hook is `Haruspec.interval`, which marks the region a timing budget applies to. The class holds no
 /// recorder; capture is ambient.
 @Traced("CartService")

@@ -28,6 +28,12 @@ final class ReproReceipt: NSObject {
 
 /// Plain-Swift stand-in for the Obj-C CartManager: posts to `.default`, object arg + object return.
 final class ReproLegacyManager {
+    let notifications: NotificationCenter
+
+    init(notifications: NotificationCenter = .default) {
+        self.notifications = notifications
+    }
+
     private var lines: [String: (price: Int, qty: Int)] = [:]
     private var order: [String] = []
     private var promo = false
@@ -40,19 +46,19 @@ final class ReproLegacyManager {
         } else {
             order.append(sku); lines[sku] = (product.price, quantity)
         }
-        NotificationCenter.default.post(name: .init("CartDidChange"), object: self)
+        notifications.post(name: .init("CartDidChange"), object: self)
     }
 
     func removeSku(_ sku: String!) {
         guard lines[sku] != nil else { return }
         lines[sku] = nil; order.removeAll { $0 == sku }
-        NotificationCenter.default.post(name: .init("CartDidChange"), object: self)
+        notifications.post(name: .init("CartDidChange"), object: self)
     }
 
     func applyPromo(_ code: String!) -> Bool {
         guard code == "SAVE10" else { return false }
         promo = true
-        NotificationCenter.default.post(name: .init("CartDidChange"), object: self)
+        notifications.post(name: .init("CartDidChange"), object: self)
         return true
     }
 
@@ -63,9 +69,9 @@ final class ReproLegacyManager {
         let receipt = ReproReceipt()
         receipt.subtotal = subtotal; receipt.discount = discount; receipt.total = total
         receipt.orderID = UUID().uuidString
-        NotificationCenter.default.post(name: .init("CheckoutDidComplete"), object: self, userInfo: ["total": total])
+        notifications.post(name: .init("CheckoutDidComplete"), object: self, userInfo: ["total": total])
         order.removeAll(); lines.removeAll(); promo = false
-        NotificationCenter.default.post(name: .init("CartDidChange"), object: self)
+        notifications.post(name: .init("CartDidChange"), object: self)
         return receipt
     }
 }
@@ -81,6 +87,12 @@ protocol ReproCart: AnyObject {
 /// Faithful port — identical behavior, posting to `.default` directly.
 @Traced("Cart")
 final class ReproSwiftPort: ReproCart {
+    let notifications: NotificationCenter
+
+    init(notifications: NotificationCenter = .default) {
+        self.notifications = notifications
+    }
+
     private var lines: [String: (price: Int, qty: Int)] = [:]
     private var order: [String] = []
     private var promo = false
@@ -93,19 +105,19 @@ final class ReproSwiftPort: ReproCart {
         } else {
             order.append(sku); lines[sku] = (product.price, quantity)
         }
-        NotificationCenter.default.post(name: .init("CartDidChange"), object: self)
+        notifications.post(name: .init("CartDidChange"), object: self)
     }
 
     func removeSku(_ sku: String!) {
         guard lines[sku] != nil else { return }
         lines[sku] = nil; order.removeAll { $0 == sku }
-        NotificationCenter.default.post(name: .init("CartDidChange"), object: self)
+        notifications.post(name: .init("CartDidChange"), object: self)
     }
 
     func applyPromo(_ code: String!) -> Bool {
         guard code == "SAVE10" else { return false }
         promo = true
-        NotificationCenter.default.post(name: .init("CartDidChange"), object: self)
+        notifications.post(name: .init("CartDidChange"), object: self)
         return true
     }
 
@@ -116,17 +128,17 @@ final class ReproSwiftPort: ReproCart {
         let receipt = ReproReceipt()
         receipt.subtotal = subtotal; receipt.discount = discount; receipt.total = total
         receipt.orderID = UUID().uuidString
-        NotificationCenter.default.post(name: .init("CheckoutDidComplete"), object: self, userInfo: ["total": total])
+        notifications.post(name: .init("CheckoutDidComplete"), object: self, userInfo: ["total": total])
         order.removeAll(); lines.removeAll(); promo = false
-        NotificationCenter.default.post(name: .init("CartDidChange"), object: self)
+        notifications.post(name: .init("CartDidChange"), object: self)
         return receipt
     }
 }
 
 final class ForwarderReproTests: XCTestCase {
-    func testForwarderBaselineVsFaithfulPortIsEquivalent() {
+    func testForwarderBaselineVsFaithfulPortIsEquivalent() async {
         let spec = Spec<ReproCart>("cart.repro")
-            .system { _ in TracedReproCart() }
+            .system { context in TracedReproCart(ReproLegacyManager(notifications: context.notifications)) }
             .operations {
                 Op("addCoffee") { sut, seams in
                     sut.add(ReproProduct(sku: "COFFEE", price: 1299), quantity: Int(seams.int("coffeeQty", default: 2)))
@@ -139,7 +151,6 @@ final class ForwarderReproTests: XCTestCase {
                 Op("checkout") { sut in _ = sut.checkout() }.last()
             }
             .observe(notifications: ["CartDidChange", "CheckoutDidComplete"])
-            .observing(on: .default)
             .tolerate(
                 Tolerance(
                     volatileFields: [.key("orderID")],
@@ -155,7 +166,7 @@ final class ForwarderReproTests: XCTestCase {
                 Ordering(max: 50)
             }
 
-        let verdict = spec.verify(against: { _ in ReproSwiftPort() })
+        let verdict = await spec.verify(against: { context in ReproSwiftPort(notifications: context.notifications) })
         print("=== FORWARDER REPRO ===")
         print(verdict.report())
         print("=== FORWARDER REPRO END ===")

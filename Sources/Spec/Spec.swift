@@ -35,7 +35,10 @@ public struct SeamContext {
 /// A labeled, typed operation on the system under test, plus ordering constraints. `$0` is the system.
 public struct Op<S> {
     public let label: String
-    let action: (S, SeamContext) -> Void
+    // Async, so an operation may drive an `actor` or any other `async` surface. A synchronous
+    // closure converts to this implicitly — Swift treats sync functions as a subtype of async ones —
+    // so every existing sync `Op { … }` declaration keeps working untouched.
+    let action: (S, SeamContext) async -> Void
     var mustBeLast = false
     /// Soft preconditions: labels this op is *expected* to follow, declared with `.after(_:)`.
     /// Exploration deliberately breaks them in part of its sample rather than filtering them out.
@@ -54,14 +57,14 @@ public struct Op<S> {
     var argumentDomains: [(seam: String, domain: SeamDomain)] = []
 
     /// A simple op.
-    public init(_ label: String, _ action: @escaping (S) -> Void) {
+    public init(_ label: String, _ action: @escaping (S) async -> Void) {
         self.label = label
-        self.action = { system, _ in action(system) }
+        self.action = { system, _ in await action(system) }
     }
 
     /// A *parameterized* op: reads generated values from the seam context, so arguments become
     /// property-varied surface (e.g. `qty: Int(seams.int("coffeeQty", default: 10))`).
-    public init(_ label: String, _ action: @escaping (S, SeamContext) -> Void) {
+    public init(_ label: String, _ action: @escaping (S, SeamContext) async -> Void) {
         self.label = label
         self.action = action
     }
@@ -188,9 +191,7 @@ public struct Spec<S> {
     /// oracle watches all behavior by default. A non-nil set is an explicit allowlist override set via
     /// `.observe(notifications:)`, for callers who want to narrow to a few product channels.
     var notificationNames: Set<String>?
-    var observationCenter: NotificationCenter?
     var tolerances: Tolerance = .strict
-    var intent: Intent = .none
     var seamDomains: [String: SeamDomain] = [:]
     /// Which of `seamDomains` came from a typed op argument — so a `Seam(_:_:)` that collides with one
     /// traps instead of quietly redefining an argument's domain from a distance.
@@ -257,26 +258,16 @@ public struct Spec<S> {
         return copy
     }
 
-    /// Observe an explicit NotificationCenter (e.g. `.default`) instead of the default isolated one — so
-    /// a SUT that posts to a center you don't control can still be watched with no code change. Notifications
-    /// are an already-decoupled broadcast, so this needs no seam. **Isolation is the caller's job:** the
-    /// default (a fresh per-window `NotificationCenter()` handed through `SeamContext.notifications`) is
-    /// inherently isolated; pointing this at a process-wide center under a *parallel* test runner can let a
-    /// sibling capture's posts leak in (prefer injecting the context center, or serialize the suite).
-    public func observing(on center: NotificationCenter) -> Spec<S> {
-        var copy = self; copy.observationCenter = center; return copy
-    }
+    // Observe an explicit NotificationCenter (e.g. `.default`) instead of the default isolated one — so
+    // a SUT that posts to a center you don't control can still be watched with no code change. Notifications
+    // are an already-decoupled broadcast, so this needs no seam. **Isolation is the caller's job:** the
+    // default (a fresh per-window `NotificationCenter()` handed through `SeamContext.notifications`) is
+    // inherently isolated; pointing this at a process-wide center under a *parallel* test runner can let a
+    // sibling capture's posts leak in (prefer injecting the context center, or serialize the suite).
 
     /// Declared acceptable deltas.
     public func tolerate(_ spec: Tolerance) -> Spec<S> {
         var copy = self; copy.tolerances = spec; return copy
-    }
-
-    /// Extension mode: declare the deltas the change was *meant* to make. Declared divergences are
-    /// reported as `intended` and don't gate; the verdict gates on the residual collateral. The default
-    /// (`Intent.none`) is parity mode — every divergence gates. See `Intent`.
-    public func intend(_ spec: Intent) -> Spec<S> {
-        var copy = self; copy.intent = spec; return copy
     }
 
     /// What to vary — seam domains and/or call ordering.

@@ -84,9 +84,9 @@ final class ContinuousRunTests: XCTestCase {
 
     // MARK: Record
 
-    func testRecordCreatesMissingDirectoriesAndWritesThePlan() throws {
+    func testRecordCreatesMissingDirectoriesAndWritesThePlan() async throws {
         let planURL = scratch().appendingPathComponent("nested/plan.json")
-        let outcome = cart(system: makeGood).runContinuous(.record(planURL: planURL))
+        let outcome = await cart(system: makeGood).runContinuous(.record(planURL: planURL))
 
         XCTAssertTrue(outcome.succeeded, outcome.summary)
         XCTAssertEqual(outcome.artifactPath, planURL.path)
@@ -97,12 +97,13 @@ final class ContinuousRunTests: XCTestCase {
 
     // MARK: Replay
 
-    func testReplayOfAFaithfulBuildWritesAnEquivalentVerdict() throws {
+    func testReplayOfAFaithfulBuildWritesAnEquivalentVerdict() async throws {
         let planURL = scratch().appendingPathComponent("plan.json")
         let resultsDir = scratch()
-        XCTAssertTrue(cart(system: makeGood).runContinuous(.record(planURL: planURL)).succeeded)
+        let recorded = await cart(system: makeGood).runContinuous(.record(planURL: planURL))
+        XCTAssertTrue(recorded.succeeded)
 
-        let outcome = cart(system: makeGood)
+        let outcome = await cart(system: makeGood)
             .runContinuous(.replay(planURL: planURL, resultsDirectory: resultsDir))
 
         XCTAssertTrue(outcome.succeeded, outcome.summary)
@@ -116,12 +117,13 @@ final class ContinuousRunTests: XCTestCase {
         )
     }
 
-    func testReplayOfARegressionFailsAndPinsTheDivergenceInResultJSON() throws {
+    func testReplayOfARegressionFailsAndPinsTheDivergenceInResultJSON() async throws {
         let planURL = scratch().appendingPathComponent("plan.json")
         let resultsDir = scratch()
-        XCTAssertTrue(cart(system: makeGood).runContinuous(.record(planURL: planURL)).succeeded)
+        let recorded = await cart(system: makeGood).runContinuous(.record(planURL: planURL))
+        XCTAssertTrue(recorded.succeeded)
 
-        let outcome = cart(system: makeRoundBug)
+        let outcome = await cart(system: makeRoundBug)
             .runContinuous(.replay(planURL: planURL, resultsDirectory: resultsDir))
 
         XCTAssertFalse(outcome.succeeded)
@@ -129,8 +131,8 @@ final class ContinuousRunTests: XCTestCase {
         XCTAssertEqual(verdict.verdict, .diverged)
     }
 
-    func testAMissingPlanIsReportedRatherThanThrown() {
-        let outcome = cart(system: makeGood).runContinuous(
+    func testAMissingPlanIsReportedRatherThanThrown() async {
+        let outcome = await cart(system: makeGood).runContinuous(
             .replay(planURL: scratch().appendingPathComponent("absent.json"), resultsDirectory: scratch())
         )
 
@@ -140,9 +142,9 @@ final class ContinuousRunTests: XCTestCase {
 
     // MARK: Environment-driven entry point
 
-    func testTheEnvironmentEntryPointDrivesTheSelectedSide() {
+    func testTheEnvironmentEntryPointDrivesTheSelectedSide() async {
         let planURL = scratch().appendingPathComponent("plan.json")
-        let outcome = cart(system: makeGood).runContinuous(environment: [
+        let outcome = await cart(system: makeGood).runContinuous(environment: [
             "HARUSPEC_MODE": "record",
             "HARUSPEC_PLAN_PATH": planURL.path
         ])
@@ -151,8 +153,8 @@ final class ContinuousRunTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: planURL.path))
     }
 
-    func testAnUnselectedRunFailsLoudlyRatherThanPassingSilently() {
-        let outcome = cart(system: makeGood).runContinuous(environment: [:])
+    func testAnUnselectedRunFailsLoudlyRatherThanPassingSilently() async {
+        let outcome = await cart(system: makeGood).runContinuous(environment: [:])
 
         XCTAssertFalse(outcome.succeeded)
         XCTAssertTrue(outcome.summary.contains("HARUSPEC_MODE"), outcome.summary)

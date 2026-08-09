@@ -8,7 +8,7 @@ import XCTest
 // would not compile — which is the test. It deliberately touches one symbol from each module:
 //
 //   HaruspecMacros   — @Traced, @Timed, @Seamed
-//   HaruspecTrace    — Haruspec.marker / Haruspec.interval, TraceRecorder, NotificationInterceptor, ManualClock
+//   HaruspecTrace    — Haruspec.marker / Haruspec.interval, TraceRecorder, RecordingNotificationCenter, ManualClock
 //   HaruspecCore     — Tolerance, TraceDiff.Verdict
 //   HaruspecSeams    — Cassette, Seam, SeamClock, SeamDomain
 //   HaruspecSpec — Spec / Op / Seam / Ordering / .verify(against:)
@@ -93,7 +93,7 @@ private func makeRefactor(_ ctx: SeamContext) -> Cart {
 final class UmbrellaImportTests: XCTestCase {
     /// The headline: the entire Spec DSL + macros + verdict types are reachable through one import,
     /// end-to-end. Also exercises the seam-value and ordering variation builders.
-    func testSingleImportSurfacesSpecDSL() {
+    func testSingleImportSurfacesSpecDSL() async {
         let spec = Spec<Cart>("umbrella-cart")
             .system(makeGood)
             .operations {
@@ -104,7 +104,7 @@ final class UmbrellaImportTests: XCTestCase {
             .tolerate(.strict) // ← Tolerance (HaruspecCore)
             .vary { Ordering(max: 10); Seam("qty", .int(1 ... 5)) } // ← Ordering / Seam / SeamDomain
 
-        let verdict: SpecVerdict = spec.verify(against: makeRefactor)
+        let verdict: SpecVerdict = await spec.verify(against: makeRefactor)
         let outcome: TraceDiff.Verdict = verdict.verdict // ← TraceDiff.Verdict (HaruspecCore)
         XCTAssertEqual(outcome, .equivalent, "a behavior-preserving refactor is EQUIVALENT")
         XCTAssertTrue(verdict.diff.divergences.isEmpty) // ← TraceDiff (HaruspecCore)
@@ -112,8 +112,8 @@ final class UmbrellaImportTests: XCTestCase {
 
     /// `htmlReport()` on all three verdict carriers is reachable through the single umbrella import —
     /// the visual companion to `report()`, self-contained enough to open over `file://`.
-    func testHTMLReportIsReExported() throws {
-        let verdict = Spec<Cart>("umbrella-html")
+    func testHTMLReportIsReExported() async throws {
+        let verdict = await Spec<Cart>("umbrella-html")
             .system(makeGood)
             .operations { Op("checkout") { _ = $0.checkout() } }
             .observe(notifications: ["CheckoutCompleted"])
@@ -140,13 +140,7 @@ final class UmbrellaImportTests: XCTestCase {
     /// `Haruspec.interval` / `Haruspec.marker`, all named through the umbrella.
     func testCaptureSurfaceIsReExported() {
         let recorder = TraceRecorder(name: "umbrella", clock: ManualClock()) // ← TraceRecorder + ManualClock
-        let center = NotificationCenter()
-        let interceptor = NotificationInterceptor(
-            recorder: recorder,
-            center: center, // ← NotificationInterceptor
-            names: ["CartChanged", "CheckoutCompleted"]
-        )
-        interceptor.start(); defer { interceptor.stop() }
+        let center = RecordingNotificationCenter(names: ["CartChanged", "CheckoutCompleted"])
 
         let cart = GoodCart(center: center)
         TraceContext.$current.withValue(recorder) { // ← TraceContext (HaruspecTrace)

@@ -81,6 +81,58 @@ public struct VolatileField: Sendable, Equatable, Hashable {
     }
 }
 
+/// How an event that ran on a *different isolation domain* participates in the verdict.
+///
+/// Default `.gating`, **red until declared**: a domain move is a real behavioral change — different
+/// re-entrancy, different observers' threads, different subtle bugs — so an undeclared one fails the
+/// verdict, and the intended one is a one-line `Intent.expectedDomainMigrations` declaration. (An
+/// earlier default of `.advisory` reasoned that a migration moves every event, so gating is red by
+/// construction — but that was really "red with no exit," and the declaration is the exit.)
+/// `.advisory` reports without failing; `.ignored` restores the pre-migration reading, where a moved
+/// event is a missing + unexpected pair.
+public enum DomainMigrationPolicy: String, Codable, Sendable {
+    case advisory // reported, does not fail the verdict
+    case gating // an undeclared domain change fails the verdict
+    case ignored // not detected; a migrated event reads as a missing/unexpected pair
+}
+
+/// How concurrent traces are compared.
+///
+/// A trace is recorded as one total order, but for concurrent code the interleaving is a property of
+/// the *scheduler*: two runs of an unchanged binary produce different orders, and comparing them as
+/// sequences manufactures a different counterexample every run. `.perDomain` stops comparing the one
+/// interleaving and compares per-domain projections instead:
+///
+///  - an **ordered** domain (main / actor / serial queue) keeps the sequence comparison — its order
+///    is a runtime guarantee, so it stays a contract;
+///  - a bucket with **no meaningful internal order** (concurrent queue, `ambient`) is compared as a
+///    **multiset** — which effects, with which payloads, how many times;
+///  - **cross-domain** relative order is dropped entirely;
+///  - an ordered baseline domain whose events land in an unordered candidate domain is compared as a
+///    multiset (either side unordered ⇒ multiset — losing an assertion rather than inventing one),
+///    and the dropped guarantee itself is reported as `orderingRelaxed`, which **gates** until the
+///    change declares it via `Intent.expectedOrderingRelaxations`.
+public enum ConcurrencyComparison: String, Codable, Sendable {
+    case totalOrder // compare the recorded interleaving as one sequence
+    case perDomain // project by domain: ordered ⇒ sequence, unordered ⇒ multiset, cross-domain order dropped
+}
+
+/// How the recorded spawn edges participate in the verdict.
+///
+/// The edge pass compares happens-before *constraints* (see `DiffSpawnEdges.swift`): a baseline
+/// constraint the candidate can no longer prove is `orderingLost` — a dropped synchronization,
+/// detected structurally from a passing run — and the reverse is `orderingAdded`, the awaited port
+/// of fire-and-forget work. Default `.gating`, **red until declared**
+/// (`Intent.expectedOrderingLosses` / `expectedOrderingAdditions`): both are real behavioral
+/// changes. Known cost, accepted deliberately: the pass does not chase transitive chains, so a
+/// constraint preserved through an intermediate hop over-reports — a spec hitting that drops to
+/// `.advisory`, and the over-report rate on real subjects is an open measurement.
+public enum SpawnEdgePolicy: String, Codable, Sendable {
+    case advisory // constraint changes are reported, but do not fail the verdict
+    case gating // an undeclared constraint change fails the verdict
+    case ignored // spawn edges are not compared at all
+}
+
 public struct Tolerance: Sendable, Equatable {
     /// Payload fields whose values are non-deterministic and must be ignored — e.g.
     /// `.key("orderID")`. Redacted to a placeholder before comparison. See `VolatileField` for the
@@ -110,6 +162,19 @@ public struct Tolerance: Sendable, Equatable {
     /// How the structural (auto-captured) tier participates in the verdict. Defaults to `.strict`.
     public var structuralComparison: StructuralComparison
 
+    /// How an event that moved isolation domains participates in the verdict. Defaults to `.gating`
+    /// (red until declared via `Intent.expectedDomainMigrations`).
+    public var domainMigration: DomainMigrationPolicy
+
+    /// How concurrent traces are compared. Defaults to `.totalOrder`; a spec whose subject does
+    /// genuinely parallel work opts into `.perDomain`, where scheduler interleaving stops being
+    /// treated as behavior.
+    public var concurrency: ConcurrencyComparison
+
+    /// How spawn-edge constraint changes participate in the verdict. Defaults to `.gating`
+    /// (red until declared via `Intent.expectedOrderingLosses` / `expectedOrderingAdditions`).
+    public var spawnEdges: SpawnEdgePolicy
+
     public init(
         volatileFields: [VolatileField] = [],
         numericEpsilon: Double = 0,
@@ -117,7 +182,10 @@ public struct Tolerance: Sendable, Equatable {
         unorderedGroups: [[String]] = [],
         ignoredKinds: [EventKind] = [],
         ignoredNotificationNames: [String] = [],
-        structuralComparison: StructuralComparison = .strict
+        structuralComparison: StructuralComparison = .strict,
+        domainMigration: DomainMigrationPolicy = .gating,
+        concurrency: ConcurrencyComparison = .totalOrder,
+        spawnEdges: SpawnEdgePolicy = .gating
     ) {
         self.volatileFields = volatileFields
         self.numericEpsilon = numericEpsilon
@@ -126,6 +194,9 @@ public struct Tolerance: Sendable, Equatable {
         self.ignoredKinds = ignoredKinds
         self.ignoredNotificationNames = ignoredNotificationNames
         self.structuralComparison = structuralComparison
+        self.domainMigration = domainMigration
+        self.concurrency = concurrency
+        self.spawnEdges = spawnEdges
     }
 
     /// The default: exact match on everything (nondeterminism already removed by canonicalization of
@@ -192,7 +263,7 @@ extension VolatileField: Codable {
 extension Tolerance: Codable {
     enum CodingKeys: String, CodingKey {
         case volatileFields, numericEpsilon, timingBudgets, unorderedGroups, ignoredKinds
-        case ignoredNotificationNames, structuralComparison
+        case ignoredNotificationNames, structuralComparison, domainMigration, concurrency, spawnEdges
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -206,6 +277,12 @@ extension Tolerance: Codable {
         ignoredNotificationNames = try container.decodeIfPresent([String].self, forKey: .ignoredNotificationNames) ?? []
         structuralComparison = try container
             .decodeIfPresent(StructuralComparison.self, forKey: .structuralComparison) ?? .strict
+        domainMigration = try container
+            .decodeIfPresent(DomainMigrationPolicy.self, forKey: .domainMigration) ?? .gating
+        concurrency = try container
+            .decodeIfPresent(ConcurrencyComparison.self, forKey: .concurrency) ?? .totalOrder
+        spawnEdges = try container
+            .decodeIfPresent(SpawnEdgePolicy.self, forKey: .spawnEdges) ?? .gating
     }
 }
 

@@ -42,9 +42,10 @@ public extension SpecVerdict {
     private var equivalentBody: String {
         // "all N orderings" only when the sweep was exhaustive: a sampled run that says "all" is
         // claiming a surface it never walked.
-        let scope = exploration.map { $0.isExhaustive ? "all \($0.orderingsExplored)" : "\($0.orderingsExplored) of "
-            + "\($0.orderingsAreExact ? "" : "≥")\($0.orderingsAvailable)"
-        } ?? "all \(orderingsExplored)"
+        let scope = exploration.isExhaustive
+            ? "all \(exploration.orderingsExplored)"
+            : "\(exploration.orderingsExplored) of "
+            + "\(exploration.orderingsAreExact ? "" : "≥")\(exploration.orderingsAvailable)"
         let plural = orderingsExplored == 1 ? "" : "s"
         var lines = ["Behavior matched across everything explored — \(scope) "
             + "call ordering\(plural) and every recorded seam variant replayed to traces identical "
@@ -129,11 +130,9 @@ public extension SpecVerdict {
     }
 
     private var footer: String {
-        let explored = exploration.map { exploration in
-            exploration.isExhaustive
-                ? "\(orderingsExplored) (exhaustive)"
-                : "\(orderingsExplored) of \(exploration.orderingsAreExact ? "" : "≥")\(exploration.orderingsAvailable)"
-        } ?? "\(orderingsExplored)"
+        let explored = exploration.isExhaustive
+            ? "\(orderingsExplored) (exhaustive)"
+            : "\(orderingsExplored) of \(exploration.orderingsAreExact ? "" : "≥")\(exploration.orderingsAvailable)"
         var parts = ["Haruspec continuous verification", "orderings explored: \(explored)"]
         if verdict != .diverged, let coverageSummary = coverageFooterSummary {
             parts.append(coverageSummary)

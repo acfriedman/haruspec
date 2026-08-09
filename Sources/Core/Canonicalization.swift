@@ -49,10 +49,15 @@ public enum Canonicalizer {
             }
             return true
         }
+        // Re-densifying the clock moves every `seq`, and a spawn edge is a `seq` — so the edges are
+        // remapped with it. An edge whose cause was filtered out is dropped rather than left pointing
+        // at whichever event inherited that number, which would be a fabricated causal claim.
+        let renumbered = Dictionary(uniqueKeysWithValues: events.enumerated().map { ($1.seq, $0) })
         for index in events.indices {
             if let payload = events[index].payload {
                 events[index].payload = redact(payload, spec: spec, label: events[index].label)
             }
+            events[index].spawnedBy = events[index].spawnedBy.flatMap { renumbered[$0] }
             events[index].seq = index // re-densify the logical clock after any filtering
         }
         return Trace(name: trace.name, schemaVersion: trace.schemaVersion, events: events)

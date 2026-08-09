@@ -11,6 +11,27 @@ import Foundation
 /// **Parity mode (migrations) is simply `Intent.none`.** Extension mode (features) is a populated
 /// spec. Same engine; the only difference is how much change was declared up front.
 public struct Intent: Sendable, Equatable {
+    /// One declared movement of work between isolation domains, named the way an author names
+    /// domains (`DomainName`): a queue by label whatever its discipline, an actor by type whatever
+    /// its instance. Scoped to the event labels it names — an empty list means every label, the
+    /// wholesale form. The DSL spellings are `Moves(_:from:to:)` and `Moves(everythingFrom:to:)`.
+    public struct DomainMove: Sendable, Equatable, Codable {
+        public let labels: [String]
+        public let origin: DomainName
+        public let destination: DomainName
+
+        public init(labels: [String] = [], from origin: DomainName, to destination: DomainName) {
+            self.labels = labels
+            self.origin = origin
+            self.destination = destination
+        }
+
+        func matches(label: String, from actualFrom: String?, to actualTo: String?) -> Bool {
+            (labels.isEmpty || labels.contains(label))
+                && origin.matches(actualFrom) && destination.matches(actualTo)
+        }
+    }
+
     /// Event labels the change is allowed to ADD (present in candidate, absent in baseline).
     public var expectedNewEvents: [String]
 
@@ -22,14 +43,42 @@ public struct Intent: Sendable, Equatable {
     /// field does NOT excuse a change to another field of the same event — intent must be specific.
     public var expectedValueChanges: [String: [String]]
 
+    /// Ordered domains whose ordering guarantee the change deliberately drops (`orderingRelaxed`).
+    /// Replacing a serial queue with a task group is the canonical case: the relaxation is the point
+    /// of the PR, so it is declarable — and gates until declared. The DSL spelling is
+    /// `Relaxes(orderingOf:)`.
+    public var expectedOrderingRelaxations: [DomainName]
+
+    /// Events (by label) whose happens-before constraint the change deliberately drops — the
+    /// `orderingLost` counterpart of a relaxation. A gate with no declarable exit would veto the
+    /// work instead of checking it.
+    public var expectedOrderingLosses: [String]
+
+    /// Events (by label) the change deliberately *newly synchronizes* — `orderingAdded`. The awaited
+    /// port of fire-and-forget work is the canonical case: everything after the call now waits.
+    public var expectedOrderingAdditions: [String]
+
+    /// Movements of work between isolation domains the change intends — a port's one-line summary
+    /// (`DomainMove(from: "queue(serial):com.emporium.cart", to: "actor:SwiftCartActor")`) rather
+    /// than one declaration per migrated event. Declaring one pair does NOT excuse another.
+    public var expectedDomainMigrations: [DomainMove]
+
     public init(
         expectedNewEvents: [String] = [],
         expectedRemovedEvents: [String] = [],
-        expectedValueChanges: [String: [String]] = [:]
+        expectedValueChanges: [String: [String]] = [:],
+        expectedOrderingRelaxations: [DomainName] = [],
+        expectedOrderingLosses: [String] = [],
+        expectedOrderingAdditions: [String] = [],
+        expectedDomainMigrations: [DomainMove] = []
     ) {
         self.expectedNewEvents = expectedNewEvents
         self.expectedRemovedEvents = expectedRemovedEvents
         self.expectedValueChanges = expectedValueChanges
+        self.expectedOrderingRelaxations = expectedOrderingRelaxations
+        self.expectedOrderingLosses = expectedOrderingLosses
+        self.expectedOrderingAdditions = expectedOrderingAdditions
+        self.expectedDomainMigrations = expectedDomainMigrations
     }
 
     /// The empty spec: nothing was declared, so every divergence stays collateral. This is parity mode.
@@ -45,6 +94,16 @@ public struct Intent: Sendable, Equatable {
         case .valueMismatch:
             guard let fields = expectedValueChanges[divergence.label] else { return false }
             return fields.isEmpty || fields.contains { fieldMatches($0, divergence.detail) }
+        case .orderingRelaxed:
+            return expectedOrderingRelaxations.contains { $0.matches(divergence.fromDomain) }
+        case .orderingLost:
+            return expectedOrderingLosses.contains(divergence.label)
+        case .orderingAdded:
+            return expectedOrderingAdditions.contains(divergence.label)
+        case .domainMigration:
+            return expectedDomainMigrations.contains {
+                $0.matches(label: divergence.label, from: divergence.fromDomain, to: divergence.toDomain)
+            }
         case .reordered, .timingRegression:
             return false // not yet expressible as declared intent — always collateral for now
         }
@@ -84,6 +143,8 @@ public extension TraceDiff {
 extension Intent: Codable {
     enum CodingKeys: String, CodingKey {
         case expectedNewEvents, expectedRemovedEvents, expectedValueChanges
+        case expectedOrderingRelaxations, expectedOrderingLosses, expectedOrderingAdditions
+        case expectedDomainMigrations
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -93,6 +154,14 @@ extension Intent: Codable {
         expectedRemovedEvents = try container.decodeIfPresent([String].self, forKey: .expectedRemovedEvents) ?? []
         expectedValueChanges = try container
             .decodeIfPresent([String: [String]].self, forKey: .expectedValueChanges) ?? [:]
+        expectedOrderingRelaxations = try container
+            .decodeIfPresent([DomainName].self, forKey: .expectedOrderingRelaxations) ?? []
+        expectedOrderingLosses = try container
+            .decodeIfPresent([String].self, forKey: .expectedOrderingLosses) ?? []
+        expectedOrderingAdditions = try container
+            .decodeIfPresent([String].self, forKey: .expectedOrderingAdditions) ?? []
+        expectedDomainMigrations = try container
+            .decodeIfPresent([DomainMove].self, forKey: .expectedDomainMigrations) ?? []
     }
 }
 
