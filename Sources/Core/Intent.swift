@@ -11,33 +11,20 @@ import Foundation
 /// **Parity mode (migrations) is simply `Intent.none`.** Extension mode (features) is a populated
 /// spec. Same engine; the only difference is how much change was declared up front.
 public struct Intent: Sendable, Equatable {
-    /// One declared movement of work between isolation domains, spelled the way domains print:
-    /// `"main"`, `"ambient"`, `"queue(serial):com.emporium.cart"`, `"actor:SwiftCartActor"`.
-    /// An actor's instance number is normalized away on both sides — an author cannot know
-    /// first-seen numbering, and "this work moved onto a `SwiftCartActor`" is the intent.
+    /// One declared movement of work between isolation domains, named the way an author names
+    /// domains (`DomainName`): a queue by label whatever its discipline, an actor by type whatever
+    /// its instance. The DSL spelling is `Moves(from:to:)`.
     public struct DomainMove: Sendable, Equatable, Codable {
-        public let origin: String
-        public let destination: String
+        public let origin: DomainName
+        public let destination: DomainName
 
-        public init(from origin: String, to destination: String) {
+        public init(from origin: DomainName, to destination: DomainName) {
             self.origin = origin
             self.destination = destination
         }
 
         func matches(from actualFrom: String?, to actualTo: String?) -> Bool {
-            guard let actualFrom, let actualTo else {
-                return false
-            }
-            return Self.normalized(actualFrom) == Self.normalized(origin)
-                && Self.normalized(actualTo) == Self.normalized(destination)
-        }
-
-        /// `actor:SwiftCartActor#3` → `actor:SwiftCartActor`; everything else unchanged.
-        static func normalized(_ domain: String) -> String {
-            guard domain.hasPrefix("actor:"), let hash = domain.lastIndex(of: "#") else {
-                return domain
-            }
-            return String(domain[..<hash])
+            origin.matches(actualFrom) && destination.matches(actualTo)
         }
     }
 
@@ -52,11 +39,11 @@ public struct Intent: Sendable, Equatable {
     /// field does NOT excuse a change to another field of the same event — intent must be specific.
     public var expectedValueChanges: [String: [String]]
 
-    /// Ordered domains whose ordering guarantee the change deliberately drops, named as an author
-    /// declares them — a queue by its bare label (`"com.emporium.cart"`), `main` or an actor by its
-    /// description. Replacing a serial queue with a task group is the canonical case: the relaxation
-    /// is the point of the PR, so it is declarable — and `orderingRelaxed` gates until it is.
-    public var expectedOrderingRelaxations: [String]
+    /// Ordered domains whose ordering guarantee the change deliberately drops (`orderingRelaxed`).
+    /// Replacing a serial queue with a task group is the canonical case: the relaxation is the point
+    /// of the PR, so it is declarable — and gates until declared. The DSL spelling is
+    /// `Relaxes(orderingOf:)`.
+    public var expectedOrderingRelaxations: [DomainName]
 
     /// Events (by label) whose happens-before constraint the change deliberately drops — the
     /// `orderingLost` counterpart of a relaxation. A gate with no declarable exit would veto the
@@ -76,7 +63,7 @@ public struct Intent: Sendable, Equatable {
         expectedNewEvents: [String] = [],
         expectedRemovedEvents: [String] = [],
         expectedValueChanges: [String: [String]] = [:],
-        expectedOrderingRelaxations: [String] = [],
+        expectedOrderingRelaxations: [DomainName] = [],
         expectedOrderingLosses: [String] = [],
         expectedOrderingAdditions: [String] = [],
         expectedDomainMigrations: [DomainMove] = []
@@ -104,7 +91,7 @@ public struct Intent: Sendable, Equatable {
             guard let fields = expectedValueChanges[divergence.label] else { return false }
             return fields.isEmpty || fields.contains { fieldMatches($0, divergence.detail) }
         case .orderingRelaxed:
-            return expectedOrderingRelaxations.contains(divergence.label)
+            return expectedOrderingRelaxations.contains { $0.matches(divergence.fromDomain) }
         case .orderingLost:
             return expectedOrderingLosses.contains(divergence.label)
         case .orderingAdded:
@@ -163,7 +150,7 @@ extension Intent: Codable {
         expectedValueChanges = try container
             .decodeIfPresent([String: [String]].self, forKey: .expectedValueChanges) ?? [:]
         expectedOrderingRelaxations = try container
-            .decodeIfPresent([String].self, forKey: .expectedOrderingRelaxations) ?? []
+            .decodeIfPresent([DomainName].self, forKey: .expectedOrderingRelaxations) ?? []
         expectedOrderingLosses = try container
             .decodeIfPresent([String].self, forKey: .expectedOrderingLosses) ?? []
         expectedOrderingAdditions = try container

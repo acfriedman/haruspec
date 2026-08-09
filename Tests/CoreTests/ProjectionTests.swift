@@ -149,9 +149,7 @@ final class ProjectionTests: XCTestCase {
         let baseline = trace("b", symbols.enumerated().map { index, symbol in
             effect(index, "Analytics.track", on: delivery, ["symbol": .string(symbol)])
         })
-        let portIntent = Intent(expectedDomainMigrations: [
-            .init(from: "queue(concurrent):com.emporium.delivery", to: "ambient")
-        ])
+        let portIntent = Intent { Moves(from: .queue("com.emporium.delivery"), to: .ambient) }
 
         for permutation in [["wineglass", "mug", "waterbottle"], ["waterbottle", "wineglass", "mug"], symbols] {
             let candidate = trace("c", permutation.enumerated().map { index, symbol in
@@ -185,9 +183,7 @@ final class ProjectionTests: XCTestCase {
         ])
 
         let movesDeclared = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
-            .classified(against: Intent(expectedDomainMigrations: [
-                .init(from: "queue(serial):com.emporium.cart", to: "ambient")
-            ]))
+            .classified(against: Intent { Moves(from: .queue("com.emporium.cart"), to: .ambient) })
 
         XCTAssertEqual(movesDeclared.verdict, .diverged)
         let relaxations = movesDeclared.divergences.filter { $0.kind == .orderingRelaxed }
@@ -200,10 +196,10 @@ final class ProjectionTests: XCTestCase {
         // The moves are declared; the dropped guarantee is its own fact and still gates alone.
         XCTAssertEqual(movesDeclared.divergences.filter(\.isGating).map(\.kind), [.orderingRelaxed])
 
-        let declared = movesDeclared.classified(against: Intent(
-            expectedOrderingRelaxations: ["com.emporium.cart"],
-            expectedDomainMigrations: [.init(from: "queue(serial):com.emporium.cart", to: "ambient")]
-        ))
+        let declared = movesDeclared.classified(against: Intent {
+            Relaxes(orderingOf: .queue("com.emporium.cart"))
+            Moves(from: .queue("com.emporium.cart"), to: .ambient)
+        })
         XCTAssertEqual(declared.verdict, .equivalent)
         XCTAssertEqual(
             declared.divergences.first { $0.kind == .orderingRelaxed }?.classification,
@@ -224,13 +220,11 @@ final class ProjectionTests: XCTestCase {
         ])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
-            .classified(against: Intent(
-                expectedOrderingRelaxations: ["com.emporium.cart"],
-                expectedDomainMigrations: [
-                    .init(from: "queue(serial):com.emporium.cart", to: "ambient"),
-                    .init(from: "queue(serial):com.emporium.checkout", to: "ambient")
-                ]
-            ))
+            .classified(against: Intent {
+                Relaxes(orderingOf: .queue("com.emporium.cart"))
+                Moves(from: .queue("com.emporium.cart"), to: .ambient)
+                Moves(from: .queue("com.emporium.checkout"), to: .ambient)
+            })
 
         XCTAssertEqual(diff.verdict, .diverged)
         XCTAssertEqual(diff.divergences.filter(\.isGating).map(\.label), ["com.emporium.checkout"])
@@ -243,9 +237,7 @@ final class ProjectionTests: XCTestCase {
         let candidate = trace("c", [effect(0, "Cart.save", on: cart, ["items": 2])])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
-            .classified(against: Intent(expectedDomainMigrations: [
-                .init(from: "ambient", to: "queue(serial):com.emporium.cart")
-            ]))
+            .classified(against: Intent { Moves(from: .ambient, to: .queue("com.emporium.cart")) })
 
         XCTAssertEqual(diff.verdict, .equivalent)
         XCTAssertEqual(diff.divergences.map(\.kind), [.domainMigration])
@@ -259,9 +251,7 @@ final class ProjectionTests: XCTestCase {
         let candidate = trace("c", [effect(0, "Analytics.track", on: .ambient, ["symbol": "mug"])])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
-            .classified(against: Intent(expectedDomainMigrations: [
-                .init(from: "queue(concurrent):com.emporium.delivery", to: "ambient")
-            ]))
+            .classified(against: Intent { Moves(from: .queue("com.emporium.delivery"), to: .ambient) })
 
         XCTAssertEqual(diff.verdict, .equivalent)
         XCTAssertEqual(diff.divergences.map(\.kind), [.domainMigration])

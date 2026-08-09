@@ -1,0 +1,224 @@
+import Foundation
+
+// The declaration DSL over `Intent` — the `.vary { }` idea applied to intent. Each constructor is a
+// sentence about *the port being checked*: it moves work between domains, relaxes an ordering,
+// awaits what was fire-and-forget, emits a new event. The builder folds them into one `Intent`:
+//
+//     declaring: Intent {
+//         Moves(from: .queue("com.emporium.cart"), to: .actor(SwiftCartActor.self))
+//         Relaxes(orderingOf: .queue("com.emporium.cart"))
+//         Awaits("Inventory.reserve")
+//     }
+
+/// How an author names an isolation domain in a declaration — deliberately *coarser* than the
+/// engine's `ConcurrencyDomain`, because a declaration should not require engine bookkeeping:
+///
+///  - `.queue(label)` matches the queue whichever ordering discipline it has. Declaring a move is
+///    about *where the work went*; a discipline change is a separate fact with its own gate
+///    (`orderingRelaxed`), so nothing is lost by not spelling it here.
+///  - `.actor(...)` matches every instance of the type. First-seen instance numbering is the
+///    engine's, not the author's.
+public enum DomainName: Sendable, Equatable {
+    case main
+    case ambient
+    /// A dispatch or operation queue, by the label its code declared.
+    case queue(String)
+    /// An actor, by type name — `.actor("SwiftCartActor")`, or `.actor(SwiftCartActor.self)`.
+    case actor(String)
+
+    /// The type-safe spelling: `.actor(SwiftCartActor.self)`.
+    public static func actor(_ type: Any.Type) -> DomainName {
+        .actor(String(describing: type))
+    }
+
+    /// Whether this name matches a recorded domain's description (`Divergence.fromDomain`/`toDomain`).
+    func matches(_ description: String?) -> Bool {
+        guard let description else {
+            return false
+        }
+        switch self {
+        case .main:
+            return description == "main"
+        case .ambient:
+            return description == "ambient"
+        case let .queue(label):
+            return description == "queue(serial):\(label)" || description == "queue(concurrent):\(label)"
+        case let .actor(type):
+            return Self.droppingInstance(description) == "actor:\(type)"
+        }
+    }
+
+    /// `actor:SwiftCartActor#3` → `actor:SwiftCartActor`; everything else unchanged.
+    static func droppingInstance(_ description: String) -> String {
+        guard description.hasPrefix("actor:"), let hash = description.lastIndex(of: "#") else {
+            return description
+        }
+        return String(description[..<hash])
+    }
+}
+
+extension DomainName: Codable {
+    /// One readable string per name — `"main"`, `"ambient"`, `"queue:com.emporium.cart"`,
+    /// `"actor:SwiftCartActor"` — with no discipline or instance detail, matching what a declaration
+    /// means. Unrecognized spellings are refused, never coerced.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = try container.decode(String.self)
+        switch raw {
+        case "main": self = .main
+        case "ambient": self = .ambient
+        default:
+            if raw.hasPrefix("queue:") {
+                self = .queue(String(raw.dropFirst("queue:".count)))
+            } else if raw.hasPrefix("actor:") {
+                self = .actor(String(raw.dropFirst("actor:".count)))
+            } else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Unrecognized domain name \"\(raw)\""
+                )
+            }
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        let raw = switch self {
+        case .main: "main"
+        case .ambient: "ambient"
+        case let .queue(label): "queue:\(label)"
+        case let .actor(type): "actor:\(type)"
+        }
+        try container.encode(raw)
+    }
+}
+
+/// One declared fact about the port being checked. Conformers fold themselves into the `Intent`
+/// the builder is assembling.
+public protocol Intention: Sendable {
+    func apply(to intent: inout Intent)
+}
+
+@resultBuilder
+public enum IntentionsBuilder {
+    public static func buildBlock(_ intentions: (any Intention)...) -> [any Intention] {
+        intentions
+    }
+}
+
+public extension Intent {
+    /// Build an intent from declarations that read as sentences about the port:
+    ///
+    ///     Intent {
+    ///         Moves(from: .queue("com.emporium.cart"), to: .actor(SwiftCartActor.self))
+    ///         Awaits("Inventory.reserve")
+    ///     }
+    init(@IntentionsBuilder _ intentions: () -> [any Intention]) {
+        self.init()
+        for intention in intentions() {
+            intention.apply(to: &self)
+        }
+    }
+}
+
+// MARK: - The intentions
+
+/// The port moves work from one isolation domain to another — `domainMigration`, declared once per
+/// domain pair, not once per migrated event.
+public struct Moves: Intention {
+    let origin: DomainName
+    let destination: DomainName
+
+    public init(from origin: DomainName, to destination: DomainName) {
+        self.origin = origin
+        self.destination = destination
+    }
+
+    public func apply(to intent: inout Intent) {
+        intent.expectedDomainMigrations.append(Intent.DomainMove(from: origin, to: destination))
+    }
+}
+
+/// The port drops an ordered domain's ordering guarantee — `orderingRelaxed`. The serial-queue →
+/// task-group migration is the canonical case.
+public struct Relaxes: Intention {
+    let domain: DomainName
+
+    public init(orderingOf domain: DomainName) {
+        self.domain = domain
+    }
+
+    public func apply(to intent: inout Intent) {
+        intent.expectedOrderingRelaxations.append(domain)
+    }
+}
+
+/// The port drops the happens-before constraint on an event — `orderingLost`, by the spawned
+/// event's label.
+public struct Drops: Intention {
+    let label: String
+
+    public init(synchronizationOf label: String) {
+        self.label = label
+    }
+
+    public func apply(to intent: inout Intent) {
+        intent.expectedOrderingLosses.append(label)
+    }
+}
+
+/// The port newly synchronizes an event the baseline left concurrent — `orderingAdded`. The awaited
+/// port of fire-and-forget work is the canonical case, and the name.
+public struct Awaits: Intention {
+    let label: String
+
+    public init(_ label: String) {
+        self.label = label
+    }
+
+    public func apply(to intent: inout Intent) {
+        intent.expectedOrderingAdditions.append(label)
+    }
+}
+
+/// The change emits an event the baseline never had — a declared feature, not an accident.
+public struct Emits: Intention {
+    let label: String
+
+    public init(_ label: String) {
+        self.label = label
+    }
+
+    public func apply(to intent: inout Intent) {
+        intent.expectedNewEvents.append(label)
+    }
+}
+
+/// The change omits an event the baseline produced — a declared removal.
+public struct Omits: Intention {
+    let label: String
+
+    public init(_ label: String) {
+        self.label = label
+    }
+
+    public func apply(to intent: inout Intent) {
+        intent.expectedRemovedEvents.append(label)
+    }
+}
+
+/// The change alters an event's payload — a specific field, or (with no fields named) any of them.
+/// Declaring one field does NOT excuse a change to another field of the same event.
+public struct Changes: Intention {
+    let label: String
+    let fields: [String]
+
+    public init(_ label: String, field fields: String...) {
+        self.label = label
+        self.fields = fields
+    }
+
+    public func apply(to intent: inout Intent) {
+        intent.expectedValueChanges[label, default: []].append(contentsOf: fields)
+    }
+}
