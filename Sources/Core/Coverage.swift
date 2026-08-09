@@ -112,18 +112,4 @@ public struct Coverage: Codable, Sendable, Equatable {
         gaps = []
         domainExercised = []
     }
-
-    private enum CodingKeys: String, CodingKey {
-        case declared, exercised, gaps, domainExercised
-    }
-
-    /// `domainExercised` decodes forward-compatibly (absent in older payloads → empty), matching the
-    /// codebase's `decodeIfPresent` convention.
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        declared = try container.decode([String].self, forKey: .declared)
-        exercised = try container.decode([String].self, forKey: .exercised)
-        gaps = try container.decode([Gap].self, forKey: .gaps)
-        domainExercised = try container.decodeIfPresent([String].self, forKey: .domainExercised) ?? []
-    }
 }

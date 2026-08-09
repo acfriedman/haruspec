@@ -58,8 +58,8 @@ final class UnmatchedDomainTests: XCTestCase {
         let explored = await spec("unmatched.variants", varying: "qtyy")
             .verify(against: makeRefactor).exploration
 
-        XCTAssertEqual(explored?.variantsPerOrdering, 1, "nothing can vary, so there is one input")
-        XCTAssertFalse(explored?.summary.contains("seam variants") ?? true, explored?.summary ?? "")
+        XCTAssertEqual(explored.variantsPerOrdering, 1, "nothing can vary, so there is one input")
+        XCTAssertFalse(explored.summary.contains("seam variants"), explored.summary)
     }
 
     func testADomainSweptOverNothingReportsZeroRatherThanStayingSilent() async {

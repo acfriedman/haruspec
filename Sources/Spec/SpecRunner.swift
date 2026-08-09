@@ -22,17 +22,15 @@ public struct SpecVerdict: Codable, Sendable {
     public let violatedPreconditions: [String]?
     /// The generated input that triggered a divergence (its varied seam values are the counterexample).
     public let counterexample: CassetteData?
-    /// The budget spent and the surface it covered. Optional because artifacts written before the
-    /// budget existed carry no such field — an old `result.json` still decodes, it just can't say what
-    /// fraction it swept.
-    public let exploration: Exploration?
+    /// The budget spent and the surface it covered.
+    public let exploration: Exploration
 
     public init(
         result: VerificationResult,
         orderingsExplored: Int,
         failingOrder: [String]?,
         counterexample: CassetteData?,
-        exploration: Exploration? = nil,
+        exploration: Exploration,
         violatedPreconditions: [String]? = nil
     ) {
         self.result = result
@@ -64,7 +62,7 @@ public struct SpecVerdict: Codable, Sendable {
         case .cannotVerify: "⚠️ CANNOT-VERIFY"
         }
         var lines = ["\(banner)  \(diff.baselineName) → \(diff.candidateName)",
-                     "  explored: \(exploration?.summary ?? "\(orderingsExplored) orderings")"]
+                     "  explored: \(exploration.summary)"]
         if let fraction = coverage.fraction {
             var line = "  coverage: \(Int((fraction * 100).rounded()))% "
                 + "of \(coverage.declared.count) declared boundaries"

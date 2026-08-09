@@ -339,16 +339,15 @@ final class ExplorationTests: XCTestCase {
         XCTAssertTrue(verdict.report().contains("all 2 orderings"), verdict.report())
     }
 
-    func testAVerdictArtifactWithoutAnExplorationStillDecodes() async throws {
-        // Artifacts written before the budget existed carry no such field.
+    func testAVerdictArtifactWithoutAnExplorationIsRefused() async throws {
+        // Pre-release stance: no tolerant decoders, no migrations. An artifact predating the
+        // budget fails to decode loudly — the fix is re-recording, not coercion.
         let verdict = await wideSpec(orderingMax: 2).verify(against: makeRefactor)
         var json = try JSONSerialization.jsonObject(with: verdict.jsonData()) as? [String: Any] ?? [:]
         json.removeValue(forKey: "exploration")
 
-        let reloaded = try SpecVerdict(jsonData: JSONSerialization.data(withJSONObject: json))
-
-        XCTAssertNil(reloaded.exploration)
-        XCTAssertEqual(reloaded.orderingsExplored, verdict.orderingsExplored)
-        XCTAssertTrue(reloaded.report().contains("orderings"), reloaded.report())
+        XCTAssertThrowsError(
+            try SpecVerdict(jsonData: JSONSerialization.data(withJSONObject: json))
+        )
     }
 }

@@ -54,22 +54,6 @@ public struct Divergence: Codable, Sendable, Equatable {
         self.isAdvisory = isAdvisory
         self.classification = classification
     }
-
-    enum CodingKeys: String, CodingKey {
-        case kind, label, baselineSeq, candidateSeq, detail, isAdvisory, classification
-    }
-
-    /// Tolerant decode so older diff JSON (written before `classification` existed) still loads.
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        kind = try container.decode(Kind.self, forKey: .kind)
-        label = try container.decode(String.self, forKey: .label)
-        baselineSeq = try container.decodeIfPresent(Int.self, forKey: .baselineSeq)
-        candidateSeq = try container.decodeIfPresent(Int.self, forKey: .candidateSeq)
-        detail = try container.decode(String.self, forKey: .detail)
-        isAdvisory = try container.decodeIfPresent(Bool.self, forKey: .isAdvisory) ?? false
-        classification = try container.decodeIfPresent(DivergenceClass.self, forKey: .classification) ?? .collateral
-    }
 }
 
 /// The oracle's verdict: does the new behavior trace match the old within declared tolerances?

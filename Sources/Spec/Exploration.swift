@@ -25,15 +25,15 @@ public struct Exploration: Codable, Sendable, Equatable {
     /// Seam cassettes generated per ordering — 1 when the spec declares no seam domain.
     public let variantsPerOrdering: Int
     /// How many of `orderingsExplored` deliberately break a declared `.after` precondition — the
-    /// defensive stratum. `nil` in artifacts written before the sample was stratified.
-    public let outOfOrderExplored: Int?
+    /// defensive stratum.
+    public let outOfOrderExplored: Int
 
     public init(
         orderingsExplored: Int,
         orderingsAvailable: Int,
         orderingsAreExact: Bool,
         variantsPerOrdering: Int,
-        outOfOrderExplored: Int? = nil
+        outOfOrderExplored: Int
     ) {
         self.orderingsExplored = orderingsExplored
         self.orderingsAvailable = orderingsAvailable
@@ -78,8 +78,8 @@ public struct Exploration: Codable, Sendable, Equatable {
         if variantsPerOrdering > 1 {
             text += " × \(variantsPerOrdering) seam variants"
         }
-        if let outOfOrder = outOfOrderExplored, outOfOrder > 0 {
-            text += " · \(outOfOrder) out-of-order"
+        if outOfOrderExplored > 0 {
+            text += " · \(outOfOrderExplored) out-of-order"
         }
         return text
     }
