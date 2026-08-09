@@ -48,7 +48,7 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// rather than on the one message that helps — re-record. Bumped to 5 when events began carrying
     /// `spawnedBy`: a version-4 plan has no happens-before edges, and a replay against one would read
     /// their absence as the subject having stopped spawning work.
-    public static let supportedSchemaVersion = 5
+    public static let supportedSchemaVersion = 6
 
     public var schemaVersion: Int
     public var specName: String

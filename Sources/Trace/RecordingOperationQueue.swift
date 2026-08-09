@@ -16,7 +16,8 @@ public final class RecordingOperationQueue: OperationQueue, @unchecked Sendable 
     /// Blocks are wrapped exactly as a dispatched one is: the recorder and the spawning call are read
     /// at the enqueue, and the work is counted so `quiesce()` waits for it.
     override public func addOperation(_ block: @escaping @Sendable () -> Void) {
-        // `name` is the nominal identity; the underlying label carries an object address.
-        super.addOperation(DispatchSeam.seamWrap(block, named: name))
+        // `name` is the nominal identity; the underlying label carries an object address. The
+        // discipline is read here too — the queue object is the one party that knows its own width.
+        super.addOperation(DispatchSeam.seamWrap(block, named: name, serial: maxConcurrentOperationCount == 1))
     }
 }

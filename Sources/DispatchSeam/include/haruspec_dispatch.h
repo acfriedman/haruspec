@@ -2,6 +2,7 @@
 #define HARUSPEC_DISPATCH_H
 
 #include <dispatch/dispatch.h>
+#include <stdbool.h>
 
 /// A **preprocessing seam** over GCD's asynchronous dispatch — the one seam type in Feathers'
 /// taxonomy (preprocessing / link / object) that the rest of this engine does not use, and the only
@@ -51,6 +52,23 @@
 /// Returns `block` unchanged when no capture is active, so the seam is a strict pass-through.
 extern dispatch_block_t haruspec_seam_wrap(dispatch_block_t block);
 
+/// Records a queue's ordering discipline (serial vs concurrent) by label, at the one site where the
+/// discipline is *stated* rather than implied. Implemented in Swift alongside the context entry
+/// points; process-global, so a queue created before any capture window is still known.
+extern void haruspec_queue_register(const char *label, bool serial);
+
+static inline dispatch_queue_t haruspec_dispatch_queue_create(const char *label,
+                                                              dispatch_queue_attr_t attr) {
+    // Attr identity is the whole test: NULL / DISPATCH_QUEUE_SERIAL mean serial, and the bare
+    // DISPATCH_QUEUE_CONCURRENT constant means concurrent. A qos-composed concurrent attr
+    // (dispatch_queue_attr_make_with_qos_class) is misread as serial — the strict direction, since
+    // serial keeps the queue's order a checked contract.
+    if (label != NULL) {
+        haruspec_queue_register(label, attr != DISPATCH_QUEUE_CONCURRENT);
+    }
+    return dispatch_queue_create(label, attr);
+}
+
 static inline void haruspec_dispatch_async(dispatch_queue_t queue, dispatch_block_t block) {
     dispatch_async(queue, haruspec_seam_wrap(block));
 }
@@ -83,6 +101,7 @@ static inline void haruspec_dispatch_group_notify(dispatch_group_t group,
 #define dispatch_after haruspec_dispatch_after
 #define dispatch_group_async haruspec_dispatch_group_async
 #define dispatch_group_notify haruspec_dispatch_group_notify
+#define dispatch_queue_create haruspec_dispatch_queue_create
 #endif
 
 

@@ -69,6 +69,27 @@ public enum DispatchSeam {
 
     private static let enteredKey = "com.haruspec.trace.enteredQueue"
     private static let enteredNameKey = "com.haruspec.trace.enteredQueueName"
+    private static let enteredSerialKey = "com.haruspec.trace.enteredQueueSerial"
+
+    /// Ordering discipline by queue label, filled in at queue *creation* — the one moment the
+    /// discipline is stated (`DISPATCH_QUEUE_CONCURRENT`, `.concurrent`) rather than implied.
+    /// Consulted by resolution for work that arrives with no discipline mark of its own.
+    private nonisolated(unsafe) static var queueDisciplines: [String: Bool] = [:]
+
+    /// Record that the queue labeled `label` is serial or concurrent. Reached by the creation seams
+    /// (`dispatch_queue_create` via the preprocessor, `DispatchQueue.init` via overload preference);
+    /// process-global because queues outlive any capture window.
+    public static func registerQueue(label: String, serial: Bool) {
+        lock.lock(); defer { lock.unlock() }
+        queueDisciplines[label] = serial
+    }
+
+    /// The discipline registered for `label`, or `nil` when its creation was never seen — a queue
+    /// made before the seam, or inside a binary framework.
+    static func registeredDiscipline(label: String) -> Bool? {
+        lock.lock(); defer { lock.unlock() }
+        return queueDisciplines[label]
+    }
 
     /// Whether the current thread is running a block the seam *handed to* a queue, as opposed to
     /// merely executing on whatever queue the caller occupied. Only the first is a fact about the
@@ -82,23 +103,34 @@ public enum DispatchSeam {
         Thread.current.threadDictionary[enteredNameKey] as? String
     }
 
+    /// The ordering discipline of the entered queue, when whoever enqueued the work knew it —
+    /// an injected `RecordingOperationQueue` reads its own `maxConcurrentOperationCount`. `nil`
+    /// outside a marked entry, or when the enqueue site had no better answer than the registry.
+    static var enteredQueueSerial: Bool? {
+        Thread.current.threadDictionary[enteredSerialKey] as? Bool
+    }
+
     /// Mark the thread as executing dispatched work for the duration of `body`. Nested, because a
     /// dispatched block may dispatch again before the outer one returns.
     ///
     /// `named` overrides the label for queues whose label is not nominal. An `OperationQueue`'s
     /// underlying label embeds its object address — `NSOperationQueue 0x106f4fa00` — which is the
-    /// run-to-run instability domains exist to remove, so its `name` is used instead.
-    static func markingQueueEntry<T>(named: String? = nil, _ body: () -> T) -> T {
+    /// run-to-run instability domains exist to remove, so its `name` is used instead. `serial`
+    /// carries the queue's ordering discipline when the enqueue site knows it.
+    static func markingQueueEntry<T>(named: String? = nil, serial: Bool? = nil, _ body: () -> T) -> T {
         let dictionary = Thread.current.threadDictionary
         let depth = dictionary[enteredKey] as? Int ?? 0
         let previousName = dictionary[enteredNameKey]
+        let previousSerial = dictionary[enteredSerialKey]
         dictionary[enteredKey] = depth + 1
-        if named != nil {
-            dictionary[enteredNameKey] = named
-        }
+        // Overwritten unconditionally (nil clears): these describe the queue just entered, and a
+        // nested entry into a queue that stated nothing must not inherit the outer queue's answers.
+        dictionary[enteredNameKey] = named
+        dictionary[enteredSerialKey] = serial
         defer {
             dictionary[enteredKey] = depth
             dictionary[enteredNameKey] = previousName
+            dictionary[enteredSerialKey] = previousSerial
         }
         return body()
     }
@@ -182,4 +214,11 @@ public func haruspecContextRun(
 public func haruspecContextRelease(_ context: UnsafeMutableRawPointer) {
     Unmanaged<TraceRecorder>.fromOpaque(context).release()
     DispatchSeam.finish()
+}
+
+/// The C creation seam's entry point: `dispatch_queue_create` is wrapped by the same preprocessor
+/// mechanism as `dispatch_async`, and creation is where a queue's discipline is stated.
+@_cdecl("haruspec_queue_register")
+public func haruspecQueueRegister(_ label: UnsafePointer<CChar>, _ serial: Bool) {
+    DispatchSeam.registerQueue(label: String(cString: label), serial: serial)
 }

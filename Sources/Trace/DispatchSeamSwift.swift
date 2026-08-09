@@ -55,6 +55,29 @@ import Foundation
         }
     }
 
+    /// The creation half of the Swift seam: `DispatchQueue.init` defaults everything but `label`, so
+    /// these overloads win at the two common creation shapes and record the queue's ordering
+    /// discipline — the fact stated only here, and needed later to decide whether the queue's order
+    /// is a contract (serial) or scheduler noise (concurrent). Delegating with every parameter
+    /// spelled out resolves to the real initializer, which no overload here claims.
+    public extension DispatchQueue {
+        convenience init(label: String) {
+            DispatchSeam.registerQueue(label: label, serial: true)
+            self.init(label: label, qos: .unspecified, attributes: [], autoreleaseFrequency: .inherit, target: nil)
+        }
+
+        convenience init(label: String, attributes: DispatchQueue.Attributes) {
+            DispatchSeam.registerQueue(label: label, serial: !attributes.contains(.concurrent))
+            self.init(
+                label: label,
+                qos: .unspecified,
+                attributes: attributes,
+                autoreleaseFrequency: .inherit,
+                target: nil
+            )
+        }
+    }
+
     /// The same lever, applied to `Task`. `Task.init` defaults `priority:`, so an overload claiming
     /// only `operation:` is preferred at `Task { … }`.
     ///
@@ -101,12 +124,13 @@ public extension DispatchSeam {
 
     static func seamWrap(
         _ work: @escaping @Sendable () -> Void,
-        named: String? = nil
+        named: String? = nil,
+        serial: Bool? = nil
     ) -> @Sendable () -> Void {
         guard let recorder = acquireForSwift() else { return work }
         let cause = recorder.enclosingCallSeq()
         return {
-            markingQueueEntry(named: named) {
+            markingQueueEntry(named: named, serial: serial) {
                 TraceContext.withThreadRecorder(recorder, spawnedBy: cause) { work() }
             }
             finishForSwift()

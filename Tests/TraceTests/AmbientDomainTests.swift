@@ -85,7 +85,7 @@ final class CausalDomainAttributionTests: XCTestCase {
         }
 
         let marker = recorder.trace().events.first { $0.label == "on-its-own-queue" }
-        XCTAssertEqual(marker?.domain, .queue("com.emporium.cart"))
+        XCTAssertEqual(marker?.domain, .queue("com.emporium.cart", serial: true))
     }
 }
 

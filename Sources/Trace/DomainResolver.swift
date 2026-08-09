@@ -47,17 +47,27 @@ enum DomainResolver {
                 return .main
             }
             if !label.isEmpty {
-                return .queue(label)
+                return .queue(label, serial: discipline(for: label))
             }
         }
 
         // An app-owned queue names itself, so being on one is evidence enough without a marker —
         // this is the `dispatch_sync` path, which the seam deliberately does not wrap.
         if !label.isEmpty, !label.hasPrefix(systemQueuePrefix) {
-            return .queue(label)
+            return .queue(label, serial: discipline(for: label))
         }
 
         return .ambient
+    }
+
+    /// The queue's ordering discipline: the enqueue site's own answer first (an injected operation
+    /// queue knows its width), the creation-seam registry second, **serial** when nothing was seen.
+    ///
+    /// Serial is the strict default on purpose. It treats the queue's order as a contract, which is
+    /// what every queue created with a `NULL` attr actually is — and a concurrent queue that slipped
+    /// past both sources fails toward a flapping *reported* order, never toward silently unchecked.
+    private static func discipline(for label: String) -> Bool {
+        DispatchSeam.enteredQueueSerial ?? DispatchSeam.registeredDiscipline(label: label) ?? true
     }
 
     /// The label of the queue currently executing, or empty when there is none.

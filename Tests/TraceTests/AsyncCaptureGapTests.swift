@@ -50,7 +50,7 @@ final class AsyncCaptureGapTests: XCTestCase {
             ["before-fetch", "on-background-queue", "in-completion", "after-fetch"]
         )
         let byLabel = Dictionary(uniqueKeysWithValues: recorder.trace().events.map { ($0.label, $0.domain) })
-        XCTAssertEqual(byLabel["on-background-queue"], .queue("com.emporium.catalog"))
+        XCTAssertEqual(byLabel["on-background-queue"], .queue("com.emporium.catalog", serial: true))
         // The test body declares no isolation, so the caller-side marker is ambient — where the
         // harness runs is not a fact about the subject.
         XCTAssertEqual(byLabel["before-fetch"], .ambient)
@@ -75,7 +75,7 @@ final class AsyncCaptureGapTests: XCTestCase {
 
         let events = recorder.trace().events
         XCTAssertEqual(events.map(\.label), ["traced-call-on-queue", "CatalogDidLoad"])
-        XCTAssertEqual(Set(events.map(\.domain)), [.queue("com.emporium.catalog")])
+        XCTAssertEqual(Set(events.map(\.domain)), [.queue("com.emporium.catalog", serial: true)])
     }
 
     /// Work no caller can await is still captured — the seam does not need a completion handler to

@@ -59,7 +59,8 @@ final class ConcurrencyDomainTests: XCTestCase {
         XCTAssertEqual(observed, [.actor("Ledger", instance: 1), .actor("Ledger", instance: 2)])
     }
 
-    /// The rung below `#isolation`: nonisolated work carries the queue's own label.
+    /// The rung below `#isolation`: nonisolated work carries the queue's own label — and the
+    /// discipline stated at creation, which the `DispatchQueue.init` overload registered.
     func testResolvesNamedDispatchQueuesByLabel() {
         let recorder = TraceRecorder(name: "domains")
         let checkout = DispatchQueue(label: "com.emporium.checkout")
@@ -69,8 +70,8 @@ final class ConcurrencyDomainTests: XCTestCase {
         analytics.sync { recorder.marker("analytics-work") }
 
         let byLabel = domains(of: recorder)
-        XCTAssertEqual(byLabel["checkout-work"], .queue("com.emporium.checkout"))
-        XCTAssertEqual(byLabel["analytics-work"], .queue("com.emporium.analytics"))
+        XCTAssertEqual(byLabel["checkout-work"], .queue("com.emporium.checkout", serial: true))
+        XCTAssertEqual(byLabel["analytics-work"], .queue("com.emporium.analytics", serial: false))
     }
 
     /// Work the runtime scheduled with nothing nominal to key on is `.ambient` — explicitly unordered,
@@ -81,7 +82,9 @@ final class ConcurrencyDomainTests: XCTestCase {
 
         XCTAssertEqual(recorder.trace().events.first?.domain, .ambient)
         XCTAssertFalse(ConcurrencyDomain.ambient.isOrdered)
-        XCTAssertTrue(ConcurrencyDomain.queue("q").isOrdered)
+        XCTAssertTrue(ConcurrencyDomain.queue("q", serial: true).isOrdered)
+        // A concurrent queue is a *named* unordered context: nominal identity, no order contract.
+        XCTAssertFalse(ConcurrencyDomain.queue("q", serial: false).isOrdered)
     }
 
     /// The property the old scheme could not hold: one OS thread serving several domains in a single
@@ -109,7 +112,8 @@ final class ConcurrencyDomainCodingTests: XCTestCase {
         let cases: [ConcurrencyDomain] = [
             .main,
             .ambient,
-            .queue("com.emporium.checkout"),
+            .queue("com.emporium.checkout", serial: true),
+            .queue("com.emporium.delivery", serial: false),
             .actor("Ledger", instance: 7)
         ]
         for domain in cases {
@@ -126,21 +130,30 @@ final class ConcurrencyDomainCodingTests: XCTestCase {
         }
         XCTAssertEqual(try encoded(.main), "\"main\"")
         XCTAssertEqual(try encoded(.ambient), "\"ambient\"")
-        XCTAssertEqual(try encoded(.queue("com.emporium.checkout")), "\"queue:com.emporium.checkout\"")
+        XCTAssertEqual(
+            try encoded(.queue("com.emporium.checkout", serial: true)),
+            "\"queue(serial):com.emporium.checkout\""
+        )
+        XCTAssertEqual(
+            try encoded(.queue("com.emporium.delivery", serial: false)),
+            "\"queue(concurrent):com.emporium.delivery\""
+        )
         XCTAssertEqual(try encoded(.actor("Ledger", instance: 2)), "\"actor:Ledger#2\"")
     }
 
     /// A queue label may legitimately contain the separators, so parsing splits at the right place.
     func testParsesLabelsContainingSeparators() throws {
-        let awkward = ConcurrencyDomain.queue("com.emporium.a#b:c")
+        let awkward = ConcurrencyDomain.queue("com.emporium.a#b:c", serial: false)
         let data = try JSONEncoder().encode(awkward)
         XCTAssertEqual(try JSONDecoder().decode(ConcurrencyDomain.self, from: data), awkward)
     }
 
     /// Fail fast on an unrecognized spelling rather than coercing it to `.main` — a plan whose domains
-    /// silently collapse would replay a lie.
+    /// silently collapse would replay a lie. A pre-discipline `queue:` is unrecognized on purpose:
+    /// guessing serial would turn a stale artifact's noise into a contract.
     func testRejectsUnrecognizedSpelling() {
-        let data = Data("\"worker-3\"".utf8)
-        XCTAssertThrowsError(try JSONDecoder().decode(ConcurrencyDomain.self, from: data))
+        for stale in ["\"worker-3\"", "\"queue:com.emporium.checkout\""] {
+            XCTAssertThrowsError(try JSONDecoder().decode(ConcurrencyDomain.self, from: Data(stale.utf8)))
+        }
     }
 }

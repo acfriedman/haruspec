@@ -47,7 +47,13 @@ public enum ConcurrencyDomain: Sendable, Equatable, Hashable, CustomStringConver
     /// event `subject` numbering) so two `Ledger`s stay distinguishable.
     case actor(String, instance: Int)
     /// A named dispatch queue, keyed by its label — nominal and stable by construction.
-    case queue(String)
+    ///
+    /// `serial` is the queue's **ordering discipline**, and it is part of the identity on purpose: a
+    /// serial queue's order is a runtime guarantee the code may rely on, a concurrent queue's is
+    /// whichever block finished first. The discipline deciding whether a projection compares this
+    /// domain as a sequence or as a multiset, and a discipline *change* on the same label reading as
+    /// a different domain (so the migration machinery reports it), both fall out of it living here.
+    case queue(String, serial: Bool)
     /// The code declares **no isolation of its own** — a plain type, a nonisolated function, an
     /// unstructured task. It ran wherever its caller happened to be.
     ///
@@ -64,15 +70,31 @@ public enum ConcurrencyDomain: Sendable, Equatable, Hashable, CustomStringConver
         switch self {
         case .main: "main"
         case let .actor(type, instance): "actor:\(type)#\(instance)"
-        case let .queue(label): "queue:\(label)"
+        case let .queue(label, serial: true): "queue(serial):\(label)"
+        case let .queue(label, serial: false): "queue(concurrent):\(label)"
         case .ambient: "ambient"
         }
     }
 
-    /// Whether events in this domain have a meaningful relative order. A serial context does;
-    /// `ambient` does not, because there is no single context to be ordered within.
+    /// Whether events in this domain have a meaningful relative order. `main`, an actor, and a serial
+    /// queue give mutual exclusion, so their order is a runtime guarantee. A concurrent queue's order
+    /// is whichever block finished first, and `ambient` has no single context to be ordered within.
     public var isOrdered: Bool {
-        self != .ambient
+        switch self {
+        case .main, .actor: true
+        case let .queue(_, serial): serial
+        case .ambient: false
+        }
+    }
+
+    /// The name an author refers to this domain by — a queue's bare label, anything else its
+    /// description. This is what `Intent.expectedOrderingRelaxations` matches against, so declaring
+    /// "com.emporium.cart" doesn't require spelling the engine's `queue(serial):` prefix.
+    public var declaredName: String {
+        if case let .queue(label, _) = self {
+            return label
+        }
+        return description
     }
 }
 
@@ -84,8 +106,13 @@ extension ConcurrencyDomain: Codable {
         case "main": self = .main
         case "ambient": self = .ambient
         default:
-            if raw.hasPrefix("queue:") {
-                self = .queue(String(raw.dropFirst("queue:".count)))
+            // A bare `queue:` (pre-discipline) is rejected rather than coerced: guessing serial would
+            // silently turn a stale artifact's noise into a contract. The plan schema gate says
+            // "re-record" first, so this fires only on a hand-mangled trace.
+            if raw.hasPrefix("queue(serial):") {
+                self = .queue(String(raw.dropFirst("queue(serial):".count)), serial: true)
+            } else if raw.hasPrefix("queue(concurrent):") {
+                self = .queue(String(raw.dropFirst("queue(concurrent):".count)), serial: false)
             } else if raw.hasPrefix("actor:"),
                       case let body = raw.dropFirst("actor:".count),
                       let hash = body.lastIndex(of: "#"),
