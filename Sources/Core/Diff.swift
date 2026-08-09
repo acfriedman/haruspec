@@ -124,33 +124,9 @@ public enum BehavioralDiff {
 
         switch spec.concurrency {
         case .totalOrder:
-            let baselineSig = baseline.map(signature)
-            let candidateSig = candidate.map(signature)
-
-            let matched = longestCommonSubsequence(baselineSig, candidateSig)
-            let matchedBaseline = Set(matched.map(\.0))
-            let matchedCandidate = Set(matched.map(\.1))
-
-            // 4a. Aligned (in-order) pairs: compare values + timing.
-            for (baselineIndex, candidateIndex) in matched {
-                compareAligned(
-                    baseline[baselineIndex],
-                    candidate[candidateIndex],
-                    spec: spec,
-                    isAdvisory: advisory(baseline[baselineIndex].tier),
-                    into: &divergences
-                )
-            }
-
-            reconcileUnmatched(
-                Alignment(
-                    baseline: baseline,
-                    candidate: candidate,
-                    baselineSig: baselineSig,
-                    candidateSig: candidateSig,
-                    matchedBaseline: matchedBaseline,
-                    matchedCandidate: matchedCandidate
-                ),
+            compareTotalOrder(
+                baseline: baseline,
+                candidate: candidate,
                 spec: spec,
                 advisory: advisory,
                 into: &divergences
@@ -179,6 +155,48 @@ public enum BehavioralDiff {
             baselineName: rawBaseline.name,
             candidateName: rawCandidate.name,
             divergences: divergences
+        )
+    }
+
+    /// The `.totalOrder` comparison: one LCS over the whole interleaving, then reconciliation of
+    /// whatever failed to align. This is the original pipeline (steps 2–4), unchanged.
+    private static func compareTotalOrder(
+        baseline: [TraceEvent],
+        candidate: [TraceEvent],
+        spec: Tolerance,
+        advisory: (EventTier) -> Bool,
+        into divergences: inout [Divergence]
+    ) {
+        let baselineSig = baseline.map(signature)
+        let candidateSig = candidate.map(signature)
+
+        let matched = longestCommonSubsequence(baselineSig, candidateSig)
+        let matchedBaseline = Set(matched.map(\.0))
+        let matchedCandidate = Set(matched.map(\.1))
+
+        // 4a. Aligned (in-order) pairs: compare values + timing.
+        for (baselineIndex, candidateIndex) in matched {
+            compareAligned(
+                baseline[baselineIndex],
+                candidate[candidateIndex],
+                spec: spec,
+                isAdvisory: advisory(baseline[baselineIndex].tier),
+                into: &divergences
+            )
+        }
+
+        reconcileUnmatched(
+            Alignment(
+                baseline: baseline,
+                candidate: candidate,
+                baselineSig: baselineSig,
+                candidateSig: candidateSig,
+                matchedBaseline: matchedBaseline,
+                matchedCandidate: matchedCandidate
+            ),
+            spec: spec,
+            advisory: advisory,
+            into: &divergences
         )
     }
 
