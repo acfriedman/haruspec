@@ -16,20 +16,20 @@ public struct Intent: Sendable, Equatable {
     /// An actor's instance number is normalized away on both sides — an author cannot know
     /// first-seen numbering, and "this work moved onto a `SwiftCartActor`" is the intent.
     public struct DomainMove: Sendable, Equatable, Codable {
-        public let from: String
-        public let to: String
+        public let origin: String
+        public let destination: String
 
-        public init(from: String, to: String) {
-            self.from = from
-            self.to = to
+        public init(from origin: String, to destination: String) {
+            self.origin = origin
+            self.destination = destination
         }
 
         func matches(from actualFrom: String?, to actualTo: String?) -> Bool {
             guard let actualFrom, let actualTo else {
                 return false
             }
-            return Self.normalized(actualFrom) == Self.normalized(from)
-                && Self.normalized(actualTo) == Self.normalized(to)
+            return Self.normalized(actualFrom) == Self.normalized(origin)
+                && Self.normalized(actualTo) == Self.normalized(destination)
         }
 
         /// `actor:SwiftCartActor#3` → `actor:SwiftCartActor`; everything else unchanged.
