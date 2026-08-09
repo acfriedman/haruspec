@@ -5,7 +5,7 @@ import Foundation
 // awaits what was fire-and-forget, emits a new event. The builder folds them into one `Intent`:
 //
 //     declaring: Intent {
-//         Moves(from: .queue("com.emporium.cart"), to: .actor(SwiftCartActor.self))
+//         Moves("Inventory.reserve", from: .queue("com.emporium.cart"), to: .actor(SwiftCartActor.self))
 //         Relaxes(orderingOf: .queue("com.emporium.cart"))
 //         Awaits("Inventory.reserve")
 //     }
@@ -110,7 +110,7 @@ public extension Intent {
     /// Build an intent from declarations that read as sentences about the port:
     ///
     ///     Intent {
-    ///         Moves(from: .queue("com.emporium.cart"), to: .actor(SwiftCartActor.self))
+    ///         Moves("Inventory.reserve", from: .queue("com.emporium.cart"), to: .actor(SwiftCartActor.self))
     ///         Awaits("Inventory.reserve")
     ///     }
     init(@IntentionsBuilder _ intentions: () -> [any Intention]) {
@@ -123,19 +123,39 @@ public extension Intent {
 
 // MARK: - The intentions
 
-/// The port moves work from one isolation domain to another — `domainMigration`, declared once per
-/// domain pair, not once per migrated event.
+/// The port moves work from one isolation domain to another — `domainMigration`.
+///
+/// **Label-scoped by default**: a declaration names the events it moves, and only those events are
+/// excused — a sixth event migrating between the same domains later gates again. A declaration is a
+/// *standing* excuse, and breadth must not happen by accident, so the blanket form is its own
+/// explicit, greppable spelling: `Moves(everythingFrom:to:)` — for the genuine wholesale port, whose
+/// claim really is "everything this domain did now happens there."
 public struct Moves: Intention {
+    /// The event labels this declaration covers; empty means every label (the wholesale form).
+    let labels: [String]
     let origin: DomainName
     let destination: DomainName
 
-    public init(from origin: DomainName, to destination: DomainName) {
+    /// Move these events — `Moves("Inventory.reserve", "CartDidChange", from: …, to: …)`. At least
+    /// one label, by construction: breadth is never the default.
+    public init(_ first: String, _ rest: String..., from origin: DomainName, to destination: DomainName) {
+        labels = [first] + rest
+        self.origin = origin
+        self.destination = destination
+    }
+
+    /// The wholesale port's spelling: every event that migrates between this pair is intended.
+    /// The word is the warning — reach for the labeled form unless "everything" is literally true.
+    public init(everythingFrom origin: DomainName, to destination: DomainName) {
+        labels = []
         self.origin = origin
         self.destination = destination
     }
 
     public func apply(to intent: inout Intent) {
-        intent.expectedDomainMigrations.append(Intent.DomainMove(from: origin, to: destination))
+        intent.expectedDomainMigrations.append(
+            Intent.DomainMove(labels: labels, from: origin, to: destination)
+        )
     }
 }
 

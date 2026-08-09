@@ -5,7 +5,7 @@ import XCTest
 final class IntentionsTests: XCTestCase {
     func testTheBuilderFoldsEveryKind() {
         let intent = Intent {
-            Moves(from: .queue("com.emporium.cart"), to: .actor("SwiftCartActor"))
+            Moves("CartDidChange", from: .queue("com.emporium.cart"), to: .actor("SwiftCartActor"))
             Relaxes(orderingOf: .queue("com.emporium.cart"))
             Drops(synchronizationOf: "Inventory.reserve")
             Awaits("Analytics.flush")
@@ -26,7 +26,7 @@ final class IntentionsTests: XCTestCase {
     /// A queue is declared by label, whichever discipline it has: the *move* is what is declared,
     /// and a discipline change is separately gated by `orderingRelaxed` — so nothing is lost.
     func testAQueueNameMatchesEitherDiscipline() {
-        let intent = Intent { Moves(from: .queue("com.emporium.delivery"), to: .ambient) }
+        let intent = Intent { Moves("Analytics.track", from: .queue("com.emporium.delivery"), to: .ambient) }
 
         for discipline in ["queue(serial)", "queue(concurrent)"] {
             let move = Divergence(
@@ -40,6 +40,43 @@ final class IntentionsTests: XCTestCase {
             )
             XCTAssertTrue(intent.declares(move), "\(discipline) should match a discipline-blind declaration")
         }
+    }
+
+    /// A declaration is a standing excuse, so it covers exactly the events it names: a different
+    /// event migrating between the same pair gates again — breadth never happens by accident.
+    func testALabeledMoveDoesNotExcuseAnotherEventOnTheSamePair() {
+        let intent = Intent { Moves("Inventory.reserve", from: .queue("com.emporium.cart"), to: .ambient) }
+        func move(_ label: String) -> Divergence {
+            Divergence(
+                kind: .domainMigration,
+                label: label,
+                baselineSeq: 0,
+                candidateSeq: 0,
+                detail: "",
+                fromDomain: "queue(serial):com.emporium.cart",
+                toDomain: "ambient"
+            )
+        }
+
+        XCTAssertTrue(intent.declares(move("Inventory.reserve")))
+        XCTAssertFalse(intent.declares(move("CheckoutDidComplete")), "an unnamed event must still gate")
+    }
+
+    /// The wholesale spelling covers every label on the pair — deliberately, in a word a reviewer
+    /// can see and question.
+    func testEverythingFromCoversAnyLabelOnThePair() {
+        let intent = Intent { Moves(everythingFrom: .queue("com.emporium.cart"), to: .ambient) }
+        let move = Divergence(
+            kind: .domainMigration,
+            label: "SomeEventNobodyForesaw",
+            baselineSeq: 0,
+            candidateSeq: 0,
+            detail: "",
+            fromDomain: "queue(serial):com.emporium.cart",
+            toDomain: "ambient"
+        )
+
+        XCTAssertTrue(intent.declares(move))
     }
 
     /// A relaxation is declared by the domain that lost its guarantee, matched structurally against

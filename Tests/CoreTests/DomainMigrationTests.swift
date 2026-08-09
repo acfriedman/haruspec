@@ -50,7 +50,11 @@ final class DomainMigrationTests: XCTestCase {
         XCTAssertEqual(diff.verdict, .diverged)
         XCTAssertEqual(diff.divergences.filter(\.isGating).map(\.kind), [.domainMigration])
 
-        let declared = diff.classified(against: Intent { Moves(from: .queue("com.emporium.cart"), to: .ambient) })
+        let declared = diff.classified(against: Intent { Moves(
+            "CartDidChange",
+            from: .queue("com.emporium.cart"),
+            to: .ambient
+        ) })
         XCTAssertEqual(declared.verdict, .equivalent)
         XCTAssertEqual(declared.divergences.first?.classification, .intended)
     }
@@ -62,7 +66,11 @@ final class DomainMigrationTests: XCTestCase {
         let candidate = trace("c", [note(0, "CartDidChange", on: .actor("CartActor", instance: 3))])
 
         let declared = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
-            .classified(against: Intent { Moves(from: .queue("com.emporium.cart"), to: .actor("CartActor")) })
+            .classified(against: Intent { Moves(
+                "CartDidChange",
+                from: .queue("com.emporium.cart"),
+                to: .actor("CartActor")
+            ) })
 
         XCTAssertEqual(declared.verdict, .equivalent)
     }
@@ -74,7 +82,7 @@ final class DomainMigrationTests: XCTestCase {
         let candidate = trace("c", [note(0, "CheckoutDidComplete", on: .ambient, ["totalCents": 1170])])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
-            .classified(against: Intent { Moves(from: .main, to: .ambient) })
+            .classified(against: Intent { Moves("CheckoutDidComplete", from: .main, to: .ambient) })
 
         XCTAssertEqual(diff.verdict, .diverged)
         XCTAssertEqual(diff.divergences.map(\.kind), [.domainMigration, .valueMismatch])

@@ -13,18 +13,22 @@ import Foundation
 public struct Intent: Sendable, Equatable {
     /// One declared movement of work between isolation domains, named the way an author names
     /// domains (`DomainName`): a queue by label whatever its discipline, an actor by type whatever
-    /// its instance. The DSL spelling is `Moves(from:to:)`.
+    /// its instance. Scoped to the event labels it names — an empty list means every label, the
+    /// wholesale form. The DSL spellings are `Moves(_:from:to:)` and `Moves(everythingFrom:to:)`.
     public struct DomainMove: Sendable, Equatable, Codable {
+        public let labels: [String]
         public let origin: DomainName
         public let destination: DomainName
 
-        public init(from origin: DomainName, to destination: DomainName) {
+        public init(labels: [String] = [], from origin: DomainName, to destination: DomainName) {
+            self.labels = labels
             self.origin = origin
             self.destination = destination
         }
 
-        func matches(from actualFrom: String?, to actualTo: String?) -> Bool {
-            origin.matches(actualFrom) && destination.matches(actualTo)
+        func matches(label: String, from actualFrom: String?, to actualTo: String?) -> Bool {
+            (labels.isEmpty || labels.contains(label))
+                && origin.matches(actualFrom) && destination.matches(actualTo)
         }
     }
 
@@ -97,8 +101,9 @@ public struct Intent: Sendable, Equatable {
         case .orderingAdded:
             return expectedOrderingAdditions.contains(divergence.label)
         case .domainMigration:
-            return expectedDomainMigrations
-                .contains { $0.matches(from: divergence.fromDomain, to: divergence.toDomain) }
+            return expectedDomainMigrations.contains {
+                $0.matches(label: divergence.label, from: divergence.fromDomain, to: divergence.toDomain)
+            }
         case .reordered, .timingRegression:
             return false // not yet expressible as declared intent — always collateral for now
         }
