@@ -11,6 +11,36 @@ import Foundation
 /// **Parity mode (migrations) is simply `Intent.none`.** Extension mode (features) is a populated
 /// spec. Same engine; the only difference is how much change was declared up front.
 public struct Intent: Sendable, Equatable {
+    /// One declared movement of work between isolation domains, spelled the way domains print:
+    /// `"main"`, `"ambient"`, `"queue(serial):com.emporium.cart"`, `"actor:SwiftCartActor"`.
+    /// An actor's instance number is normalized away on both sides — an author cannot know
+    /// first-seen numbering, and "this work moved onto a `SwiftCartActor`" is the intent.
+    public struct DomainMove: Sendable, Equatable, Codable {
+        public let from: String
+        public let to: String
+
+        public init(from: String, to: String) {
+            self.from = from
+            self.to = to
+        }
+
+        func matches(from actualFrom: String?, to actualTo: String?) -> Bool {
+            guard let actualFrom, let actualTo else {
+                return false
+            }
+            return Self.normalized(actualFrom) == Self.normalized(from)
+                && Self.normalized(actualTo) == Self.normalized(to)
+        }
+
+        /// `actor:SwiftCartActor#3` → `actor:SwiftCartActor`; everything else unchanged.
+        static func normalized(_ domain: String) -> String {
+            guard domain.hasPrefix("actor:"), let hash = domain.lastIndex(of: "#") else {
+                return domain
+            }
+            return String(domain[..<hash])
+        }
+    }
+
     /// Event labels the change is allowed to ADD (present in candidate, absent in baseline).
     public var expectedNewEvents: [String]
 
@@ -29,22 +59,35 @@ public struct Intent: Sendable, Equatable {
     public var expectedOrderingRelaxations: [String]
 
     /// Events (by label) whose happens-before constraint the change deliberately drops — the
-    /// `orderingLost` counterpart of a relaxation. Only consulted when `Tolerance.spawnEdges` is
-    /// `.gating`; a gate with no declarable exit would veto the work instead of checking it.
+    /// `orderingLost` counterpart of a relaxation. A gate with no declarable exit would veto the
+    /// work instead of checking it.
     public var expectedOrderingLosses: [String]
+
+    /// Events (by label) the change deliberately *newly synchronizes* — `orderingAdded`. The awaited
+    /// port of fire-and-forget work is the canonical case: everything after the call now waits.
+    public var expectedOrderingAdditions: [String]
+
+    /// Movements of work between isolation domains the change intends — a port's one-line summary
+    /// (`DomainMove(from: "queue(serial):com.emporium.cart", to: "actor:SwiftCartActor")`) rather
+    /// than one declaration per migrated event. Declaring one pair does NOT excuse another.
+    public var expectedDomainMigrations: [DomainMove]
 
     public init(
         expectedNewEvents: [String] = [],
         expectedRemovedEvents: [String] = [],
         expectedValueChanges: [String: [String]] = [:],
         expectedOrderingRelaxations: [String] = [],
-        expectedOrderingLosses: [String] = []
+        expectedOrderingLosses: [String] = [],
+        expectedOrderingAdditions: [String] = [],
+        expectedDomainMigrations: [DomainMove] = []
     ) {
         self.expectedNewEvents = expectedNewEvents
         self.expectedRemovedEvents = expectedRemovedEvents
         self.expectedValueChanges = expectedValueChanges
         self.expectedOrderingRelaxations = expectedOrderingRelaxations
         self.expectedOrderingLosses = expectedOrderingLosses
+        self.expectedOrderingAdditions = expectedOrderingAdditions
+        self.expectedDomainMigrations = expectedDomainMigrations
     }
 
     /// The empty spec: nothing was declared, so every divergence stays collateral. This is parity mode.
@@ -64,10 +107,12 @@ public struct Intent: Sendable, Equatable {
             return expectedOrderingRelaxations.contains(divergence.label)
         case .orderingLost:
             return expectedOrderingLosses.contains(divergence.label)
-        // A domain move is not declarable yet: `Intent` has no vocabulary for "this work moved to an
-        // actor on purpose". Until it does, the policy on `Tolerance` is the only dial.
-        // `orderingAdded` is always advisory, so declaring it would change nothing.
-        case .reordered, .timingRegression, .domainMigration, .orderingAdded:
+        case .orderingAdded:
+            return expectedOrderingAdditions.contains(divergence.label)
+        case .domainMigration:
+            return expectedDomainMigrations
+                .contains { $0.matches(from: divergence.fromDomain, to: divergence.toDomain) }
+        case .reordered, .timingRegression:
             return false // not yet expressible as declared intent — always collateral for now
         }
     }
@@ -106,7 +151,8 @@ public extension TraceDiff {
 extension Intent: Codable {
     enum CodingKeys: String, CodingKey {
         case expectedNewEvents, expectedRemovedEvents, expectedValueChanges
-        case expectedOrderingRelaxations, expectedOrderingLosses
+        case expectedOrderingRelaxations, expectedOrderingLosses, expectedOrderingAdditions
+        case expectedDomainMigrations
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -120,6 +166,10 @@ extension Intent: Codable {
             .decodeIfPresent([String].self, forKey: .expectedOrderingRelaxations) ?? []
         expectedOrderingLosses = try container
             .decodeIfPresent([String].self, forKey: .expectedOrderingLosses) ?? []
+        expectedOrderingAdditions = try container
+            .decodeIfPresent([String].self, forKey: .expectedOrderingAdditions) ?? []
+        expectedDomainMigrations = try container
+            .decodeIfPresent([DomainMove].self, forKey: .expectedDomainMigrations) ?? []
     }
 }
 

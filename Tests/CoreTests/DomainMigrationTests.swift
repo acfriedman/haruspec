@@ -39,26 +39,63 @@ final class DomainMigrationTests: XCTestCase {
         )
     }
 
-    /// Advisory by default. Gating on the move itself would make the tool red by construction on the
-    /// migration it exists to serve.
-    func testAMoveAloneDoesNotFailTheVerdict() {
+    /// Red until declared: a domain move is a real behavioral change — different re-entrancy,
+    /// different observers' threads — so an undeclared one fails, and the intended one is a
+    /// one-line declaration, not a policy loosened for everyone.
+    func testAnUndeclaredMoveFailsUntilDeclared() {
         let baseline = trace("b", [note(0, "CartDidChange", on: .queue("com.emporium.cart", serial: true))])
         let candidate = trace("c", [note(0, "CartDidChange", on: .ambient)])
 
-        XCTAssertEqual(BehavioralDiff.compare(baseline: baseline, candidate: candidate).verdict, .equivalent)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
+        XCTAssertEqual(diff.verdict, .diverged)
+        XCTAssertEqual(diff.divergences.filter(\.isGating).map(\.kind), [.domainMigration])
+
+        let declared = diff.classified(against: Intent(expectedDomainMigrations: [
+            .init(from: "queue(serial):com.emporium.cart", to: "ambient")
+        ]))
+        XCTAssertEqual(declared.verdict, .equivalent)
+        XCTAssertEqual(declared.divergences.first?.classification, .intended)
     }
 
-    /// The move is disclosed; the values carried across it are still the contract. This is the
-    /// distinction the old pairs destroyed.
-    func testValuesStillGateAcrossAMove() {
+    /// An actor destination is declared by type: first-seen instance numbering is the engine's
+    /// bookkeeping, and an author cannot know it.
+    func testAnActorDestinationIsDeclaredWithoutItsInstanceNumber() {
+        let baseline = trace("b", [note(0, "CartDidChange", on: .queue("com.emporium.cart", serial: true))])
+        let candidate = trace("c", [note(0, "CartDidChange", on: .actor("CartActor", instance: 3))])
+
+        let declared = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
+            .classified(against: Intent(expectedDomainMigrations: [
+                .init(from: "queue(serial):com.emporium.cart", to: "actor:CartActor")
+            ]))
+
+        XCTAssertEqual(declared.verdict, .equivalent)
+    }
+
+    /// Declaring the move excuses the move — never the values carried across it. This is the
+    /// distinction the old missing/unexpected pairs destroyed.
+    func testValuesStillGateAcrossADeclaredMove() {
         let baseline = trace("b", [note(0, "CheckoutDidComplete", on: .main, ["totalCents": 1169])])
         let candidate = trace("c", [note(0, "CheckoutDidComplete", on: .ambient, ["totalCents": 1170])])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
+            .classified(against: Intent(expectedDomainMigrations: [.init(from: "main", to: "ambient")]))
 
         XCTAssertEqual(diff.verdict, .diverged)
         XCTAssertEqual(diff.divergences.map(\.kind), [.domainMigration, .valueMismatch])
         XCTAssertEqual(diff.divergences.filter(\.isGating).map(\.kind), [.valueMismatch])
+    }
+
+    /// The opt-down: `.advisory` reports the move without failing, for a spec that has accepted
+    /// wholesale movement and wants only values gated.
+    func testAdvisoryPolicyReportsWithoutFailing() {
+        let baseline = trace("b", [note(0, "CartDidChange", on: .main)])
+        let candidate = trace("c", [note(0, "CartDidChange", on: .ambient)])
+        let spec = Tolerance(domainMigration: .advisory)
+
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec)
+
+        XCTAssertEqual(diff.verdict, .equivalent)
+        XCTAssertEqual(diff.divergences.map(\.kind), [.domainMigration])
     }
 
     /// For a change that claims to preserve threading, the move itself is the finding.

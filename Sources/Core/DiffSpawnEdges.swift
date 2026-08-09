@@ -12,12 +12,14 @@ import Foundation
 /// A baseline constraint the candidate can prove neither way is **`orderingLost`** — a dropped
 /// synchronization, said from a passing run, which is the claim dynamic race detection cannot make.
 /// A candidate constraint the baseline had neither way is **`orderingAdded`** — new synchronization,
-/// frequently the intended point of a migration, so it is always advisory.
+/// the awaited port of fire-and-forget work. Both are real behavioral changes, so both follow the
+/// `spawnEdges` policy: **red until declared** by default, through `Intent.expectedOrderingLosses`
+/// and `expectedOrderingAdditions`.
 ///
 /// Honest limits, stated rather than hidden: the recorded edge set under-approximates true
 /// happens-before (no lock or shared-memory edges), and this pass does not chase transitive chains —
-/// a constraint preserved only through an intermediate hop reports as lost. That errs toward
-/// over-reporting, which is why the policy defaults to `.advisory` until measured on real subjects.
+/// a constraint preserved only through an intermediate hop reports as lost. A spec hitting that
+/// over-report drops the policy to `.advisory`; the rate on real subjects is an open measurement.
 extension BehavioralDiff {
     static func compareSpawnEdges(
         baseline: [TraceEvent],
@@ -69,7 +71,7 @@ extension BehavioralDiff {
                         candidateSeq: candidateEvent.seq,
                         detail: "synchronization added: \(spawner.label) → \(candidateEvent.label) "
                             + "constrained in candidate, concurrent in baseline",
-                        isAdvisory: true
+                        isAdvisory: spec.spawnEdges == .advisory
                     )
                 )
             }

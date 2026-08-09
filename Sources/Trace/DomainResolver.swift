@@ -75,7 +75,16 @@ enum DomainResolver {
     /// `dispatch_get_current_queue` is deprecated and unsound to compare against other queues, but
     /// reading the *label* of the running queue is exactly the narrow use it remains valid for — this
     /// never treats the result as a queue reference.
+    ///
+    /// Foundation decorates an `OperationQueue`'s underlying label with a QoS suffix —
+    /// `com.emporium.delivery (QOS: UNSPECIFIED)` — which is scheduling detail, not identity. It is
+    /// stripped so the domain matches the name the code declared, the registry key, and anything an
+    /// author would write in an `Intent` declaration.
     private static func currentQueueLabel() -> String {
-        String(cString: __dispatch_queue_get_label(nil))
+        let label = String(cString: __dispatch_queue_get_label(nil))
+        guard let suffix = label.range(of: " (QOS:") else {
+            return label
+        }
+        return String(label[..<suffix.lowerBound])
     }
 }

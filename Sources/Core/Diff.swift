@@ -27,6 +27,11 @@ public struct Divergence: Codable, Sendable, Equatable {
     public var baselineSeq: Int?
     public var candidateSeq: Int?
     public var detail: String
+    /// For a divergence that is *about* domains (`domainMigration`, `orderingRelaxed`): where the
+    /// work was, and where it went — carried structurally so `Intent` can match a declared move
+    /// without parsing prose out of `detail`.
+    public var fromDomain: String?
+    public var toDomain: String?
     /// True when this divergence is reported but does not fail the verdict (a structural divergence
     /// under `structuralComparison == .advisory`).
     public var isAdvisory: Bool
@@ -45,6 +50,8 @@ public struct Divergence: Codable, Sendable, Equatable {
         baselineSeq: Int?,
         candidateSeq: Int?,
         detail: String,
+        fromDomain: String? = nil,
+        toDomain: String? = nil,
         isAdvisory: Bool = false,
         classification: DivergenceClass = .collateral
     ) {
@@ -53,6 +60,8 @@ public struct Divergence: Codable, Sendable, Equatable {
         self.baselineSeq = baselineSeq
         self.candidateSeq = candidateSeq
         self.detail = detail
+        self.fromDomain = fromDomain
+        self.toDomain = toDomain
         self.isAdvisory = isAdvisory
         self.classification = classification
     }

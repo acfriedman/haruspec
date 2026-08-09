@@ -140,22 +140,28 @@ final class ProjectionTests: XCTestCase {
         )
     }
 
-    /// The operation-queue → task-group shape, unordered on both sides: every event migrates domains
-    /// (advisory, values matched by content), no guarantee was dropped, and the verdict is stable in
-    /// every scheduling — the engine-level restatement of the app's committed-red test going green.
-    func testAnUnorderedToUnorderedPortIsEquivalentUnderAnyScheduling() {
+    /// The operation-queue → task-group shape, unordered on both sides: no guarantee was dropped,
+    /// the values match as a multiset, and one declared move covers every migrated event — so the
+    /// verdict is stable in every scheduling. The engine-level restatement of the app's
+    /// committed-red test going green.
+    func testAnUnorderedToUnorderedPortIsEquivalentOnceDeclaredUnderAnyScheduling() {
         let symbols = ["mug", "waterbottle", "wineglass"]
         let baseline = trace("b", symbols.enumerated().map { index, symbol in
             effect(index, "Analytics.track", on: delivery, ["symbol": .string(symbol)])
         })
+        let portIntent = Intent(expectedDomainMigrations: [
+            .init(from: "queue(concurrent):com.emporium.delivery", to: "ambient")
+        ])
 
         for permutation in [["wineglass", "mug", "waterbottle"], ["waterbottle", "wineglass", "mug"], symbols] {
             let candidate = trace("c", permutation.enumerated().map { index, symbol in
                 effect(index, "Analytics.track", on: .ambient, ["symbol": .string(symbol)])
             })
 
-            let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+            let undeclared = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+            XCTAssertEqual(undeclared.verdict, .diverged, "an undeclared port move must gate")
 
+            let diff = undeclared.classified(against: portIntent)
             XCTAssertEqual(diff.verdict, .equivalent, "diverged for \(permutation): \(diff.divergences)")
             XCTAssertEqual(diff.divergences.map(\.kind), Array(repeating: .domainMigration, count: 3))
             XCTAssertFalse(diff.divergences.contains { $0.kind == .orderingRelaxed })
@@ -178,19 +184,26 @@ final class ProjectionTests: XCTestCase {
             effect(1, "Cart.save", on: .ambient, ["items": 2])
         ])
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let movesDeclared = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+            .classified(against: Intent(expectedDomainMigrations: [
+                .init(from: "queue(serial):com.emporium.cart", to: "ambient")
+            ]))
 
-        XCTAssertEqual(diff.verdict, .diverged)
-        let relaxations = diff.divergences.filter { $0.kind == .orderingRelaxed }
+        XCTAssertEqual(movesDeclared.verdict, .diverged)
+        let relaxations = movesDeclared.divergences.filter { $0.kind == .orderingRelaxed }
         XCTAssertEqual(relaxations.count, 1)
         XCTAssertEqual(relaxations.first?.label, "com.emporium.cart")
         XCTAssertEqual(
             relaxations.first?.detail,
             "ordering guarantee dropped: queue(serial):com.emporium.cart → ambient (2 events)"
         )
-        XCTAssertEqual(diff.divergences.filter(\.isGating).map(\.kind), [.orderingRelaxed])
+        // The moves are declared; the dropped guarantee is its own fact and still gates alone.
+        XCTAssertEqual(movesDeclared.divergences.filter(\.isGating).map(\.kind), [.orderingRelaxed])
 
-        let declared = diff.classified(against: Intent(expectedOrderingRelaxations: ["com.emporium.cart"]))
+        let declared = movesDeclared.classified(against: Intent(
+            expectedOrderingRelaxations: ["com.emporium.cart"],
+            expectedDomainMigrations: [.init(from: "queue(serial):com.emporium.cart", to: "ambient")]
+        ))
         XCTAssertEqual(declared.verdict, .equivalent)
         XCTAssertEqual(
             declared.divergences.first { $0.kind == .orderingRelaxed }?.classification,
@@ -211,19 +224,28 @@ final class ProjectionTests: XCTestCase {
         ])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
-            .classified(against: Intent(expectedOrderingRelaxations: ["com.emporium.cart"]))
+            .classified(against: Intent(
+                expectedOrderingRelaxations: ["com.emporium.cart"],
+                expectedDomainMigrations: [
+                    .init(from: "queue(serial):com.emporium.cart", to: "ambient"),
+                    .init(from: "queue(serial):com.emporium.checkout", to: "ambient")
+                ]
+            ))
 
         XCTAssertEqual(diff.verdict, .diverged)
         XCTAssertEqual(diff.divergences.filter(\.isGating).map(\.label), ["com.emporium.checkout"])
     }
 
-    /// The reverse move gains an ordering nothing promised, which loses no guarantee: a plain
-    /// advisory migration, no relaxation, green.
+    /// The reverse move gains an ordering nothing promised, which loses no guarantee: once the move
+    /// itself is declared, there is no relaxation left to gate.
     func testGainedOrderIsNotARelaxation() {
         let baseline = trace("b", [effect(0, "Cart.save", on: .ambient, ["items": 2])])
         let candidate = trace("c", [effect(0, "Cart.save", on: cart, ["items": 2])])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+            .classified(against: Intent(expectedDomainMigrations: [
+                .init(from: "ambient", to: "queue(serial):com.emporium.cart")
+            ]))
 
         XCTAssertEqual(diff.verdict, .equivalent)
         XCTAssertEqual(diff.divergences.map(\.kind), [.domainMigration])
@@ -231,12 +253,15 @@ final class ProjectionTests: XCTestCase {
     }
 
     /// Concurrent queue → task group never promised consumers an order, so nothing was dropped:
-    /// discipline is unchanged even though the location moved.
+    /// discipline is unchanged even though the location moved — one declared move, green.
     func testAConcurrentQueueToTaskGroupMoveIsNotARelaxation() {
         let baseline = trace("b", [effect(0, "Analytics.track", on: delivery, ["symbol": "mug"])])
         let candidate = trace("c", [effect(0, "Analytics.track", on: .ambient, ["symbol": "mug"])])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+            .classified(against: Intent(expectedDomainMigrations: [
+                .init(from: "queue(concurrent):com.emporium.delivery", to: "ambient")
+            ]))
 
         XCTAssertEqual(diff.verdict, .equivalent)
         XCTAssertEqual(diff.divergences.map(\.kind), [.domainMigration])

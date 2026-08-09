@@ -268,7 +268,9 @@ extension BehavioralDiff {
                     baselineSeq: relaxation.firstBaselineSeq,
                     candidateSeq: relaxation.firstCandidateSeq,
                     detail: "ordering guarantee dropped: \(relaxation.origin) → \(relaxation.destination) "
-                        + "(\(relaxation.count) event\(relaxation.count == 1 ? "" : "s"))"
+                        + "(\(relaxation.count) event\(relaxation.count == 1 ? "" : "s"))",
+                    fromDomain: relaxation.origin.description,
+                    toDomain: relaxation.destination.description
                 )
             )
         }
@@ -290,6 +292,8 @@ extension BehavioralDiff {
                 baselineSeq: event.seq,
                 candidateSeq: counterpart.seq,
                 detail: "ran on a different domain (\(event.domain) → \(counterpart.domain))",
+                fromDomain: event.domain.description,
+                toDomain: counterpart.domain.description,
                 isAdvisory: isAdvisory(event.tier, under: spec) || spec.domainMigration == .advisory
             )
         )

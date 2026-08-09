@@ -51,9 +51,10 @@ final class SpawnEdgeDiffTests: XCTestCase {
         XCTAssertTrue(edgeDivergences(BehavioralDiff.compare(baseline: baseline, candidate: candidate)).isEmpty)
     }
 
-    /// The edge is gone and no ordered domain covers the pair: the synchronization was dropped.
-    /// Advisory by default — reported, verdict still green — until the over-report rate is measured.
-    func testADroppedEdgeIsOrderingLostAndAdvisoryByDefault() {
+    /// The edge is gone and no ordered domain covers the pair: the synchronization was dropped, and
+    /// it gates by default — the author may have meant it, and declaring so through `Intent` is the
+    /// way back to green, per event, not wholesale.
+    func testADroppedEdgeIsOrderingLostAndGatesUntilDeclared() {
         let baseline = trace("b", [
             event(0, "Cart.checkout", on: .main),
             event(1, "Inventory.reserve", on: .ambient, spawnedBy: 0)
@@ -65,21 +66,25 @@ final class SpawnEdgeDiffTests: XCTestCase {
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
 
-        XCTAssertEqual(diff.verdict, .equivalent)
-        let lost = edgeDivergences(diff)
-        XCTAssertEqual(lost.map(\.kind), [.orderingLost])
-        XCTAssertEqual(lost.first?.label, "Inventory.reserve")
+        XCTAssertEqual(diff.verdict, .diverged)
+        XCTAssertEqual(diff.divergences.filter(\.isGating).map(\.kind), [.orderingLost])
         XCTAssertEqual(
-            lost.first?.detail,
+            edgeDivergences(diff).first?.detail,
             "synchronization dropped: Cart.checkout → Inventory.reserve held in baseline "
                 + "(spawn edge from #0); the candidate leaves them concurrent"
         )
-        XCTAssertTrue(lost.allSatisfy(\.isAdvisory))
+
+        let declared = diff.classified(against: Intent(expectedOrderingLosses: ["Inventory.reserve"]))
+        XCTAssertEqual(declared.verdict, .equivalent)
+        XCTAssertEqual(
+            declared.divergences.first { $0.kind == .orderingLost }?.classification,
+            .intended
+        )
     }
 
-    /// Under the gating policy the same loss fails the verdict — and declaring it through `Intent`
-    /// is the way back to green, per divergence, not wholesale.
-    func testAGatedLossFailsUntilDeclared() {
+    /// The opt-down for a subject hitting the pass's known over-report (transitive chains are not
+    /// chased): `.advisory` keeps the report and drops the gate.
+    func testAdvisoryPolicyReportsALossWithoutFailing() {
         let baseline = trace("b", [
             event(0, "Cart.checkout", on: .main),
             event(1, "Inventory.reserve", on: .ambient, spawnedBy: 0)
@@ -88,18 +93,13 @@ final class SpawnEdgeDiffTests: XCTestCase {
             event(0, "Cart.checkout", on: .main),
             event(1, "Inventory.reserve", on: .ambient)
         ])
-        let spec = Tolerance(spawnEdges: .gating)
+        let spec = Tolerance(spawnEdges: .advisory)
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec)
-        XCTAssertEqual(diff.verdict, .diverged)
-        XCTAssertEqual(diff.divergences.filter(\.isGating).map(\.kind), [.orderingLost])
 
-        let declared = diff.classified(against: Intent(expectedOrderingLosses: ["Inventory.reserve"]))
-        XCTAssertEqual(declared.verdict, .equivalent)
-        XCTAssertEqual(
-            declared.divergences.first { $0.kind == .orderingLost }?.classification,
-            .intended
-        )
+        XCTAssertEqual(diff.verdict, .equivalent)
+        XCTAssertEqual(edgeDivergences(diff).map(\.kind), [.orderingLost])
+        XCTAssertTrue(edgeDivergences(diff).allSatisfy(\.isAdvisory))
     }
 
     /// The actor-port shape: the dispatch edge disappears because the work went synchronous inside
@@ -122,9 +122,10 @@ final class SpawnEdgeDiffTests: XCTestCase {
         )
     }
 
-    /// The reverse shape: the candidate synchronizes a pair the baseline left concurrent. New
-    /// synchronization is frequently the migration's point, so it is always advisory.
-    func testNewSynchronizationIsOrderingAddedAndNeverGates() {
+    /// The reverse shape: the candidate synchronizes a pair the baseline left concurrent — the
+    /// awaited port of fire-and-forget work. A real behavioral change (everything downstream now
+    /// waits), so it gates until declared, exactly like a loss.
+    func testNewSynchronizationIsOrderingAddedAndGatesUntilDeclared() {
         let baseline = trace("b", [
             event(0, "Cart.checkout", on: .main),
             event(1, "Inventory.reserve", on: .ambient)
@@ -133,13 +134,13 @@ final class SpawnEdgeDiffTests: XCTestCase {
             event(0, "Cart.checkout", on: .main),
             event(1, "Inventory.reserve", on: .ambient, spawnedBy: 0)
         ])
-        let spec = Tolerance(spawnEdges: .gating)
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
+        XCTAssertEqual(diff.verdict, .diverged)
+        XCTAssertEqual(diff.divergences.filter(\.isGating).map(\.kind), [.orderingAdded])
 
-        XCTAssertEqual(diff.verdict, .equivalent)
-        XCTAssertEqual(edgeDivergences(diff).map(\.kind), [.orderingAdded])
-        XCTAssertTrue(edgeDivergences(diff).allSatisfy(\.isAdvisory))
+        let declared = diff.classified(against: Intent(expectedOrderingAdditions: ["Inventory.reserve"]))
+        XCTAssertEqual(declared.verdict, .equivalent)
     }
 
     /// A spawner that did not survive alignment makes no edge claim — its absence is already the

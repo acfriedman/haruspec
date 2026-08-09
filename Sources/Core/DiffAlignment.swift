@@ -89,6 +89,8 @@ extension BehavioralDiff {
                         candidateSeq: candidate[candidateIndex].seq,
                         detail: "ran on a different domain "
                             + "(\(baseline[baselineIndex].domain) → \(candidate[candidateIndex].domain))",
+                        fromDomain: baseline[baselineIndex].domain.description,
+                        toDomain: candidate[candidateIndex].domain.description,
                         isAdvisory: advisory(baseline[baselineIndex].tier)
                             || spec.domainMigration == .advisory
                     )

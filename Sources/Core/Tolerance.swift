@@ -83,14 +83,16 @@ public struct VolatileField: Sendable, Equatable, Hashable {
 
 /// How an event that ran on a *different isolation domain* participates in the verdict.
 ///
-/// A concurrency migration moves work between domains by definition — a dispatch queue becoming an
-/// actor migrates every event it touches — so gating on the move itself would make the tool red by
-/// construction on the migration it exists to serve. Default `.advisory`: the move is reported, and
-/// the values carried across it still gate. `.gating` for a change that claims to preserve threading;
-/// `.ignored` restores the old behaviour, where a migrated event reads as missing + unexpected.
+/// Default `.gating`, **red until declared**: a domain move is a real behavioral change — different
+/// re-entrancy, different observers' threads, different subtle bugs — so an undeclared one fails the
+/// verdict, and the intended one is a one-line `Intent.expectedDomainMigrations` declaration. (An
+/// earlier default of `.advisory` reasoned that a migration moves every event, so gating is red by
+/// construction — but that was really "red with no exit," and the declaration is the exit.)
+/// `.advisory` reports without failing; `.ignored` restores the pre-migration reading, where a moved
+/// event is a missing + unexpected pair.
 public enum DomainMigrationPolicy: String, Codable, Sendable {
     case advisory // reported, does not fail the verdict
-    case gating // a domain change fails the verdict on its own
+    case gating // an undeclared domain change fails the verdict
     case ignored // not detected; a migrated event reads as a missing/unexpected pair
 }
 
@@ -119,13 +121,15 @@ public enum ConcurrencyComparison: String, Codable, Sendable {
 ///
 /// The edge pass compares happens-before *constraints* (see `DiffSpawnEdges.swift`): a baseline
 /// constraint the candidate can no longer prove is `orderingLost` — a dropped synchronization,
-/// detected structurally from a passing run. The captured edge set is an honest under-approximation
-/// and the pass does not chase transitive chains, so it can over-report; `.advisory` is the default
-/// until that rate is measured on real subjects. `orderingAdded` is always advisory — new
-/// synchronization is frequently the migration's point.
+/// detected structurally from a passing run — and the reverse is `orderingAdded`, the awaited port
+/// of fire-and-forget work. Default `.gating`, **red until declared**
+/// (`Intent.expectedOrderingLosses` / `expectedOrderingAdditions`): both are real behavioral
+/// changes. Known cost, accepted deliberately: the pass does not chase transitive chains, so a
+/// constraint preserved through an intermediate hop over-reports — a spec hitting that drops to
+/// `.advisory`, and the over-report rate on real subjects is an open measurement.
 public enum SpawnEdgePolicy: String, Codable, Sendable {
     case advisory // constraint changes are reported, but do not fail the verdict
-    case gating // a lost constraint fails the verdict unless declared via Intent
+    case gating // an undeclared constraint change fails the verdict
     case ignored // spawn edges are not compared at all
 }
 
@@ -158,7 +162,8 @@ public struct Tolerance: Sendable, Equatable {
     /// How the structural (auto-captured) tier participates in the verdict. Defaults to `.strict`.
     public var structuralComparison: StructuralComparison
 
-    /// How an event that moved isolation domains participates in the verdict. Defaults to `.advisory`.
+    /// How an event that moved isolation domains participates in the verdict. Defaults to `.gating`
+    /// (red until declared via `Intent.expectedDomainMigrations`).
     public var domainMigration: DomainMigrationPolicy
 
     /// How concurrent traces are compared. Defaults to `.totalOrder`; a spec whose subject does
@@ -166,7 +171,8 @@ public struct Tolerance: Sendable, Equatable {
     /// treated as behavior.
     public var concurrency: ConcurrencyComparison
 
-    /// How spawn-edge constraint changes participate in the verdict. Defaults to `.advisory`.
+    /// How spawn-edge constraint changes participate in the verdict. Defaults to `.gating`
+    /// (red until declared via `Intent.expectedOrderingLosses` / `expectedOrderingAdditions`).
     public var spawnEdges: SpawnEdgePolicy
 
     public init(
@@ -177,9 +183,9 @@ public struct Tolerance: Sendable, Equatable {
         ignoredKinds: [EventKind] = [],
         ignoredNotificationNames: [String] = [],
         structuralComparison: StructuralComparison = .strict,
-        domainMigration: DomainMigrationPolicy = .advisory,
+        domainMigration: DomainMigrationPolicy = .gating,
         concurrency: ConcurrencyComparison = .totalOrder,
-        spawnEdges: SpawnEdgePolicy = .advisory
+        spawnEdges: SpawnEdgePolicy = .gating
     ) {
         self.volatileFields = volatileFields
         self.numericEpsilon = numericEpsilon
@@ -272,11 +278,11 @@ extension Tolerance: Codable {
         structuralComparison = try container
             .decodeIfPresent(StructuralComparison.self, forKey: .structuralComparison) ?? .strict
         domainMigration = try container
-            .decodeIfPresent(DomainMigrationPolicy.self, forKey: .domainMigration) ?? .advisory
+            .decodeIfPresent(DomainMigrationPolicy.self, forKey: .domainMigration) ?? .gating
         concurrency = try container
             .decodeIfPresent(ConcurrencyComparison.self, forKey: .concurrency) ?? .totalOrder
         spawnEdges = try container
-            .decodeIfPresent(SpawnEdgePolicy.self, forKey: .spawnEdges) ?? .advisory
+            .decodeIfPresent(SpawnEdgePolicy.self, forKey: .spawnEdges) ?? .gating
     }
 }
 
