@@ -15,6 +15,7 @@ public struct Divergence: Codable, Sendable, Equatable {
         case unexpectedEvent // candidate produced an event the baseline never had
         case reordered // an event moved, and its order is significant
         case domainMigration // the same event, on a different isolation domain
+        case orderingRelaxed // work left an ordered domain for an unordered one — a guarantee was dropped
         case valueMismatch // an aligned event's payload differs beyond tolerance
         case timingRegression // an aligned interval got slower than its declared budget allows
     }
@@ -119,39 +120,51 @@ public enum BehavioralDiff {
             spec.structuralComparison == .advisory && tier == .structural
         }
 
-        let baselineSig = baseline.map(signature)
-        let candidateSig = candidate.map(signature)
-
-        let matched = longestCommonSubsequence(baselineSig, candidateSig)
-        let matchedBaseline = Set(matched.map(\.0))
-        let matchedCandidate = Set(matched.map(\.1))
-
         var divergences: [Divergence] = []
 
-        // 4a. Aligned (in-order) pairs: compare values + timing.
-        for (baselineIndex, candidateIndex) in matched {
-            compareAligned(
-                baseline[baselineIndex],
-                candidate[candidateIndex],
+        switch spec.concurrency {
+        case .totalOrder:
+            let baselineSig = baseline.map(signature)
+            let candidateSig = candidate.map(signature)
+
+            let matched = longestCommonSubsequence(baselineSig, candidateSig)
+            let matchedBaseline = Set(matched.map(\.0))
+            let matchedCandidate = Set(matched.map(\.1))
+
+            // 4a. Aligned (in-order) pairs: compare values + timing.
+            for (baselineIndex, candidateIndex) in matched {
+                compareAligned(
+                    baseline[baselineIndex],
+                    candidate[candidateIndex],
+                    spec: spec,
+                    isAdvisory: advisory(baseline[baselineIndex].tier),
+                    into: &divergences
+                )
+            }
+
+            reconcileUnmatched(
+                Alignment(
+                    baseline: baseline,
+                    candidate: candidate,
+                    baselineSig: baselineSig,
+                    candidateSig: candidateSig,
+                    matchedBaseline: matchedBaseline,
+                    matchedCandidate: matchedCandidate
+                ),
                 spec: spec,
-                isAdvisory: advisory(baseline[baselineIndex].tier),
+                advisory: advisory,
+                into: &divergences
+            )
+        case .perDomain:
+            // The projection: one comparison per domain (sequence where order is a guarantee,
+            // multiset where it is scheduler noise), cross-domain order dropped. `DiffProjection.swift`.
+            comparePerDomain(
+                baseline: baseline,
+                candidate: candidate,
+                spec: spec,
                 into: &divergences
             )
         }
-
-        reconcileUnmatched(
-            Alignment(
-                baseline: baseline,
-                candidate: candidate,
-                baselineSig: baselineSig,
-                candidateSig: candidateSig,
-                matchedBaseline: matchedBaseline,
-                matchedCandidate: matchedCandidate
-            ),
-            spec: spec,
-            advisory: advisory,
-            into: &divergences
-        )
 
         divergences.sort { lhs, rhs in
             (lhs.baselineSeq ?? lhs.candidateSeq ?? Int.max, lhs.candidateSeq ?? Int.max)
@@ -206,7 +219,8 @@ public enum BehavioralDiff {
     }
 
     /// Structural, tolerance-aware value comparison. Returns one message per differing leaf path.
-    private static func valueDivergences(
+    /// Internal rather than private: the projection's multiset matching uses it as its predicate.
+    static func valueDivergences(
         _ baseline: CanonicalValue,
         _ candidate: CanonicalValue,
         path: String,

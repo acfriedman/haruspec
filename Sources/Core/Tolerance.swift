@@ -94,6 +94,27 @@ public enum DomainMigrationPolicy: String, Codable, Sendable {
     case ignored // not detected; a migrated event reads as a missing/unexpected pair
 }
 
+/// How concurrent traces are compared.
+///
+/// A trace is recorded as one total order, but for concurrent code the interleaving is a property of
+/// the *scheduler*: two runs of an unchanged binary produce different orders, and comparing them as
+/// sequences manufactures a different counterexample every run. `.perDomain` stops comparing the one
+/// interleaving and compares per-domain projections instead:
+///
+///  - an **ordered** domain (main / actor / serial queue) keeps the sequence comparison — its order
+///    is a runtime guarantee, so it stays a contract;
+///  - a bucket with **no meaningful internal order** (concurrent queue, `ambient`) is compared as a
+///    **multiset** — which effects, with which payloads, how many times;
+///  - **cross-domain** relative order is dropped entirely;
+///  - an ordered baseline domain whose events land in an unordered candidate domain is compared as a
+///    multiset (either side unordered ⇒ multiset — losing an assertion rather than inventing one),
+///    and the dropped guarantee itself is reported as `orderingRelaxed`, which **gates** until the
+///    change declares it via `Intent.expectedOrderingRelaxations`.
+public enum ConcurrencyComparison: String, Codable, Sendable {
+    case totalOrder // compare the recorded interleaving as one sequence
+    case perDomain // project by domain: ordered ⇒ sequence, unordered ⇒ multiset, cross-domain order dropped
+}
+
 public struct Tolerance: Sendable, Equatable {
     /// Payload fields whose values are non-deterministic and must be ignored — e.g.
     /// `.key("orderID")`. Redacted to a placeholder before comparison. See `VolatileField` for the
@@ -126,6 +147,11 @@ public struct Tolerance: Sendable, Equatable {
     /// How an event that moved isolation domains participates in the verdict. Defaults to `.advisory`.
     public var domainMigration: DomainMigrationPolicy
 
+    /// How concurrent traces are compared. Defaults to `.totalOrder`; a spec whose subject does
+    /// genuinely parallel work opts into `.perDomain`, where scheduler interleaving stops being
+    /// treated as behavior.
+    public var concurrency: ConcurrencyComparison
+
     public init(
         volatileFields: [VolatileField] = [],
         numericEpsilon: Double = 0,
@@ -134,7 +160,8 @@ public struct Tolerance: Sendable, Equatable {
         ignoredKinds: [EventKind] = [],
         ignoredNotificationNames: [String] = [],
         structuralComparison: StructuralComparison = .strict,
-        domainMigration: DomainMigrationPolicy = .advisory
+        domainMigration: DomainMigrationPolicy = .advisory,
+        concurrency: ConcurrencyComparison = .totalOrder
     ) {
         self.volatileFields = volatileFields
         self.numericEpsilon = numericEpsilon
@@ -144,6 +171,7 @@ public struct Tolerance: Sendable, Equatable {
         self.ignoredNotificationNames = ignoredNotificationNames
         self.structuralComparison = structuralComparison
         self.domainMigration = domainMigration
+        self.concurrency = concurrency
     }
 
     /// The default: exact match on everything (nondeterminism already removed by canonicalization of
@@ -210,7 +238,7 @@ extension VolatileField: Codable {
 extension Tolerance: Codable {
     enum CodingKeys: String, CodingKey {
         case volatileFields, numericEpsilon, timingBudgets, unorderedGroups, ignoredKinds
-        case ignoredNotificationNames, structuralComparison, domainMigration
+        case ignoredNotificationNames, structuralComparison, domainMigration, concurrency
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -226,6 +254,8 @@ extension Tolerance: Codable {
             .decodeIfPresent(StructuralComparison.self, forKey: .structuralComparison) ?? .strict
         domainMigration = try container
             .decodeIfPresent(DomainMigrationPolicy.self, forKey: .domainMigration) ?? .advisory
+        concurrency = try container
+            .decodeIfPresent(ConcurrencyComparison.self, forKey: .concurrency) ?? .totalOrder
     }
 }
 

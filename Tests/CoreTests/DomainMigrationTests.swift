@@ -26,7 +26,7 @@ final class DomainMigrationTests: XCTestCase {
     /// One named divergence, not a pair — and the domains it moved between are in the message, since
     /// "which domain now?" is the question a reader has.
     func testAMovedEventIsOneDivergenceNamingBothDomains() {
-        let baseline = trace("b", [note(0, "CartDidChange", on: .queue("com.emporium.cart"))])
+        let baseline = trace("b", [note(0, "CartDidChange", on: .queue("com.emporium.cart", serial: true))])
         let candidate = trace("c", [note(0, "CartDidChange", on: .actor("CartActor", instance: 1))])
 
         let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
@@ -35,14 +35,14 @@ final class DomainMigrationTests: XCTestCase {
         XCTAssertEqual(diff.divergences.first?.kind, .domainMigration)
         XCTAssertEqual(
             diff.divergences.first?.detail,
-            "ran on a different domain (queue:com.emporium.cart → actor:CartActor#1)"
+            "ran on a different domain (queue(serial):com.emporium.cart → actor:CartActor#1)"
         )
     }
 
     /// Advisory by default. Gating on the move itself would make the tool red by construction on the
     /// migration it exists to serve.
     func testAMoveAloneDoesNotFailTheVerdict() {
-        let baseline = trace("b", [note(0, "CartDidChange", on: .queue("com.emporium.cart"))])
+        let baseline = trace("b", [note(0, "CartDidChange", on: .queue("com.emporium.cart", serial: true))])
         let candidate = trace("c", [note(0, "CartDidChange", on: .ambient)])
 
         XCTAssertEqual(BehavioralDiff.compare(baseline: baseline, candidate: candidate).verdict, .equivalent)
@@ -64,7 +64,7 @@ final class DomainMigrationTests: XCTestCase {
     /// For a change that claims to preserve threading, the move itself is the finding.
     func testGatingPolicyFailsOnTheMoveAlone() {
         let baseline = trace("b", [note(0, "CartDidChange", on: .main)])
-        let candidate = trace("c", [note(0, "CartDidChange", on: .queue("com.emporium.cart"))])
+        let candidate = trace("c", [note(0, "CartDidChange", on: .queue("com.emporium.cart", serial: true))])
         let spec = Tolerance(domainMigration: .gating)
 
         XCTAssertEqual(

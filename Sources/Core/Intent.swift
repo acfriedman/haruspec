@@ -22,14 +22,22 @@ public struct Intent: Sendable, Equatable {
     /// field does NOT excuse a change to another field of the same event — intent must be specific.
     public var expectedValueChanges: [String: [String]]
 
+    /// Ordered domains whose ordering guarantee the change deliberately drops, named as an author
+    /// declares them — a queue by its bare label (`"com.emporium.cart"`), `main` or an actor by its
+    /// description. Replacing a serial queue with a task group is the canonical case: the relaxation
+    /// is the point of the PR, so it is declarable — and `orderingRelaxed` gates until it is.
+    public var expectedOrderingRelaxations: [String]
+
     public init(
         expectedNewEvents: [String] = [],
         expectedRemovedEvents: [String] = [],
-        expectedValueChanges: [String: [String]] = [:]
+        expectedValueChanges: [String: [String]] = [:],
+        expectedOrderingRelaxations: [String] = []
     ) {
         self.expectedNewEvents = expectedNewEvents
         self.expectedRemovedEvents = expectedRemovedEvents
         self.expectedValueChanges = expectedValueChanges
+        self.expectedOrderingRelaxations = expectedOrderingRelaxations
     }
 
     /// The empty spec: nothing was declared, so every divergence stays collateral. This is parity mode.
@@ -45,6 +53,8 @@ public struct Intent: Sendable, Equatable {
         case .valueMismatch:
             guard let fields = expectedValueChanges[divergence.label] else { return false }
             return fields.isEmpty || fields.contains { fieldMatches($0, divergence.detail) }
+        case .orderingRelaxed:
+            return expectedOrderingRelaxations.contains(divergence.label)
         // A domain move is not declarable yet: `Intent` has no vocabulary for "this work moved to an
         // actor on purpose". Until it does, the policy on `Tolerance` is the only dial.
         case .reordered, .timingRegression, .domainMigration:
@@ -85,7 +95,7 @@ public extension TraceDiff {
 
 extension Intent: Codable {
     enum CodingKeys: String, CodingKey {
-        case expectedNewEvents, expectedRemovedEvents, expectedValueChanges
+        case expectedNewEvents, expectedRemovedEvents, expectedValueChanges, expectedOrderingRelaxations
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -95,6 +105,8 @@ extension Intent: Codable {
         expectedRemovedEvents = try container.decodeIfPresent([String].self, forKey: .expectedRemovedEvents) ?? []
         expectedValueChanges = try container
             .decodeIfPresent([String: [String]].self, forKey: .expectedValueChanges) ?? [:]
+        expectedOrderingRelaxations = try container
+            .decodeIfPresent([String].self, forKey: .expectedOrderingRelaxations) ?? []
     }
 }
 

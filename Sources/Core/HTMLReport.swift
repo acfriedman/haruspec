@@ -554,6 +554,7 @@ private extension Divergence.Kind {
         case .unexpectedEvent: "+"
         case .reordered: "↔"
         case .domainMigration: "⇄"
+        case .orderingRelaxed: "⤳"
         case .valueMismatch: "≠"
         case .timingRegression: "⏱"
         }
@@ -565,6 +566,7 @@ private extension Divergence.Kind {
         case .unexpectedEvent: "unexpected event"
         case .reordered: "reordered"
         case .domainMigration: "domain migration"
+        case .orderingRelaxed: "ordering relaxed"
         case .valueMismatch: "value mismatch"
         case .timingRegression: "timing regression"
         }
@@ -574,7 +576,7 @@ private extension Divergence.Kind {
         switch self {
         case .missingEvent: "k-missing"
         case .unexpectedEvent: "k-unexpected"
-        case .reordered, .domainMigration: "k-reordered"
+        case .reordered, .domainMigration, .orderingRelaxed: "k-reordered"
         case .valueMismatch: "k-value"
         case .timingRegression: "k-timing"
         }
