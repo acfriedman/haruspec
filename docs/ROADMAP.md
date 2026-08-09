@@ -219,10 +219,12 @@ the golden branch, replay the *same* transcript into both branches, and diff. Se
 
 ## Open research (the hard core; budget for it)
 
-- 🔬 **Concurrent partial-order traces** — a trace is still a total order. Serial queues and actors
-  keep that honest (mutual exclusion gives one sequence), so the open case is genuinely parallel work,
-  where the interleaving is the scheduler's and not the behavior's. Happens-before edges are reachable
-  at the seam's enqueue site but are not yet recorded.
+- ⏳ **Concurrent partial-order traces** — a trace is still a total order, and the cost is now measured
+  rather than argued. Serial queues and actors keep a total order honest, because mutual exclusion gives
+  one sequence; genuinely parallel work does not. A fan-out of concurrent image loads produces a *different
+  counterexample every run* — two branches finishing in a different order, aligned to each other, reported
+  as a value mismatch. Comparing per-domain projections instead is what that needs. Happens-before edges
+  are recorded (`spawnedBy`); nothing diffs them yet.
 - 🔬 **Trace canonicalization at scale** — clock jitter, address nondeterminism, dispatch ordering.
 - 🔬 **Replay determinism** — input seeding, sim-state restore, network stubbing so replays compare.
 - 🔬 **Tolerance model depth** — richer declared deltas beyond exact/volatile/timing/unordered.
