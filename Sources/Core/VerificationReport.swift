@@ -22,13 +22,16 @@ public extension VerificationResult {
         case .equivalent: "PASS"
         case .diverged: "FAIL"
         case .cannotVerify: "ABSTAIN"
+        // A `VerificationResult` is one pass and never resolves `.unstable` itself (that takes
+        // repetition, `SpecVerdict`'s layer) — but the vocabulary is shared, so relay it faithfully.
+        case .unstable: "UNSTABLE"
         }
 
         var lines = [
             "── FOR THE AGENT · how to relay this verdict ──",
             "This is a deterministic behavioral-diff verdict from the oracle: ground truth from re-running",
             "the code against a recorded baseline, not a plausibility guess. Relay it to the user like this:",
-            "• Gate: \(gate).  (process exit code: 0 = PASS, 3 = FAIL, 4 = ABSTAIN.)",
+            "• Gate: \(gate).  (process exit code: 0 = PASS, 3 = FAIL, 4 = ABSTAIN, 5 = UNSTABLE.)",
             "• Coverage: \(coverageSummary). EQUIVALENT is only as strong as this number — say it out loud."
         ]
 

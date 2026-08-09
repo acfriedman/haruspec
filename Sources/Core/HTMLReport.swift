@@ -235,12 +235,13 @@ public enum HTML {
 
     // MARK: - Verdict vocabulary (the single HTML copy of it)
 
-    /// The three-tier banner glyph + label.
+    /// The four-tier banner glyph + label.
     public static func banner(_ verdict: TraceDiff.Verdict) -> String {
         switch verdict {
         case .equivalent: "✅ EQUIVALENT"
         case .diverged: "❌ DIVERGED"
         case .cannotVerify: "⚠️ CANNOT-VERIFY"
+        case .unstable: "🌀 UNSTABLE"
         }
     }
 
@@ -250,6 +251,7 @@ public enum HTML {
         case .equivalent: "Equivalent"
         case .diverged: "Diverged"
         case .cannotVerify: "Cannot verify"
+        case .unstable: "Unstable"
         }
     }
 
@@ -259,6 +261,7 @@ public enum HTML {
         case .equivalent: "ok"
         case .diverged: "bad"
         case .cannotVerify: "warn"
+        case .unstable: "warn"
         }
     }
 

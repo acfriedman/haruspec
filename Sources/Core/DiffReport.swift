@@ -12,12 +12,13 @@ public extension TraceDiff {
         "\(TraceDiff.banner(verdict))  \(baselineName) → \(candidateName)"
     }
 
-    /// The three-tier banner glyph + label.
+    /// The four-tier banner glyph + label.
     static func banner(_ verdict: Verdict) -> String {
         switch verdict {
         case .equivalent: "✅ EQUIVALENT"
         case .diverged: "❌ DIVERGED"
         case .cannotVerify: "⚠️ CANNOT-VERIFY"
+        case .unstable: "🌀 UNSTABLE"
         }
     }
 

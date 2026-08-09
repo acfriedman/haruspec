@@ -71,6 +71,23 @@
     },
     "verdict" : "diverged"
   },
+  "stability" : {
+    "outcomes" : [
+      {
+        "inventory" : [
+          "valueMismatch CheckoutCompleted · total: baseline=1798 candidate=1799",
+          "valueMismatch PromoCart.checkout · value: baseline=1798 candidate=1799"
+        ],
+        "runs" : [
+          1,
+          2,
+          3
+        ],
+        "verdict" : "diverged"
+      }
+    ],
+    "replays" : 3
+  },
   "violatedPreconditions" : [
 
   ]
