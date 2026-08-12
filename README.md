@@ -56,4 +56,4 @@ declared you **intended**, and nothing else.
 
 ## License
 
-<!-- Add when a LICENSE lands; say "TBD" until then rather than implying one. -->
+Apache License 2.0. See [LICENSE](LICENSE).
