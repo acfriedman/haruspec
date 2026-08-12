@@ -27,6 +27,9 @@ public extension SpecVerdict {
         case .unstable:
             sections.append(contentsOf: unstableBody)
         }
+        // On every verdict, deliberately — a green states its blind spots, a red or an abstention
+        // states the surface it was measured over. The disclaimer, rendered rather than linked.
+        sections.append(qualificationBlock)
         sections.append(footer)
         return sections.joined(separator: "\n\n")
     }
@@ -171,6 +174,18 @@ public extension SpecVerdict {
             parts.append(coverageSummary)
         }
         return "<sub>\(parts.joined(separator: " · "))</sub>"
+    }
+
+    /// The qualification block: what this verdict rests on, one aligned line per axis. Fenced as
+    /// text so the sticky comment renders it as the fixed-width block a reader scans, not five
+    /// paragraphs of prose.
+    private var qualificationBlock: String {
+        let entries = qualificationEntries
+        let width = (entries.map(\.label.count).max() ?? 0) + 1
+        let lines = entries.map { entry in
+            "\(entry.label):".padding(toLength: width + 2, withPad: " ", startingAt: 0) + entry.value
+        }
+        return "**What this verdict rests on:**\n\n```text\n" + lines.joined(separator: "\n") + "\n```"
     }
 
     // MARK: - Rendering helpers

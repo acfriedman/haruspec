@@ -6,7 +6,35 @@ import Foundation
 // scraping test output. Same canonical-encoder discipline as the plan: identical verdicts serialize to
 // identical bytes, which is what makes "the reviewer reproduces the exact verdict" checkable.
 
+/// Just the version field, so a result artifact can be gated before its shape is assumed —
+/// `SpecPlan`'s stamp discipline, verdict side.
+private struct VerdictSchemaStamp: Decodable {
+    let schemaVersion: Int
+}
+
+/// Thrown when a result artifact can't be rendered by this engine. The verdict is transient CI
+/// output, so the remedy is always the same: re-run the verify that wrote it.
+public enum SpecVerdictError: Error, Equatable, CustomStringConvertible {
+    /// `found` is `nil` for an artifact with no stamp at all — one written before verdicts were
+    /// versioned, which this engine refuses rather than part-decodes.
+    case unsupportedSchemaVersion(found: Int?, supported: Int)
+
+    public var description: String {
+        switch self {
+        case let .unsupportedSchemaVersion(found, supported):
+            let stamp = found.map { "schemaVersion \($0)" } ?? "no schemaVersion stamp"
+            return "result artifact has \(stamp) (this engine renders \(supported)) — "
+                + "re-run the verify to regenerate it"
+        }
+    }
+}
+
 public extension SpecVerdict {
+    /// The one verdict schema this engine writes and renders. Version 1 introduced the stamp itself
+    /// together with the qualification block (and `Exploration`'s boundary-edge fields) — an
+    /// unstamped artifact predates all three.
+    static let supportedSchemaVersion = 1
+
     static func canonicalEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
@@ -22,6 +50,24 @@ public extension SpecVerdict {
     }
 
     init(jsonData: Data) throws {
+        // Version first, on its own: a pre-stamp artifact has no `schemaVersion` key, and "re-run
+        // the verify" is the answer a caller needs — not a keyNotFound. Only the missing key maps
+        // to that message; malformed JSON stays its own error.
+        let stamp: VerdictSchemaStamp
+        do {
+            stamp = try JSONDecoder().decode(VerdictSchemaStamp.self, from: jsonData)
+        } catch DecodingError.keyNotFound {
+            throw SpecVerdictError.unsupportedSchemaVersion(
+                found: nil,
+                supported: Self.supportedSchemaVersion
+            )
+        }
+        guard stamp.schemaVersion == Self.supportedSchemaVersion else {
+            throw SpecVerdictError.unsupportedSchemaVersion(
+                found: stamp.schemaVersion,
+                supported: Self.supportedSchemaVersion
+            )
+        }
         self = try JSONDecoder().decode(SpecVerdict.self, from: jsonData)
     }
 

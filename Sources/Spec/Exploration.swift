@@ -27,19 +27,31 @@ public struct Exploration: Codable, Sendable, Equatable {
     /// How many of `orderingsExplored` deliberately break a declared `.after` precondition — the
     /// defensive stratum.
     public let outOfOrderExplored: Int
+    /// Boundary-edge variants the declared seam domains schedule against the golden template — the
+    /// edges-before-middles pass (`DomainSeamGenerator`). Zero when no declared domain matched a
+    /// recorded seam: there was no boundary schedule to spend on.
+    public let boundaryEdgesScheduled: Int
+    /// How many scheduled edges the variant budget actually ran. The remainder was dropped when
+    /// `variantsPerOrdering` ran out — which used to happen silently; a sweep that skipped 11 of its
+    /// 38 edges should say so rather than read as edge-complete.
+    public let boundaryEdgesCovered: Int
 
     public init(
         orderingsExplored: Int,
         orderingsAvailable: Int,
         orderingsAreExact: Bool,
         variantsPerOrdering: Int,
-        outOfOrderExplored: Int
+        outOfOrderExplored: Int,
+        boundaryEdgesScheduled: Int,
+        boundaryEdgesCovered: Int
     ) {
         self.orderingsExplored = orderingsExplored
         self.orderingsAvailable = orderingsAvailable
         self.orderingsAreExact = orderingsAreExact
         self.variantsPerOrdering = variantsPerOrdering
         self.outOfOrderExplored = outOfOrderExplored
+        self.boundaryEdgesScheduled = boundaryEdgesScheduled
+        self.boundaryEdgesCovered = boundaryEdgesCovered
     }
 
     /// Differential runs spent: each drives the baseline and the candidate once.
@@ -85,11 +97,35 @@ public struct Exploration: Codable, Sendable, Equatable {
     }
 
     /// Rounded, except that a non-zero share never renders as `0%` — "we covered none of it" and
-    /// "we covered a sliver" are different findings.
-    private static func percent(_ fraction: Double) -> String {
+    /// "we covered a sliver" are different findings. Internal: the qualification block renders its
+    /// ordering fraction with the same rule, so the two lines can't disagree about a sliver.
+    static func percent(_ fraction: Double) -> String {
         let rounded = Int((fraction * 100).rounded())
         return rounded == 0 ? "<1%" : "\(rounded)%"
     }
+}
+
+/// The generation constants shared by the live differential (`verify(against:)`) and the recorded plan
+/// (`record()` / `verify(replaying:)`) — one surface, whichever side of a build boundary it runs on.
+enum SpecDefaults {
+    static let seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+    /// Seam cassettes per ordering when no `Budget(runs:)` is declared.
+    static let variantCount = 64
+    /// Where counting valid orderings gives up and reports a lower bound. A denominator is worth a few
+    /// milliseconds, not a factorial walk.
+    static let orderingCountLimit = 100_000
+    /// The share of a sampled ordering budget spent on sequences that break a declared `.after`
+    /// precondition. A quarter is enough that every declared precondition is broken several times over
+    /// at a typical `Ordering(max: 50)`, while the bulk of the sweep stays on the surface the author
+    /// described. Zero when a spec declares no preconditions — there is no such stratum to draw from.
+    static let outOfOrderShare = 0.25
+    /// How many distinct occurrence-count shapes a spec's declared `.repeating(_:)` ranges may produce
+    /// before shapes are sampled rather than enumerated. Generous: the product only grows when an author
+    /// declares several ranged ops, and the fallback is a lower-bound denominator, not a wrong one.
+    static let shapeLimit = 4096
+    /// How many times the sampler revisits every shape. Each pass draws at most one ordering per shape,
+    /// so this bounds the work when most shapes are exhausted and the budget still isn't spent.
+    static let shapePasses = 8
 }
 
 // MARK: - The resolved plan
@@ -162,6 +198,13 @@ extension Spec {
             ? linearExtensions(operations, max: split.orderings, repeating: orderingRepeats)
             : [operations]
 
+        // The schedule is deterministic from (domains × golden tracks), so its length is knowable
+        // here without running generation — and recomputable at replay from the plan's golden probe.
+        let scheduled = hasSeams
+            ? DomainSeamGenerator(domains: seamDomains, seed: SpecDefaults.seed, golden: golden.tracks)
+            .scheduledBoundaryEdges
+            : 0
+
         return ExplorationPlan(
             orderings: orderings,
             variantsPerOrdering: split.variants,
@@ -170,7 +213,9 @@ extension Spec {
                 orderingsAvailable: Swift.max(available.count, orderings.count),
                 orderingsAreExact: available.exact,
                 variantsPerOrdering: split.variants,
-                outOfOrderExplored: outOfOrderCount(among: orderings.map { $0.map(\.label) })
+                outOfOrderExplored: outOfOrderCount(among: orderings.map { $0.map(\.label) }),
+                boundaryEdgesScheduled: scheduled,
+                boundaryEdgesCovered: Swift.min(split.variants, scheduled)
             ),
             golden: golden,
             domains: seamDomains,

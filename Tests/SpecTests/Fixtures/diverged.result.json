@@ -9,6 +9,8 @@
     }
   },
   "exploration" : {
+    "boundaryEdgesCovered" : 8,
+    "boundaryEdgesScheduled" : 8,
     "orderingsAreExact" : true,
     "orderingsAvailable" : 7,
     "orderingsExplored" : 7,
@@ -23,6 +25,16 @@
     "checkout"
   ],
   "orderingsExplored" : 7,
+  "qualification" : {
+    "coveredClasses" : [
+      "PromoCart"
+    ],
+    "operations" : 3,
+    "probes" : 385,
+    "seamPositions" : {
+      "coffeeQty" : 2
+    }
+  },
   "result" : {
     "coverage" : {
       "declared" : [
@@ -71,6 +83,7 @@
     },
     "verdict" : "diverged"
   },
+  "schemaVersion" : 1,
   "stability" : {
     "outcomes" : [
       {

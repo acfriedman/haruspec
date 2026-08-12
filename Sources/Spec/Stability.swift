@@ -104,11 +104,13 @@ extension SpecVerdict {
     /// representative pass whose diff, coverage, and counterexample the artifact keeps.
     func qualified(by stability: Stability) -> SpecVerdict {
         SpecVerdict(
+            schemaVersion: schemaVersion,
             result: result,
             orderingsExplored: orderingsExplored,
             failingOrder: failingOrder,
             counterexample: counterexample,
             exploration: exploration,
+            qualification: qualification,
             violatedPreconditions: violatedPreconditions,
             stability: stability
         )
