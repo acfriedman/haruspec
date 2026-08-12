@@ -9,6 +9,10 @@ import HaruspecTrace
 /// shrinks (a shrunk variant has no recorded golden to diff against).
 /// `Codable`, so a verify run is writable as a `result.json` artifact a reviewer can read and reproduce.
 public struct SpecVerdict: Codable, Sendable {
+    /// The artifact's version stamp — `SpecPlan`'s discipline applied to the verdict side (see
+    /// `supportedSchemaVersion` in SpecVerdictSerialization.swift). An unstamped `result.json`
+    /// predates the qualification block and is refused with "re-run", never part-decoded.
+    public let schemaVersion: Int
     /// The diff + coverage pair carrying the *resolved* verdict (see `VerificationResult`): an
     /// EQUIVALENT the replay can't stand behind (an op or seam fell back to live) downgrades to
     /// CANNOT-VERIFY; a DIVERGED always stands.
@@ -24,24 +28,32 @@ public struct SpecVerdict: Codable, Sendable {
     public let counterexample: CassetteData?
     /// The budget spent and the surface it covered.
     public let exploration: Exploration
+    /// What the verdict was measured over — the disclaimer's feeds, rendered as the qualification
+    /// block on every surface (see Qualification.swift). No default: an empty qualification would
+    /// claim a surface of nothing, which is a statement, not an absence.
+    public let qualification: Qualification
     /// How the verdict behaved across repeated replays. `.singleRun` where repetition never happened
     /// (the live differential, a one-pass replay) — reported as unmeasured, never as reproduced.
     public let stability: Stability
 
     public init(
+        schemaVersion: Int = SpecVerdict.supportedSchemaVersion,
         result: VerificationResult,
         orderingsExplored: Int,
         failingOrder: [String]?,
         counterexample: CassetteData?,
         exploration: Exploration,
+        qualification: Qualification,
         violatedPreconditions: [String]? = nil,
         stability: Stability = .singleRun
     ) {
+        self.schemaVersion = schemaVersion
         self.result = result
         self.orderingsExplored = orderingsExplored
         self.failingOrder = failingOrder
         self.counterexample = counterexample
         self.exploration = exploration
+        self.qualification = qualification
         self.violatedPreconditions = violatedPreconditions
         self.stability = stability
     }
@@ -83,6 +95,7 @@ public struct SpecVerdict: Codable, Sendable {
                 lines.append("    ⚠︎ declared domain matched nothing: \(gap.boundary) (nothing read that seam)")
             }
         }
+        lines += qualificationReportLines
         if diff.divergences.isEmpty {
             lines.append("  behavior matches across everything explored (0 divergences)")
         } else {
@@ -139,27 +152,11 @@ public struct SpecVerdict: Codable, Sendable {
     }
 }
 
-/// The generation constants shared by the live differential (`verify(against:)`) and the recorded plan
-/// (`record()` / `verify(replaying:)`) — one surface, whichever side of a build boundary it runs on.
-enum SpecDefaults {
-    static let seed: UInt64 = 0x9E37_79B9_7F4A_7C15
-    /// Seam cassettes per ordering when no `Budget(runs:)` is declared.
-    static let variantCount = 64
-    /// Where counting valid orderings gives up and reports a lower bound. A denominator is worth a few
-    /// milliseconds, not a factorial walk.
-    static let orderingCountLimit = 100_000
-    /// The share of a sampled ordering budget spent on sequences that break a declared `.after`
-    /// precondition. A quarter is enough that every declared precondition is broken several times over
-    /// at a typical `Ordering(max: 50)`, while the bulk of the sweep stays on the surface the author
-    /// described. Zero when a spec declares no preconditions — there is no such stratum to draw from.
-    static let outOfOrderShare = 0.25
-    /// How many distinct occurrence-count shapes a spec's declared `.repeating(_:)` ranges may produce
-    /// before shapes are sampled rather than enumerated. Generous: the product only grows when an author
-    /// declares several ranged ops, and the fallback is a lower-bound denominator, not a wrong one.
-    static let shapeLimit = 4096
-    /// How many times the sampler revisits every shape. Each pass draws at most one ordering per shape,
-    /// so this bounds the work when most shapes are exhausted and the budget still isn't spent.
-    static let shapePasses = 8
+/// The golden template and everything resolved off it (see `goldenSurface()`).
+private struct GoldenSurface<S> {
+    let golden: CassetteData
+    let plan: ExplorationPlan<S>
+    let qualification: Qualification
 }
 
 public extension Spec {
@@ -174,12 +171,8 @@ public extension Spec {
         against candidate: @escaping (SeamContext) -> S,
         declaring intent: Intent = .none
     ) async -> SpecVerdict {
-        // Golden: the declared order under live seams — the template every variation is derived from.
-        let recording = Cassette()
-        _ = await capture(make: makeSystem, order: explorationOrder(), cassette: recording)
-        let golden = recording.snapshot()
-
-        let plan = explorationPlan(golden: golden)
+        let surface = await goldenSurface()
+        let (golden, plan, qualification) = (surface.golden, surface.plan, surface.qualification)
 
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index) {
@@ -205,6 +198,7 @@ public extension Spec {
                         failingOrder: failing,
                         counterexample: seamDomains.isEmpty ? nil : cassette,
                         exploration: plan.exploration,
+                        qualification: qualification,
                         violatedPreconditions: failing.map(preconditionViolations(in:))
                     )
                 }
@@ -224,11 +218,27 @@ public extension Spec {
             orderingsExplored: plan.orderings.count,
             failingOrder: nil,
             counterexample: nil,
-            exploration: plan.exploration
+            exploration: plan.exploration,
+            qualification: qualification
         )
     }
 
     // MARK: - Hidden machinery
+
+    /// Record the golden template — the declared order under live seams, the template every variation
+    /// is derived from — and resolve the explored surface plus the qualification measured off it.
+    private func goldenSurface() async -> GoldenSurface<S> {
+        let recording = Cassette()
+        let goldenTrace = await capture(make: makeSystem, order: explorationOrder(), cassette: recording)
+        let golden = recording.snapshot()
+        let plan = explorationPlan(golden: golden)
+        let qualification = liveQualification(
+            goldenTrace: goldenTrace,
+            golden: golden,
+            exploration: plan.exploration
+        )
+        return GoldenSurface(golden: golden, plan: plan, qualification: qualification)
+    }
 
     /// The longest call sequence exploration can produce: the declared ops, each repeated as far as
     /// `Ordering(repeating:)` allows. The golden cassette is recorded over *this* rather than the

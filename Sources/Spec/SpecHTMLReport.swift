@@ -31,6 +31,9 @@ public extension SpecVerdict {
         return HTML.page(title: "Haruspec · \(name)", sections: [
             HTML.hero(verdict, title: name, baseline: diff.baselineName, candidate: name),
             HTML.statSection(statTiles),
+            // Right under the stats, on every verdict: the stats say what was found, this says what
+            // the finding was measured over — the disclaimer, rendered.
+            HTML.qualificationSection(qualificationEntries),
             HTML.counterexampleSection(seams: counterexampleSeamPairs, order: failingOrder),
             body
         ])

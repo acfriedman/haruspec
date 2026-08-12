@@ -196,7 +196,16 @@ final class OrderingPreconditionTests: XCTestCase {
                 orderingsAvailable: 40,
                 orderingsAreExact: true,
                 variantsPerOrdering: 1,
-                outOfOrderExplored: 12
+                outOfOrderExplored: 12,
+                boundaryEdgesScheduled: 0,
+                boundaryEdgesCovered: 0
+            ),
+            qualification: Qualification(
+                coveredClasses: [],
+                operations: 2,
+                probes: 40,
+                seamPositions: [:],
+                blindSpots: nil
             ),
             violatedPreconditions: ["remove after add"]
         )

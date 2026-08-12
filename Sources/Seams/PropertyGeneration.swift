@@ -247,6 +247,13 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         Set(domains.keys)
     }
 
+    /// How many boundary-edge variants the schedule holds. A budget below this drops the tail of the
+    /// schedule (`beginVariant` goes random past it) — exposing the count is what lets a verdict
+    /// report "boundary edges N of M" instead of silently reading as edge-complete.
+    public var scheduledBoundaryEdges: Int {
+        schedule.count
+    }
+
     public mutating func beginVariant(_ index: Int) {
         pinned = index < schedule.count ? schedule[index] : nil
     }

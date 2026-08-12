@@ -144,6 +144,18 @@ public enum HTML {
         """
     }
 
+    /// The qualification block — what the verdict rests on, one labelled row per axis. The HTML twin
+    /// of the markdown block: both render the same entries, so the sticky comment and the artifact
+    /// can't drift apart.
+    public static func qualificationSection(_ entries: [(label: String, value: String)]) -> String {
+        let rows = entries.map { entry in
+            "<div class=\"qual-row\"><span class=\"qual-label\">\(esc(entry.label))</span>"
+                + "<span>\(esc(entry.value))</span></div>"
+        }
+        .joined()
+        return "<section class=\"qual\"><h2>What this verdict rests on</h2>\(rows)</section>"
+    }
+
     /// The CANNOT-VERIFY abstention panel — the oracle refusing to certify a parity it couldn't isolate.
     public static func abstentionSection(reason: String) -> String {
         """
@@ -390,6 +402,13 @@ public enum HTML {
     .coverage h2 { margin-bottom:12px; }
     .cov-gap { color:var(--warn); font-size:13px; margin-top:8px; }
     .cov-gap::before { content:"gap · "; color:var(--muted); }
+
+    .qual { background:var(--panel); border:1px solid var(--line); border-radius:14px; \
+    padding:18px 20px; margin:18px 0; }
+    .qual h2 { margin-bottom:12px; }
+    .qual-row { display:flex; gap:12px; padding:2px 0; font-size:13px; \
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+    .qual-label { color:var(--muted); min-width:10ch; flex-shrink:0; }
 
     footer { margin-top:28px; color:var(--muted); font-size:12px; line-height:1.6; \
     border-top:1px solid var(--line); padding-top:16px; }

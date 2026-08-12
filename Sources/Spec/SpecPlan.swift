@@ -179,20 +179,12 @@ public extension Spec {
             }
         }
 
-        var classes = Set<String>()
-        for probe in probes {
-            for event in probe.golden.events where event.tier == .structural {
-                if let dot = event.label.firstIndex(of: "."), dot != event.label.startIndex {
-                    classes.insert(String(event.label[..<dot]))
-                }
-            }
-        }
         return SpecPlan(
             specName: name,
             seed: SpecDefaults.seed,
             variedSeams: seamDomains.keys.sorted(),
             probes: probes,
-            coveredClasses: classes.sorted()
+            coveredClasses: structuralClasses(in: probes.map(\.golden))
         )
     }
 
@@ -232,22 +224,15 @@ public extension Spec {
 
     /// One replay pass — the primitive `verify(replaying:)` repeats and compares.
     private func verifyOnce(replaying plan: SpecPlan, declaring intent: Intent) async -> SpecVerdict {
-        let opsByLabel = Dictionary(uniqueKeysWithValues: operations.map { ($0.label, $0) })
-        let planOps = orderedUnion(plan.probes.map(\.ordering))
-        let missingOps = planOps.filter { opsByLabel[$0] == nil }
-        let replayable = plan.probes.filter { $0.ordering.allSatisfy { opsByLabel[$0] != nil } }
-
-        let distinctOrderings = Set(plan.probes.map(\.ordering)).count
-        let variedInputs = plan.probes.contains { $0.cassette != plan.probes.first?.cassette }
-        let exploration = exploration(recordedIn: plan)
+        let surface = replaySurface(of: plan)
 
         var replays: [Cassette] = []
         var representative: TraceDiff?
-        for probe in replayable {
+        for probe in surface.replayable {
             let replay = Cassette(replaying: probe.cassette)
             let current = await capture(
                 make: makeSystem,
-                order: probe.ordering.compactMap { opsByLabel[$0] },
+                order: probe.ordering.compactMap { surface.opsByLabel[$0] },
                 cassette: replay
             )
             let diff = BehavioralDiff.compare(
@@ -262,22 +247,7 @@ public extension Spec {
             }
 
             guard diff.isEquivalent else {
-                let coverage = coverage(
-                    replays: [replay],
-                    domainHeld: false,
-                    declaredOps: planOps,
-                    missingOps: missingOps
-                )
-                return SpecVerdict(
-                    result: VerificationResult(diff: diff, coverage: coverage),
-                    orderingsExplored: distinctOrderings,
-                    failingOrder: distinctOrderings > 1 ? probe.ordering : nil,
-                    counterexample: variedInputs ? probe.cassette : nil,
-                    exploration: exploration,
-                    violatedPreconditions: distinctOrderings > 1
-                        ? preconditionViolations(in: probe.ordering)
-                        : nil
-                )
+                return divergedReplayVerdict(diff: diff, probe: probe, replay: replay, surface: surface)
             }
         }
 
@@ -287,16 +257,62 @@ public extension Spec {
         let coverage = coverage(
             replays: replays,
             domainHeld: true,
-            declaredOps: planOps,
-            missingOps: missingOps,
+            declaredOps: surface.planOps,
+            missingOps: surface.missingOps,
             sweptSeams: plan.variedSeams
         )
         return SpecVerdict(
             result: VerificationResult(diff: diff, coverage: coverage),
-            orderingsExplored: distinctOrderings,
+            orderingsExplored: surface.distinctOrderings,
             failingOrder: nil,
             counterexample: nil,
-            exploration: exploration
+            exploration: surface.exploration,
+            qualification: surface.qualification
+        )
+    }
+
+    /// The plan read through the current build: which recorded probes can replay at all, and the
+    /// exploration/qualification the verdict will carry either way — resolved once per pass, shared
+    /// by both exits so a divergence and a hold describe the same surface.
+    private func replaySurface(of plan: SpecPlan) -> ReplaySurface<S> {
+        let opsByLabel = Dictionary(uniqueKeysWithValues: operations.map { ($0.label, $0) })
+        let planOps = orderedUnion(plan.probes.map(\.ordering))
+        let replayable = plan.probes.filter { $0.ordering.allSatisfy { opsByLabel[$0] != nil } }
+        return ReplaySurface(
+            opsByLabel: opsByLabel,
+            planOps: planOps,
+            missingOps: planOps.filter { opsByLabel[$0] == nil },
+            replayable: replayable,
+            distinctOrderings: Set(plan.probes.map(\.ordering)).count,
+            variedInputs: plan.probes.contains { $0.cassette != plan.probes.first?.cassette },
+            exploration: exploration(recordedIn: plan),
+            qualification: replayQualification(of: plan, operations: planOps.count, probes: replayable.count)
+        )
+    }
+
+    /// The first-divergence exit: stop, and pin the probe that exposed it.
+    private func divergedReplayVerdict(
+        diff: TraceDiff,
+        probe: SpecProbe,
+        replay: Cassette,
+        surface: ReplaySurface<S>
+    ) -> SpecVerdict {
+        let coverage = coverage(
+            replays: [replay],
+            domainHeld: false,
+            declaredOps: surface.planOps,
+            missingOps: surface.missingOps
+        )
+        return SpecVerdict(
+            result: VerificationResult(diff: diff, coverage: coverage),
+            orderingsExplored: surface.distinctOrderings,
+            failingOrder: surface.distinctOrderings > 1 ? probe.ordering : nil,
+            counterexample: surface.variedInputs ? probe.cassette : nil,
+            exploration: surface.exploration,
+            qualification: surface.qualification,
+            violatedPreconditions: surface.distinctOrderings > 1
+                ? preconditionViolations(in: probe.ordering)
+                : nil
         )
     }
 
@@ -320,12 +336,25 @@ public extension Spec {
         let available = exploreOrdering
             ? countLinearExtensions(operations, repeating: orderingRepeats, limit: SpecDefaults.orderingCountLimit)
             : (count: 1, exact: true)
+        let variants = Swift.max(1, plan.probes.count / Swift.max(1, orderings.count))
+        // The boundary schedule is deterministic from (declared domains × the golden template), and
+        // the plan's first probe *is* the golden — so the count is recomputed here rather than stored,
+        // the same way the ordering denominator is: read through the current build's declarations.
+        let goldenTracks = plan.probes.first?.cassette.tracks ?? [:]
+        let scheduled = Set(seamDomains.keys).isDisjoint(with: goldenTracks.keys)
+            ? 0
+            : DomainSeamGenerator(domains: seamDomains, seed: plan.seed, golden: goldenTracks)
+            .scheduledBoundaryEdges
         return Exploration(
             orderingsExplored: orderings.count,
             orderingsAvailable: Swift.max(available.count, orderings.count),
             orderingsAreExact: available.exact,
-            variantsPerOrdering: Swift.max(1, plan.probes.count / Swift.max(1, orderings.count)),
-            outOfOrderExplored: outOfOrderCount(among: Array(orderings))
+            variantsPerOrdering: variants,
+            outOfOrderExplored: outOfOrderCount(among: Array(orderings)),
+            boundaryEdgesScheduled: scheduled,
+            // `variants` is derived from probe counts (deduped at record), so this can undercount by
+            // one near the boundary — never overcount, which is the honest direction for a coverage claim.
+            boundaryEdgesCovered: Swift.min(variants, scheduled)
         )
     }
 
@@ -344,6 +373,18 @@ public extension Spec {
             tolerances: tolerances
         )
     }
+}
+
+/// One replay pass's resolved view of a plan (see `replaySurface(of:)`).
+private struct ReplaySurface<S> {
+    let opsByLabel: [String: Op<S>]
+    let planOps: [String]
+    let missingOps: [String]
+    let replayable: [SpecProbe]
+    let distinctOrderings: Int
+    let variedInputs: Bool
+    let exploration: Exploration
+    let qualification: Qualification
 }
 
 /// The union of several label sequences, keeping first-seen order (deterministic gap reporting).
