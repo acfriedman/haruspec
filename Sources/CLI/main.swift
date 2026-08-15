@@ -1,4 +1,5 @@
 import Foundation
+import HaruspecAudit
 import HaruspecCore
 import HaruspecDemo
 import HaruspecMCP
@@ -10,6 +11,7 @@ import HaruspecTrace
 //   haruspec demo [--out <dir>]
 //   haruspec canonicalize <trace.json> [--tolerance <spec.json>] [--out <file.json>]
 //   haruspec report <result.json> [--markdown] [--html <path>] [--agent]
+//   haruspec audit --root <dir> [--verdict <result.json>] [--covering <Sym,Sym>]
 //
 // Exit codes:  0 ok / equivalent · 1 runtime error · 2 usage error · 3 behavioral divergence ·
 //              4 cannot-verify (the oracle abstained — an uncovered/un-isolable surface) ·
@@ -99,6 +101,14 @@ USAGE:
       --markdown            GitHub-flavored markdown (PR comment / job summary) instead of text.
       --html <path>         also write the self-contained visual report to <path>.
       --agent               append the relay guide telling a consuming agent how to report the verdict.
+
+  haruspec audit --root <dir> [--verdict <result.json>] [--covering <Sym,Sym>]
+      Capture-completeness audit: resolve the covered declarations to source under <dir>, then read
+      that source for effect channels the capture cannot see (NotificationCenter.default, Timer,
+      Combine, KVO, delayed dispatch). Exits 4 if any channel is found OR any declaration's source
+      cannot be located — both mean the verdict cannot claim it saw everything.
+      --verdict <result.json>  audit exactly what that verdict covered (its recorded origins).
+      --covering <Sym,Sym>     audit these declarations by name (Obj-C classes, Swift types).
 
   haruspec mcp
       Serve the engine as MCP tools over stdio (verify_behavioral_parity, canonicalize_trace),
@@ -208,6 +218,44 @@ func runCanonicalize(_ rest: [String]) -> Never {
     }
 }
 
+/// Capture-completeness audit: resolve what a verdict covered back to source, then lint that source
+/// for effect channels the capture cannot see. Static, so it runs on the CI host beside `report` —
+/// the verify itself may have run somewhere with no source tree at all (a simulator, a device).
+///
+/// Exits 4 (CANNOT-VERIFY) on any blind spot, resolved or not: a channel found and a declaration that
+/// could not be read are the same fact about the verdict — it cannot claim it saw everything.
+func runAudit(_ rest: [String]) -> Never {
+    let (flags, _) = parse(rest)
+    guard let rootPath = flags["root"], !rootPath.isEmpty else {
+        fail("audit needs --root <dir>\n\n\(usage)", code: .usage)
+    }
+    let root = URL(fileURLWithPath: rootPath)
+    do {
+        let origins = try auditOrigins(flags)
+        guard !origins.isEmpty else {
+            fail("audit needs --verdict <result.json> or --covering <Sym,Sym>\n\n\(usage)", code: .usage)
+        }
+        let report = AuditReport.audit(origins: origins, root: root)
+        print(report.report())
+        exit(report.isClean ? ExitCode.success.rawValue : ExitCode.cannotVerify.rawValue)
+    } catch {
+        fail("audit failed: \(error)", code: .runtime)
+    }
+}
+
+/// The declarations to audit: a verdict's own origins, or symbols named on the command line (the
+/// form CI can use before a verdict artifact exists — and the form an Obj-C class needs anyway).
+func auditOrigins(_ flags: [String: String]) throws -> [TraceOrigin] {
+    if let path = flags["verdict"], !path.isEmpty {
+        return try SpecVerdict(contentsOf: URL(fileURLWithPath: path)).qualification.origins
+    }
+    guard let covering = flags["covering"], !covering.isEmpty else { return [] }
+    return covering.split(separator: ",").map { symbol in
+        let name = symbol.trimmingCharacters(in: .whitespaces)
+        return TraceOrigin(label: name, symbol: name)
+    }
+}
+
 func runReport(_ rest: [String]) -> Never {
     let (flags, positionals) = parse(rest)
     guard positionals.count == 1 else { fail("report needs <result.json>\n\n\(usage)", code: .usage) }
@@ -250,6 +298,7 @@ case "diff": runDiff(rest)
 case "demo": runDemo(rest)
 case "canonicalize": runCanonicalize(rest)
 case "report": runReport(rest)
+case "audit": runAudit(rest)
 case "mcp": MCPServer().run()
 case "help", "--help", "-h": print(usage); exit(ExitCode.success.rawValue)
 default: fail("unknown command \"\(command)\"\n\n\(usage)", code: .usage)
