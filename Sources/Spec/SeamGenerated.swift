@@ -29,7 +29,11 @@ import HaruspecTrace
 /// the domains (no capture bound), and per call during captures. A `Date()` or a random inside it
 /// breaks replay the same way any unseamed read does.
 public protocol SeamGenerated {
-    static func generated(from fields: FieldSeams) -> Self
+    /// The produced model — `Self` in spirit, an associated type in law: a `Self` requirement would
+    /// demand covariant witnesses from non-final classes, and the audience here is exactly the
+    /// bridged Obj-C model, which is never final.
+    associatedtype Generated = Self
+    static func generated(from fields: FieldSeams) -> Generated
 }
 
 /// The reads a `SeamGenerated` factory builds from. One value, two lives: during a capture it reads

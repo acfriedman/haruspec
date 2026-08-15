@@ -336,7 +336,7 @@ public struct Spec<S> {
     /// A field key already declared explicitly (a `Seam("Membership.tier", …)` in `.vary`, before or
     /// after this call) keeps its explicit domain: the model states how it *can* mutate, the spec may
     /// narrow how it *does* here.
-    public func generates<T: SeamGenerated>(_ type: T.Type) -> Spec<S> {
+    public func generates<T: SeamGenerated>(_ type: T.Type) -> Spec<S> where T.Generated == T {
         var copy = self
         copy.valueMakers[ObjectIdentifier(type)] = { context, _ in
             T.generated(from: FieldSeams(mode: .live(context), prefix: "\(T.self)"))
