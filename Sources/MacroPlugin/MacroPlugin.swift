@@ -136,11 +136,11 @@ public struct TracedMethodMacro: BodyMacro {
 /// The `noteOrigin` argument list an instrumented body registers itself with. `sourceExpression` is
 /// already a Swift expression — a `#fileID` string literal from the expansion context, or nil where the
 /// behavior has no Swift source to point at.
-private func originArguments(label: String, symbol: String?, sourceExpression: String?) -> String {
+func originArguments(label: String, symbol: String?, sourceExpression: String?) -> String {
     "\(literalString(label)), symbol: \(symbol.map(literalString) ?? "nil"), source: \(sourceExpression ?? "nil")"
 }
 
-private func tracedBody(
+func tracedBody(
     function: FunctionDeclSyntax,
     label rawLabel: String,
     innerBody: String,
@@ -456,11 +456,11 @@ public struct SeamedMethodMacro: BodyMacro {
 /// Extract the first positional string-literal argument of a macro attribute, if present.
 /// `label` as Swift source for a string literal — labels are plain identifiers, but escape anyway so
 /// a pathological one cannot break out of the generated expression.
-private func quotedLiteral(_ value: String) -> String {
+func quotedLiteral(_ value: String) -> String {
     StringLiteralExprSyntax(content: value).description
 }
 
-private func stringArgument(of node: AttributeSyntax) -> String? {
+func stringArgument(of node: AttributeSyntax) -> String? {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self),
           let first = arguments.first, first.label == nil,
           let literal = first.expression.as(StringLiteralExprSyntax.self) else { return nil }
@@ -468,7 +468,7 @@ private func stringArgument(of node: AttributeSyntax) -> String? {
 }
 
 /// Extract a labeled string-literal argument of a macro attribute, if present.
-private func stringArgument(of node: AttributeSyntax, name: String) -> String? {
+func stringArgument(of node: AttributeSyntax, name: String) -> String? {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else { return nil }
     for argument in arguments where argument.label?.text == name {
         if let literal = argument.expression.as(StringLiteralExprSyntax.self) {
@@ -492,17 +492,17 @@ private func typeArgument(of node: AttributeSyntax, name: String) -> String? {
 }
 
 /// Whether a modifier list marks the declaration `static` or `class` (a type member, no instance `self`).
-private func isStaticOrClass(_ modifiers: DeclModifierListSyntax) -> Bool {
+func isStaticOrClass(_ modifiers: DeclModifierListSyntax) -> Bool {
     modifiers.contains { $0.name.tokenKind == .keyword(.static) || $0.name.tokenKind == .keyword(.class) }
 }
 
 /// Indent each line of a generated body by two levels (eight spaces), for readability of the expansion.
-private func indent(_ body: String) -> String {
+func indent(_ body: String) -> String {
     body.split(separator: "\n", omittingEmptySubsequences: false).map { "        \($0)" }.joined(separator: "\n")
 }
 
 /// A macro-expansion failure surfaced to the compiler as a diagnostic (never a plugin crash).
-private struct MacroError: Error, CustomStringConvertible {
+struct MacroError: Error, CustomStringConvertible {
     let description: String
     init(_ description: String) {
         self.description = description
@@ -542,7 +542,7 @@ private func typeName(of declaration: some DeclGroupSyntax) -> String? {
 }
 
 /// Render a Swift double-quoted string literal for a known-safe label.
-private func literalString(_ value: String) -> String {
+func literalString(_ value: String) -> String {
     "\"\(value)\""
 }
 
@@ -555,6 +555,7 @@ struct Plugin: CompilerPlugin {
         TracedMethodMacro.self,
         TimedMarkerMacro.self,
         TracedForwarderMacro.self,
+        TracedDoubleMacro.self,
         SeamedMacro.self,
         SeamedMethodMacro.self
     ]

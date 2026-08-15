@@ -11,6 +11,13 @@ import HaruspecTrace
 // Prototype: proves the ergonomics on a decoupled checkout, with call-ordering variation as the headline
 // (stateful/model-based differential testing — the baseline branch *is* the model).
 
+/// A generated recording double's construction contract (`@TracedDouble` emits the conformance):
+/// built from the capture's context, so its synthesized returns read generated seam values and
+/// `SeamContext.double(_:)` can construct-and-register in one move.
+public protocol SeamDouble: TraceLabeled {
+    init(_ seams: SeamContext)
+}
+
 /// Handed to the system factory and seam reads: the `NotificationCenter` to inject (so observation works
 /// with zero SUT coupling) and typed seam readings backed by the replay cassette.
 public struct SeamContext {
@@ -28,12 +35,23 @@ public struct SeamContext {
         return double
     }
 
+    /// Construct a generated recording double (`@TracedDouble`) and hand it in, in one move — the
+    /// double reads its synthesized returns through this context, and constructing it here is what
+    /// registers it as an injected collaborator.
+    public func double<D: SeamDouble>(_ type: D.Type) -> D {
+        inject(type.init(self))
+    }
+
     public func int(_ seam: String, default value: Int64) -> Int64 {
         cassette.int(seam: seam, live: { value })
     }
 
     public func double(_ seam: String, default value: Double) -> Double {
         cassette.double(seam: seam, live: { value })
+    }
+
+    public func bool(_ seam: String, default value: Bool) -> Bool {
+        cassette.bool(seam: seam, live: { value })
     }
 
     /// The categorical read, paired with `.oneOf(…)`: an input whose interesting values are named

@@ -33,6 +33,28 @@ import HaruspecTrace
 public macro Traced(_ typeLabel: String? = nil, timing: Bool = false) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedMacro")
 
+/// Generate a recording test double from a pasted protocol — the collaborator counterpart of
+/// `@TracedForwarder`, with nothing behind the boundary.
+///
+///     @TracedDouble(label: "Inventory")
+///     protocol InventoryDouble: InventoryReserving {
+///         func reserve(sku: String, quantity: Int)
+///         func stock(sku: String) -> Int
+///     }
+///     // → final class TracedInventoryDouble: records "Inventory.reserve" and no-ops;
+///     //   stock(sku:) returns the seam "Inventory.stock" (default 0)
+///
+/// Construct one through the capture context — `context.double(TracedInventoryDouble.self)` — which
+/// also registers it as an injected collaborator. `Void` requirements record the call and do nothing:
+/// the interaction at the boundary is the behavior a differential checks, and everything past it is
+/// fixture. A value-returning requirement reads the seam `"<label>.<method>"` — the type's zero by
+/// default, swept when a spec declares a domain for that key in `.vary`, recorded and replayed like
+/// any other seam. A return with no sensible zero is refused at expansion time: hand-write that
+/// double instead of shipping a bad default.
+@attached(peer, names: prefixed(Traced))
+public macro TracedDouble(label: String, as generatedName: String? = nil) =
+    #externalMacro(module: "HaruspecMacroPlugin", type: "TracedDoubleMacro")
+
 /// Instrument a single method with entry/exit trace capture. Normally applied automatically by
 /// `@Traced`; usable directly for selective instrumentation. The argument is the stable type label
 /// used to build the event name `"<typeLabel>.<method>"`. Pass `timed: true` to also record the
