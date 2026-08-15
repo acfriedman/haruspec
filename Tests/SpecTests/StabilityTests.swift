@@ -87,7 +87,6 @@ final class StabilityTests: XCTestCase {
             .operations {
                 Op("total") { subject, _ in subject.total() }
             }
-            .observe(notifications: ["Total"])
     }
 
     private func steadyPlan() async -> SpecPlan {

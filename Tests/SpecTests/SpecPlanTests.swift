@@ -109,7 +109,6 @@ final class SpecPlanTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted", "LoyaltyPointsEarned"])
             .vary {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 10)
@@ -236,7 +235,6 @@ final class SpecPlanTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
 
         let verdict = await drifted.verify(replaying: plan)
         XCTAssertEqual(

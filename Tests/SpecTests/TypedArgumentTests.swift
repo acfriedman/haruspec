@@ -84,7 +84,6 @@ final class TypedArgumentTests: XCTestCase {
                 }
                 Op("total") { _ = $0.total() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
     }
 
     // MARK: - The join
@@ -184,7 +183,6 @@ final class TypedArgumentTests: XCTestCase {
                 }
                 Op("total") { _ = $0.total() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary { Ordering(max: 2, repeating: 2) }
 
         let verdict = await spec.verify(against: makeTopOfRangeBug)

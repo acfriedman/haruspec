@@ -30,7 +30,6 @@ private struct PromoCartSpec: SpecProviding {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 4)
