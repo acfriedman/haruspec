@@ -18,7 +18,7 @@ public enum CheckoutSpec {
     ) -> Trace {
         let clock = ManualClock()
         let recorder = TraceRecorder(name: name, clock: clock)
-        let center = RecordingNotificationCenter(names: checkoutNotificationNames)
+        let center = RecordingNotificationCenter()
 
         let service = makeService(center)
 

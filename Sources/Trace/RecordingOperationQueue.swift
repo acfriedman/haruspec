@@ -18,6 +18,6 @@ public final class RecordingOperationQueue: OperationQueue, @unchecked Sendable 
     override public func addOperation(_ block: @escaping @Sendable () -> Void) {
         // `name` is the nominal identity; the underlying label carries an object address. The
         // discipline is read here too — the queue object is the one party that knows its own width.
-        super.addOperation(DispatchSeam.seamWrap(block, named: name, serial: maxConcurrentOperationCount == 1))
+        super.addOperation(DispatchSeam.seamWrap(block, serial: maxConcurrentOperationCount == 1))
     }
 }

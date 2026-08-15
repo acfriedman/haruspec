@@ -19,7 +19,7 @@ final class PropertyBasedTests: XCTestCase {
         total: (_ subtotal: Int64, _ discount: Int64) -> Int64
     ) -> Trace {
         let recorder = TraceRecorder(name: "checkout", clock: ManualClock())
-        let center = RecordingNotificationCenter(names: ["CheckoutCompleted"])
+        let center = RecordingNotificationCenter()
 
         TraceContext.$current.withValue(recorder) {
             let discount = cassette.int(seam: "discount", live: { 100 }) // seam → output

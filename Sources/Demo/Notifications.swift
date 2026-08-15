@@ -8,11 +8,3 @@ public extension Notification.Name {
     static let checkoutDidComplete = Notification.Name("CheckoutDidComplete")
     static let loyaltyPointsEarned = Notification.Name("LoyaltyPointsEarned")
 }
-
-/// The set the interceptor allowlists so only product notifications enter the trace.
-public let checkoutNotificationNames: Set<String> = [
-    "CartDidChange",
-    "AnalyticsDidTrack",
-    "CheckoutDidComplete",
-    "LoyaltyPointsEarned"
-]

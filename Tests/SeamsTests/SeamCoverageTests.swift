@@ -56,7 +56,7 @@ final class SeamCoverageTests: XCTestCase {
     /// the unrecorded boundary and abstain.
     private func runSession(cassette: Cassette, extraSeam: Bool) -> Trace {
         let recorder = TraceRecorder(name: "session", clock: ManualClock())
-        let center = RecordingNotificationCenter(names: ["CheckoutCompleted"])
+        let center = RecordingNotificationCenter()
 
         TraceContext.$current.withValue(recorder) {
             let base = cassette.int(seam: "clock", live: { 1000 }) // recorded seam

@@ -124,13 +124,12 @@ public extension DispatchSeam {
 
     static func seamWrap(
         _ work: @escaping @Sendable () -> Void,
-        named: String? = nil,
         serial: Bool? = nil
     ) -> @Sendable () -> Void {
         guard let recorder = acquireForSwift() else { return work }
         let cause = recorder.enclosingCallSeq()
         return {
-            markingQueueEntry(named: named, serial: serial) {
+            markingQueueEntry(serial: serial) {
                 TraceContext.withThreadRecorder(recorder, spawnedBy: cause) { work() }
             }
             finishForSwift()

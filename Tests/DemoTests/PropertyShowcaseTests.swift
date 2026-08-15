@@ -21,7 +21,7 @@ final class PropertyShowcaseTests: XCTestCase {
         _ make: (NotificationCenter) -> CartService
     ) -> Trace {
         let recorder = TraceRecorder(name: name, clock: ManualClock())
-        let center = RecordingNotificationCenter(names: checkoutNotificationNames)
+        let center = RecordingNotificationCenter()
         let service = make(center)
         TraceContext.$current.withValue(recorder) {
             let qty = Int(cassette.int(seam: "coffeeQty", live: { 10 })) // input from a seam boundary

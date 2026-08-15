@@ -138,7 +138,7 @@ final class UmbrellaImportTests: XCTestCase {
     /// `Haruspec.interval` / `Haruspec.marker`, all named through the umbrella.
     func testCaptureSurfaceIsReExported() {
         let recorder = TraceRecorder(name: "umbrella", clock: ManualClock()) // ← TraceRecorder + ManualClock
-        let center = RecordingNotificationCenter(names: ["CartChanged", "CheckoutCompleted"])
+        let center = RecordingNotificationCenter()
 
         let cart = GoodCart(center: center)
         TraceContext.$current.withValue(recorder) { // ← TraceContext (HaruspecTrace)

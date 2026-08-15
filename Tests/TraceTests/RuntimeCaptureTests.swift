@@ -62,19 +62,21 @@ private final class Receipt: NSObject {
 }
 
 final class RecordingNotificationCenterTests: XCTestCase {
-    func testCapturesAllowlistedPostsAndFiltersOthers() {
+    /// Everything posted through the injected center is recorded — there is no allowlist to hide a
+    /// channel the subject starts posting. Noise exclusion is the spec's `.ignore(notifications:)`,
+    /// subtractive and at diff time, so the raw trace stays complete.
+    func testCapturesEveryPostThroughTheInjectedCenter() {
         let recorder = TraceRecorder(name: "t")
-        let center = RecordingNotificationCenter(names: ["Ping"])
+        let center = RecordingNotificationCenter()
 
         TraceContext.$current.withValue(recorder) {
             center.post(name: Notification.Name("Ping"), object: nil, userInfo: ["n": 1])
-            center.post(name: Notification.Name("Unlisted"), object: nil) // filtered
+            center.post(name: Notification.Name("Unlisted"), object: nil)
         }
 
         let events = recorder.trace().events
-        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.map(\.label), ["Ping", "Unlisted"])
         XCTAssertEqual(events[0].kind, .notification)
-        XCTAssertEqual(events[0].label, "Ping")
         XCTAssertEqual(events[0].payload, ["n": 1])
     }
 
@@ -82,7 +84,7 @@ final class RecordingNotificationCenterTests: XCTestCase {
     /// center records only while a recorder is bound.
     func testPostsOutsideACaptureWindowAreNotRecorded() {
         let recorder = TraceRecorder(name: "t")
-        let center = RecordingNotificationCenter(names: ["Ping"])
+        let center = RecordingNotificationCenter()
 
         center.post(name: Notification.Name("Ping"), object: nil)
 
@@ -91,7 +93,7 @@ final class RecordingNotificationCenterTests: XCTestCase {
 
     func testPostsAreCapturedInOrderSynchronously() {
         let recorder = TraceRecorder(name: "t")
-        let center = RecordingNotificationCenter(names: ["A", "B"])
+        let center = RecordingNotificationCenter()
 
         TraceContext.$current.withValue(recorder) {
             center.post(name: Notification.Name("A"), object: nil)
@@ -120,8 +122,8 @@ final class RecordingNotificationCenterTests: XCTestCase {
     func testSeparateCentersDoNotCrossPollinate() {
         let recorderA = TraceRecorder(name: "a")
         let recorderB = TraceRecorder(name: "b")
-        let centerA = RecordingNotificationCenter(names: ["Ping"])
-        let centerB = RecordingNotificationCenter(names: ["Ping"])
+        let centerA = RecordingNotificationCenter()
+        let centerB = RecordingNotificationCenter()
 
         TraceContext.$current.withValue(recorderA) {
             centerA.post(name: Notification.Name("Ping"), object: nil, userInfo: ["src": 1])

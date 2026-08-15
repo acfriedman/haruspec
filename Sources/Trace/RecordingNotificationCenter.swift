@@ -17,16 +17,11 @@ import HaruspecCore
 ///
 /// Substitutable wherever a `NotificationCenter` is expected, so legacy Objective-C that posts through
 /// an injected center needs no change — the posting call is the app's own, unmodified.
+///
+/// Records **everything** posted through it, deliberately: a filter here would be an allowlist, whose
+/// only power is hiding a channel the subject starts posting. The noise knob is the spec's
+/// `.ignore(notifications:)` — subtractive, applied at diff time, raw trace complete.
 public final class RecordingNotificationCenter: NotificationCenter, @unchecked Sendable {
-    /// Names to record, or `nil` for everything posted here. An allowlist keeps a noisy channel out of
-    /// the trace without the app knowing anything about it.
-    private let names: Set<String>?
-
-    public init(names: Set<String>? = nil) {
-        self.names = names
-        super.init()
-    }
-
     /// Every posting spelling funnels here — `postNotificationName:object:userInfo:` and its shorter
     /// forms all end at `post(_:)` in Foundation, and overriding the funnel rather than each spelling
     /// is what keeps a post from being recorded twice or missed.
@@ -46,7 +41,6 @@ public final class RecordingNotificationCenter: NotificationCenter, @unchecked S
     }
 
     private func record(_ notification: Notification) {
-        guard names?.contains(notification.name.rawValue) ?? true else { return }
         guard let recorder = TraceContext.active else { return }
         recorder.notification(
             notification.name.rawValue,

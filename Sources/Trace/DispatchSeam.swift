@@ -68,7 +68,6 @@ public enum DispatchSeam {
     }
 
     private static let enteredKey = "com.haruspec.trace.enteredQueue"
-    private static let enteredNameKey = "com.haruspec.trace.enteredQueueName"
     private static let enteredSerialKey = "com.haruspec.trace.enteredQueueSerial"
 
     /// Ordering discipline by queue label, filled in at queue *creation* — the one moment the
@@ -98,11 +97,6 @@ public enum DispatchSeam {
         (Thread.current.threadDictionary[enteredKey] as? Int ?? 0) > 0
     }
 
-    /// The name the entered queue should be known by, when it has one worth more than its label.
-    static var enteredQueueName: String? {
-        Thread.current.threadDictionary[enteredNameKey] as? String
-    }
-
     /// The ordering discipline of the entered queue, when whoever enqueued the work knew it —
     /// an injected `RecordingOperationQueue` reads its own `maxConcurrentOperationCount`. `nil`
     /// outside a marked entry, or when the enqueue site had no better answer than the registry.
@@ -113,23 +107,20 @@ public enum DispatchSeam {
     /// Mark the thread as executing dispatched work for the duration of `body`. Nested, because a
     /// dispatched block may dispatch again before the outer one returns.
     ///
-    /// `named` overrides the label for queues whose label is not nominal. An `OperationQueue`'s
-    /// underlying label embeds its object address — `NSOperationQueue 0x106f4fa00` — which is the
-    /// run-to-run instability domains exist to remove, so its `name` is used instead. `serial`
-    /// carries the queue's ordering discipline when the enqueue site knows it.
-    static func markingQueueEntry<T>(named: String? = nil, serial: Bool? = nil, _ body: () -> T) -> T {
+    /// `serial` carries the queue's ordering discipline when the enqueue site knows it — an injected
+    /// `RecordingOperationQueue` reads its own `maxConcurrentOperationCount`. (The queue's *identity*
+    /// needs no such channel: an `OperationQueue`'s `name` renames its underlying dispatch label, so
+    /// the label rung already answers, minus the " (QOS: …)" decoration the resolver strips.)
+    static func markingQueueEntry<T>(serial: Bool? = nil, _ body: () -> T) -> T {
         let dictionary = Thread.current.threadDictionary
         let depth = dictionary[enteredKey] as? Int ?? 0
-        let previousName = dictionary[enteredNameKey]
         let previousSerial = dictionary[enteredSerialKey]
         dictionary[enteredKey] = depth + 1
-        // Overwritten unconditionally (nil clears): these describe the queue just entered, and a
-        // nested entry into a queue that stated nothing must not inherit the outer queue's answers.
-        dictionary[enteredNameKey] = named
+        // Overwritten unconditionally (nil clears): this describes the queue just entered, and a
+        // nested entry into a queue that stated nothing must not inherit the outer queue's answer.
         dictionary[enteredSerialKey] = serial
         defer {
             dictionary[enteredKey] = depth
-            dictionary[enteredNameKey] = previousName
             dictionary[enteredSerialKey] = previousSerial
         }
         return body()
