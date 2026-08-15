@@ -26,6 +26,14 @@ struct Fee: Equatable {
     let cents: Int
 }
 
+/// The reusable form: the model carries its own mutation spec. Any spec adopts it with
+/// `.generates(Fee.self)` and the field domains travel along — no `.vary` required.
+extension Fee: SeamGenerated {
+    static func generated(from fields: FieldSeams) -> Fee {
+        Fee(cents: Int(fields.int("cents", in: 1 ... 9)))
+    }
+}
+
 protocol Gauge: AnyObject {
     func add(value: Int)
 }
@@ -159,6 +167,52 @@ final class TracedDoubleTests: XCTestCase {
             0,
             "a custom return's field is declared surface — swept and reported like an op argument"
         )
+    }
+
+    /// The reusable generator: `.generates(Fee.self)` adopts the model's own `SeamGenerated`
+    /// definition, and its field domains travel with it — swept and reported with no `.vary` at all.
+    func testAModelsOwnGeneratorTravelsWithItsDomains() async {
+        let spec = Spec<Gauge>("double.gauge.conformance")
+            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self)) }
+            .operations {
+                Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
+                    gauge.add(value: Int(value))
+                }
+            }
+            .generates(Fee.self)
+
+        let verdict = await spec.verify(against: { ctx in
+            MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+        })
+
+        XCTAssertEqual(verdict.verdict, .equivalent)
+        XCTAssertGreaterThan(
+            verdict.qualification.seamPositions["Fee.cents"] ?? 0,
+            0,
+            "adopting the model's generator declares its mutation surface — nothing restated in .vary"
+        )
+    }
+
+    /// The model states how a field *can* mutate; a spec may narrow how it *does* — an explicit
+    /// `Seam` on the type-scoped key wins over the generator's domain in either declaration order.
+    func testASpecNarrowsAModelFieldWithAnExplicitSeam() async {
+        let verdict = await Spec<Gauge>("double.gauge.narrowed")
+            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self)) }
+            .operations {
+                Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
+                    gauge.add(value: Int(value))
+                }
+            }
+            .vary {
+                Seam("Fee.cents", .int(7 ... 7))
+            }
+            .generates(Fee.self)
+            .verify(against: { ctx in
+                MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+            })
+
+        XCTAssertEqual(verdict.verdict, .equivalent)
+        XCTAssertGreaterThan(verdict.qualification.seamPositions["Fee.cents"] ?? 0, 0)
     }
 
     func testDroppingTheBoundaryCallDiverges() async {

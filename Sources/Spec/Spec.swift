@@ -18,6 +18,90 @@ public protocol SeamDouble: TraceLabeled {
     init(_ seams: SeamContext)
 }
 
+/// How instances of a model *mutate* — the reusable, standalone form of a custom-type generator.
+/// Declared once, next to the model; any spec adopts it with one line, `.generates(Membership.self)`:
+///
+///     extension Membership: SeamGenerated {
+///         static func generated(from fields: FieldSeams) -> Membership {
+///             let membership = Membership()
+///             membership.tier = fields.string("tier", oneOf: "bronze", "silver", "gold", "Gold")
+///             membership.points = Int(fields.int("points", in: 0 ... 1000))
+///             return membership
+///         }
+///     }
+///
+/// Each field read *carries its domain*, the same way a typed op argument does — so adopting the
+/// generator declares the model's whole mutation surface: the fields join `seamPositions`, sweep
+/// under the variant budget, and replay identically. Keys are type-scoped (`"Membership.tier"`), so
+/// every boundary returning the type shares one declared surface; a spec narrows a field with an
+/// explicit `Seam("Membership.tier", …)` in `.vary`, which always wins.
+///
+/// The factory must be **pure over its field reads**: it runs once at declaration time to discover
+/// the domains (no capture bound), and per call during captures. A `Date()` or a random inside it
+/// breaks replay the same way any unseamed read does.
+public protocol SeamGenerated {
+    static func generated(from fields: FieldSeams) -> Self
+}
+
+/// The reads a `SeamGenerated` factory builds from. One value, two lives: during a capture it reads
+/// through the cassette (recorded, varied, replayed); at declaration time it *discovers* — each read
+/// registers its domain and answers the domain's canonical default (a range's lower bound, a
+/// choice list's first entry, `false`).
+public struct FieldSeams {
+    enum Mode {
+        case live(SeamContext)
+        case discovery(DomainCollector)
+    }
+
+    let mode: Mode
+    /// The type's name — every field key is `"<Type>.<field>"`, shared by all boundaries returning it.
+    let prefix: String
+
+    public func int(_ field: String, in range: ClosedRange<Int64>) -> Int64 {
+        let key = "\(prefix).\(field)"
+        switch mode {
+        case let .live(context): return context.int(key, default: range.lowerBound)
+        case let .discovery(collector): collector.register(key, .int(range)); return range.lowerBound
+        }
+    }
+
+    public func double(_ field: String, in range: ClosedRange<Double>) -> Double {
+        let key = "\(prefix).\(field)"
+        switch mode {
+        case let .live(context): return context.double(key, default: range.lowerBound)
+        case let .discovery(collector): collector.register(key, .double(range)); return range.lowerBound
+        }
+    }
+
+    public func string(_ field: String, oneOf choices: String...) -> String {
+        precondition(!choices.isEmpty, "\"\(field)\" declares no choices — a domain must contain a value")
+        let key = "\(prefix).\(field)"
+        switch mode {
+        case let .live(context): return context.string(key, default: choices[0])
+        case let .discovery(collector): collector.register(key, .oneOf(choices)); return choices[0]
+        }
+    }
+
+    public func bool(_ field: String) -> Bool {
+        let key = "\(prefix).\(field)"
+        switch mode {
+        case let .live(context): return context.bool(key, default: false)
+        case let .discovery(collector):
+            collector.register(key, .anyOf([.bool(false), .bool(true)]))
+            return false
+        }
+    }
+}
+
+/// Where a declaration-time dry run deposits the domains its field reads declared.
+final class DomainCollector {
+    private(set) var domains: [String: SeamDomain] = [:]
+
+    func register(_ key: String, _ domain: SeamDomain) {
+        domains[key] = domain
+    }
+}
+
 /// Handed to the system factory and seam reads: the `NotificationCenter` to inject (so observation works
 /// with zero SUT coupling) and typed seam readings backed by the replay cassette.
 public struct SeamContext {
@@ -66,13 +150,15 @@ public struct SeamContext {
             preconditionFailure(
                 """
                 no generator declared for \(T.self) (needed by the synthesized return "\(key)") — \
-                declare one on the spec:
+                conform the model once and adopt it here:
 
-                    .generates(\(T.self).self) { seams, key in
-                        \(T.self)(…: seams.int("\\(key).…", default: 0), …)
+                    extension \(T.self): SeamGenerated {
+                        static func generated(from fields: FieldSeams) -> \(T.self) { … }
                     }
+                    // spec: .generates(\(T.self).self)
 
-                (read every field through `seams`, so the value replays) — or hand-write this double
+                or declare a one-off factory: .generates(\(T.self).self) { seams, key in … } — \
+                read every field through the seams, so the value replays. Or hand-write this double.
                 """
             )
         }
@@ -359,6 +445,28 @@ public struct Spec<S> {
     public func generates<T>(_ type: T.Type, _ make: @escaping (SeamContext, String) -> T) -> Spec<S> {
         var copy = self
         copy.valueMakers[ObjectIdentifier(type)] = { make($0, $1) }
+        return copy
+    }
+
+    /// Adopt a model's own generator (`SeamGenerated`) — the reusable form, one line per spec. The
+    /// type's field domains are discovered here, at declaration time, by a dry run of the factory,
+    /// so they join the declared surface exactly like `.vary` seams: swept by the variant budget,
+    /// scheduled for boundary edges, reported in `seamPositions` — and known to a replay, whose
+    /// schedule recomputes from this same spec value.
+    ///
+    /// A field key already declared explicitly (a `Seam("Membership.tier", …)` in `.vary`, before or
+    /// after this call) keeps its explicit domain: the model states how it *can* mutate, the spec may
+    /// narrow how it *does* here.
+    public func generates<T: SeamGenerated>(_ type: T.Type) -> Spec<S> {
+        var copy = self
+        copy.valueMakers[ObjectIdentifier(type)] = { context, _ in
+            T.generated(from: FieldSeams(mode: .live(context), prefix: "\(T.self)"))
+        }
+        let discovery = DomainCollector()
+        _ = T.generated(from: FieldSeams(mode: .discovery(discovery), prefix: "\(T.self)"))
+        for (key, domain) in discovery.domains where copy.seamDomains[key] == nil && !copy.argumentSeams.contains(key) {
+            copy.seamDomains[key] = domain
+        }
         return copy
     }
 
