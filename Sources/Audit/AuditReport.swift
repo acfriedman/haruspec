@@ -85,9 +85,11 @@ public struct AuditReport: Sendable, Equatable {
         }
         return lines.joined(separator: "\n")
     }
+}
 
-    private func orderedUnique(_ values: [String]) -> [String] {
-        var seen = Set<String>()
-        return values.filter { seen.insert($0).inserted }
-    }
+/// First occurrence wins, order preserved — findings read in file order, and a channel names itself
+/// once however many lines reach it.
+func orderedUnique(_ values: [String]) -> [String] {
+    var seen = Set<String>()
+    return values.filter { seen.insert($0).inserted }
 }

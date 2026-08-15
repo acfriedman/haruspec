@@ -215,7 +215,7 @@ public extension Spec {
         replays: Int = Stability.defaultReplays
     ) async -> SpecVerdict {
         precondition(replays >= 1, "verify(replaying:) needs at least one replay pass, got \(replays)")
-        return await collectingOrigins {
+        return await collectingOrigins(declaring: intent) {
             var passes: [SpecVerdict] = []
             for _ in 0 ..< replays {
                 await passes.append(verifyOnce(replaying: plan, declaring: intent))

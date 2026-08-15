@@ -65,6 +65,19 @@ public struct Qualification: Codable, Sendable, Equatable {
             origins: origins
         )
     }
+
+    /// The same qualification with what the capture-completeness audit found. Only an audit that ran
+    /// calls this — the nil placeholder is how a verdict says nobody looked.
+    func noting(blindSpots: [String]) -> Qualification {
+        Qualification(
+            coveredClasses: coveredClasses,
+            operations: operations,
+            probes: probes,
+            seamPositions: seamPositions,
+            blindSpots: blindSpots,
+            origins: origins
+        )
+    }
 }
 
 // MARK: - The rendered lines (one vocabulary for report(), markdown, and HTML)

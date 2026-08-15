@@ -63,6 +63,17 @@ public struct Intent: Sendable, Equatable {
     /// than one declaration per migrated event. Declaring one pair does NOT excuse another.
     public var expectedDomainMigrations: [DomainMove]
 
+    /// Effect channels the author accepts the capture cannot see (`"Timer / RunLoop"`), by the name
+    /// the capture-completeness audit gives them. The only exit from a `bypassedChannel` gap, and a
+    /// deliberately weak one: it does not hide the channel, it *names* it on the verdict as a
+    /// declared blind spot. The DSL spelling is `Accepts(uncaptured:)`.
+    ///
+    /// Unlike the divergence declarations above, this excuses something the diff never saw — so the
+    /// audit also reports a declaration that matched nothing. An accepted blind spot that no longer
+    /// exists is the allowlist failure again: an entry matching nothing looks exactly like one that
+    /// matches.
+    public var acceptedBlindSpots: [String]
+
     public init(
         expectedNewEvents: [String] = [],
         expectedRemovedEvents: [String] = [],
@@ -70,7 +81,8 @@ public struct Intent: Sendable, Equatable {
         expectedOrderingRelaxations: [DomainName] = [],
         expectedOrderingLosses: [String] = [],
         expectedOrderingAdditions: [String] = [],
-        expectedDomainMigrations: [DomainMove] = []
+        expectedDomainMigrations: [DomainMove] = [],
+        acceptedBlindSpots: [String] = []
     ) {
         self.expectedNewEvents = expectedNewEvents
         self.expectedRemovedEvents = expectedRemovedEvents
@@ -79,6 +91,7 @@ public struct Intent: Sendable, Equatable {
         self.expectedOrderingLosses = expectedOrderingLosses
         self.expectedOrderingAdditions = expectedOrderingAdditions
         self.expectedDomainMigrations = expectedDomainMigrations
+        self.acceptedBlindSpots = acceptedBlindSpots
     }
 
     /// The empty spec: nothing was declared, so every divergence stays collateral. This is parity mode.
@@ -144,7 +157,7 @@ extension Intent: Codable {
     enum CodingKeys: String, CodingKey {
         case expectedNewEvents, expectedRemovedEvents, expectedValueChanges
         case expectedOrderingRelaxations, expectedOrderingLosses, expectedOrderingAdditions
-        case expectedDomainMigrations
+        case expectedDomainMigrations, acceptedBlindSpots
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -162,6 +175,8 @@ extension Intent: Codable {
             .decodeIfPresent([String].self, forKey: .expectedOrderingAdditions) ?? []
         expectedDomainMigrations = try container
             .decodeIfPresent([DomainMove].self, forKey: .expectedDomainMigrations) ?? []
+        acceptedBlindSpots = try container
+            .decodeIfPresent([String].self, forKey: .acceptedBlindSpots) ?? []
     }
 }
 
