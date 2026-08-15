@@ -67,6 +67,10 @@ public struct FieldSeams {
     }
 
     public func string(_ field: String, oneOf choices: String...) -> String {
+        string(field, oneOf: choices)
+    }
+
+    public func string(_ field: String, oneOf choices: [String]) -> String {
         precondition(!choices.isEmpty, "\"\(field)\" declares no choices — a domain must contain a value")
         let key = "\(prefix).\(field)"
         switch mode {
