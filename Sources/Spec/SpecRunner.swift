@@ -192,7 +192,7 @@ public extension Spec {
         let recorder = TraceRecorder(name: name, clock: ManualClock())
         // The SUT posts through a center that records, so a notification takes the same path and the
         // same recorder lookup as every other kind of event. There is no second mechanism.
-        let center = RecordingNotificationCenter(names: notificationNames)
+        let center = RecordingNotificationCenter()
         let context = SeamContext(notifications: center, cassette: cassette)
         let system = make(context)
         // Task-locals are inherited across `await`, so binding once around the whole loop still

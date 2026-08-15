@@ -110,7 +110,6 @@ final class OpMultiplicityTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }.repeating(0 ... 2)
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary { Ordering(max: 100) }
 
         let available = spec.availableOrderings()

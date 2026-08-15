@@ -19,7 +19,6 @@ final class UnmatchedDomainTests: XCTestCase {
                 }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary { Seam(key, .int(1 ... 20)) }
     }
 
@@ -88,7 +87,6 @@ final class UnmatchedDomainTests: XCTestCase {
                 }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
 
         let verdict = await typed.verify(against: makeRefactor)
 

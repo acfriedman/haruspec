@@ -29,7 +29,6 @@ final class OrderingPreconditionTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary { Ordering(max: orderingMax) }
     }
 
@@ -156,7 +155,6 @@ final class OrderingPreconditionTests: XCTestCase {
                 Op("audit") { _ in }.after("promo")
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary { Ordering(max: 40) }
 
         let verdict = await spec.verify(against: makeRefactor)

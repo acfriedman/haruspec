@@ -33,7 +33,6 @@ final class QualificationTests: XCTestCase {
                 Op(promoLabel) { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted", "LoyaltyPointsEarned"])
             .vary {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 10)
@@ -125,7 +124,6 @@ final class QualificationTests: XCTestCase {
                 }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary {
                 Seam("coffeeQty", .int(1 ... 20))
                 Seam("mugQty", .int(0 ... 9))

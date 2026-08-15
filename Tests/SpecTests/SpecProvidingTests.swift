@@ -30,7 +30,6 @@ private struct PromoCartSpec: SpecProviding {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .candidates {
                 Candidate("RefactorCart", makeRefactor)
                 Candidate("RoundBugCart", expecting: .diverged, makeRoundBug)

@@ -61,7 +61,6 @@ final class ExplorationTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: orderingMax)
@@ -128,7 +127,6 @@ final class ExplorationTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 100, repeating: 1)
@@ -155,7 +153,6 @@ final class ExplorationTests: XCTestCase {
                 }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary {
                 Seam("coffeeQty", .int(1 ... 20))
                 Budget(runs: 4)
@@ -329,7 +326,6 @@ final class ExplorationTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .vary { Ordering(max: 100, repeating: 1) }
 
         let verdict = await spec.verify(against: makeRefactor)

@@ -43,7 +43,6 @@ final class CandidatesTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .candidates {
                 // Both spellings an adopting app will reach for: a factory reference, and the
                 // trailing-closure form that wires collaborators inline.

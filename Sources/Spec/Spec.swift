@@ -187,10 +187,6 @@ public struct Spec<S> {
     public let name: String
     var makeSystem: (SeamContext) -> S = { _ in fatalError("Spec.system(_:) was not set") }
     var operations: [Op<S>] = []
-    /// Which notification names to capture. `nil` (the default) captures *everything* — a behavioral
-    /// oracle watches all behavior by default. A non-nil set is an explicit allowlist override set via
-    /// `.observe(notifications:)`, for callers who want to narrow to a few product channels.
-    var notificationNames: Set<String>?
     var tolerances: Tolerance = .strict
     var seamDomains: [String: SeamDomain] = [:]
     /// Which of `seamDomains` came from a typed op argument — so a `Seam(_:_:)` that collides with one
@@ -240,18 +236,12 @@ public struct Spec<S> {
         return copy
     }
 
-    /// Narrow observation to an explicit allowlist of notification names. **Optional** — specs
-    /// capture *all* notifications by default (a behavioral oracle watches everything), so this is an
-    /// opt-in narrowing for callers who genuinely want to ignore every channel except the ones listed.
-    /// To silence a specific noisy channel while keeping the rest, prefer `.ignore(notifications:)`.
-    public func observe(notifications: [String]) -> Spec<S> {
-        var copy = self; copy.notificationNames = Set(notifications); return copy
-    }
-
     /// Opt a noisy notification channel *out* of the diff while still capturing everything else. The
     /// raw trace stays faithful (reports show every post); the named channels are dropped from both
     /// sides at diff time, so a channel whose count varies run-to-run stops causing spurious
-    /// divergences. Symmetric with `.observe(notifications:)`; writes into the tolerance spec.
+    /// divergences. The only notification knob a spec has, and it is subtractive by design: an
+    /// allowlist would hide a channel the subject *starts* posting, which is the failure a behavioral
+    /// oracle exists to catch. Writes into the tolerance spec, so the raw trace stays complete.
     public func ignore(notifications names: [String]) -> Spec<S> {
         var copy = self
         copy.tolerances.ignoredNotificationNames += names

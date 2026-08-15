@@ -218,7 +218,6 @@ final class SpecPrototypeTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
     }
 
     func testSpecPrototype() async {

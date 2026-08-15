@@ -88,7 +88,6 @@ final class SpecHTMLReportTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
     }
 
     private func assertSelfContained(_ html: String, file: StaticString = #filePath, line: UInt = #line) {

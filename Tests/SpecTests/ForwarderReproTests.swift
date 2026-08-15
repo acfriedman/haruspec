@@ -150,7 +150,6 @@ final class ForwarderReproTests: XCTestCase {
                 Op("removeMug") { sut in sut.removeSku("MUG") }.after("addMug")
                 Op("checkout") { sut in _ = sut.checkout() }.last()
             }
-            .observe(notifications: ["CartDidChange", "CheckoutDidComplete"])
             .tolerate(
                 Tolerance(
                     volatileFields: [.key("orderID")],

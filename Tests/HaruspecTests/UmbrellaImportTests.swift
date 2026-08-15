@@ -100,7 +100,6 @@ final class UmbrellaImportTests: XCTestCase {
                 Op("add") { cart, seams in cart.add(cents: 999, qty: Int(seams.int("qty", default: 2))) }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .observe(notifications: ["CartChanged", "CheckoutCompleted"])
             .tolerate(.strict) // ← Tolerance (HaruspecCore)
             .vary { Ordering(max: 10); Seam("qty", .int(1 ... 5)) } // ← Ordering / Seam / SeamDomain
 
@@ -116,7 +115,6 @@ final class UmbrellaImportTests: XCTestCase {
         let verdict = await Spec<Cart>("umbrella-html")
             .system(makeGood)
             .operations { Op("checkout") { _ = $0.checkout() } }
-            .observe(notifications: ["CheckoutCompleted"])
             .verify(against: makeRefactor)
 
         let scenarioHTML: String = verdict.htmlReport() // ← SpecVerdict.htmlReport (HaruspecSpec)
