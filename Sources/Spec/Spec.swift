@@ -57,43 +57,6 @@ public struct SeamContext {
         cassette.bool(seam: seam, live: { value })
     }
 
-    /// A synthesized custom-type return — the declared factory for `type`, applied to this context.
-    /// There is no universal zero for a custom type, so an undeclared one **traps, fail-fast**, naming
-    /// the declaration to write. The factory reads its fields through seams, which is what makes the
-    /// value recorded, domain-sweepable, and identical on replay.
-    public func value<T>(_ type: T.Type, key: String) -> T {
-        guard let made = valueIfDeclared(type, key: key) else {
-            preconditionFailure(
-                """
-                no generator declared for \(T.self) (needed by the synthesized return "\(key)") — \
-                conform the model once and adopt it here:
-
-                    extension \(T.self): SeamGenerated {
-                        static func generated(from fields: FieldSeams) -> \(T.self) { … }
-                    }
-                    // spec: .generates(\(T.self).self)
-
-                or declare a one-off factory: .generates(\(T.self).self) { seams, key in … } — \
-                read every field through the seams, so the value replays. Or hand-write this double.
-                """
-            )
-        }
-        return made
-    }
-
-    /// The optional-return path: a declared factory if there is one, else `nil` — which IS the
-    /// sensible zero for an optional, so `-> Receipt?` needs no declaration until a spec wants the
-    /// non-nil branch explored.
-    public func valueIfDeclared<T>(_ type: T.Type, key: String) -> T? {
-        guard let make = makers[ObjectIdentifier(type)] else { return nil }
-        guard let made = make(self, key) as? T else {
-            // Unreachable through `generates(_:_:)`, whose signature ties the key to the closure's
-            // return type — this guards only a hand-assembled context.
-            preconditionFailure("the generator registered for \(T.self) produced a different type")
-        }
-        return made
-    }
-
     /// The categorical read, paired with `.oneOf(…)`: an input whose interesting values are named
     /// rather than ranged reads as itself, instead of an int the op has to decode.
     public func string(_ seam: String, default value: String) -> String {
