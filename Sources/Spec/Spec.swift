@@ -87,6 +87,11 @@ public struct Op<S> {
     /// `Spec.operations(_:)` merges them into the declared surface, so a typed argument is
     /// property-varied without anyone naming it in `.vary` — which is the join that used to be a string.
     var argumentDomains: [(seam: String, domain: SeamDomain)] = []
+    /// Field domains a `.generated(_:)` argument contributes, under the model's type-scoped keys.
+    /// Merged fill-if-vacant: the fields are shared surface, and an explicit `Seam` narrows them.
+    var generatedArgumentFields: [(seam: String, domain: SeamDomain)] = []
+    /// Factories a `.generated(_:)` argument carries, registered so the read can build the model.
+    var argumentMakers: [(type: ObjectIdentifier, make: (SeamContext, String) -> Any)] = []
 
     /// A simple op.
     public init(_ label: String, _ action: @escaping (S) async -> Void) {
@@ -269,6 +274,15 @@ public struct Spec<S> {
                 )
                 copy.seamDomains[argument.seam] = argument.domain
                 copy.argumentSeams.insert(argument.seam)
+            }
+            // Generated-model fields are shared, type-scoped surface: two ops taking a Product read
+            // the same tracks on purpose, and an explicit `Seam` on a field key narrows it — so these
+            // fill vacancies rather than trapping, exactly like a `.generates` adoption.
+            for field in operation.generatedArgumentFields where copy.seamDomains[field.seam] == nil {
+                copy.seamDomains[field.seam] = field.domain
+            }
+            for maker in operation.argumentMakers {
+                copy.valueMakers[maker.type] = maker.make
             }
         }
         return copy

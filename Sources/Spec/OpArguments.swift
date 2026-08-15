@@ -16,16 +16,33 @@ import HaruspecSeams
 // value on its own. `ArgumentDomain<T>` carries the erased domain *plus* how to read one back as `T`,
 // which is what lets the body take `quantity: Int` instead of unwrapping a `CanonicalValue`.
 
-/// One typed op argument: the domain it varies over, and how to read a generated value back as `T`.
+/// One typed op argument: what it varies over, and how to read a generated value back as `T`.
+///
+/// Two shapes. A *scalar* argument owns one domain under a synthesized op-scoped key (`add.sku`). A
+/// *generated* argument (`.generated(Product.self)`) is a whole model built by its `SeamGenerated`
+/// factory: it contributes the type-scoped field domains the factory declared (`Product.sku`), and
+/// registers the factory so the read can build the value.
 public struct ArgumentDomain<T> {
-    let domain: SeamDomain
+    enum Kind {
+        /// One erased domain, keyed `<op>.<name-or-position>`.
+        case scalar(SeamDomain)
+        /// A `SeamGenerated` model: its discovered field domains (type-scoped keys) and its factory.
+        case generated(fields: [String: SeamDomain], maker: (SeamContext, String) -> Any)
+    }
+
+    let kind: Kind
     /// The author's name for this argument, if given. Defaults to the argument's position.
     var name: String?
     private let decode: (SeamContext, String) -> T
 
     init(domain: SeamDomain, name: String? = nil, decode: @escaping (SeamContext, String) -> T) {
-        self.domain = domain
+        kind = .scalar(domain)
         self.name = name
+        self.decode = decode
+    }
+
+    init(kind: Kind, decode: @escaping (SeamContext, String) -> T) {
+        self.kind = kind
         self.decode = decode
     }
 
@@ -48,6 +65,45 @@ public struct ArgumentDomain<T> {
 
     func read(_ seams: SeamContext, seam: String) -> T {
         decode(seams, seam)
+    }
+
+    /// What this argument adds to the declared surface: the synthesized-key scalar domain, or the
+    /// model's type-scoped field domains.
+    func contributions(for label: String, at position: Int) -> [(seam: String, domain: SeamDomain)] {
+        switch kind {
+        case let .scalar(domain):
+            [(seam: key(for: label, at: position), domain: domain)]
+        case let .generated(fields, _):
+            fields.map { (seam: $0.key, domain: $0.value) }.sorted { $0.seam < $1.seam }
+        }
+    }
+
+    /// The factory to register for a generated argument, `nil` for a scalar.
+    var maker: (type: ObjectIdentifier, make: (SeamContext, String) -> Any)? {
+        guard case let .generated(_, make) = kind else { return nil }
+        return (ObjectIdentifier(T.self), make)
+    }
+}
+
+public extension ArgumentDomain where T: SeamGenerated, T.Generated == T {
+    /// A whole generated model as an op input — the structured half the scalar domains cannot express.
+    ///
+    /// The model's `SeamGenerated` factory is the single place its invariants live: a `Product`
+    /// generator picks the SKU from a domain and *derives* the price from the catalogue, so a pair
+    /// the real dependency could never produce is unrepresentable. Fields are discovered here, at
+    /// declaration time, under the model's type-scoped keys (`Product.sku`) — swept, reported, and
+    /// narrowable with an explicit `Seam` exactly like a `.generates` adoption; no separate
+    /// `.generates` call is needed for the argument.
+    static func generated(_: T.Type) -> ArgumentDomain<T> {
+        let discovery = DomainCollector()
+        _ = T.generated(from: FieldSeams(mode: .discovery(discovery), prefix: "\(T.self)"))
+        return ArgumentDomain(
+            kind: .generated(
+                fields: discovery.domains,
+                maker: { context, _ in T.generated(from: FieldSeams(mode: .live(context), prefix: "\(T.self)")) }
+            ),
+            decode: { seams, _ in seams.value(T.self, key: "\(T.self)") }
+        )
     }
 }
 
@@ -115,16 +171,15 @@ public extension Op {
         self.init(label) { system, seams in
             await action(system, first.read(seams, seam: keys[0]))
         }
-        argumentDomains = [(seam: keys[0], domain: first.domain)]
+        declare(first, key: keys[0])
     }
 
     /// Two arguments, delivered together.
     ///
-    /// They are sampled *independently* — a domain is still a scalar or a named set, so this cannot by
-    /// itself express "a SKU and its real price". What it does fix is where the correlation is drawn:
-    /// the op body receives the sku and derives the rest (`Product(sku)`), so a fabricated pair the real
-    /// dependency could never return is unrepresentable — the generator only ever picks the sku. A
-    /// domain over structured values is the other half, and is deferred to the property-based card.
+    /// Scalar domains are sampled *independently* — they cannot by themselves express "a SKU and its
+    /// real price"; the op body receives the sku and derives the rest, so a fabricated pair is
+    /// unrepresentable. `.generated(_:)` is the structured other half: the model's own factory draws
+    /// the fields and encodes the correlation once, next to the model.
     init<A, B>(
         _ label: String,
         varying first: ArgumentDomain<A>,
@@ -135,10 +190,8 @@ public extension Op {
         self.init(label) { system, seams in
             await action(system, first.read(seams, seam: keys[0]), second.read(seams, seam: keys[1]))
         }
-        argumentDomains = [
-            (seam: keys[0], domain: first.domain),
-            (seam: keys[1], domain: second.domain)
-        ]
+        declare(first, key: keys[0])
+        declare(second, key: keys[1])
     }
 
     init<A, B, C>(
@@ -157,15 +210,29 @@ public extension Op {
                 third.read(seams, seam: keys[2])
             )
         }
-        argumentDomains = [
-            (seam: keys[0], domain: first.domain),
-            (seam: keys[1], domain: second.domain),
-            (seam: keys[2], domain: third.domain)
-        ]
+        declare(first, key: keys[0])
+        declare(second, key: keys[1])
+        declare(third, key: keys[2])
+    }
+
+    /// Fold one argument into the op's declared surface: a scalar owns its synthesized key; a
+    /// generated model contributes its type-scoped field domains and the factory that builds it.
+    private mutating func declare(_ argument: ArgumentDomain<some Any>, key: String) {
+        switch argument.kind {
+        case let .scalar(domain):
+            argumentDomains.append((seam: key, domain: domain))
+        case let .generated(fields, _):
+            generatedArgumentFields += fields.map { (seam: $0.key, domain: $0.value) }
+                .sorted { $0.seam < $1.seam }
+            if let maker = argument.maker {
+                argumentMakers.append((type: maker.type, make: maker.make))
+            }
+        }
     }
 
     /// Two arguments of one op cannot share a name: they would read the same track, and the second
-    /// would consume a cursor the first advanced.
+    /// would consume a cursor the first advanced. (A generated argument reads no op-scoped track;
+    /// its position holds a synthesized key nothing consumes.)
     private static func keys(_ label: String, _ names: [String?]) -> [String] {
         let keys = names.enumerated().map { position, name in
             "\(label).\(name ?? String(position))"

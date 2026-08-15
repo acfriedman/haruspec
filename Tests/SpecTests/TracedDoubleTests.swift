@@ -215,6 +215,35 @@ final class TracedDoubleTests: XCTestCase {
         XCTAssertGreaterThan(verdict.qualification.seamPositions["Fee.cents"] ?? 0, 0)
     }
 
+    /// The structured op input: `.generated(Fee.self)` hands the op a whole model built by its own
+    /// factory — fields discovered at declaration time, swept under type-scoped keys, the maker
+    /// registered by the argument itself (no `.generates` call anywhere).
+    func testAGeneratedModelAsAnOpArgument() async {
+        let spec = Spec<Gauge>("double.gauge.argument")
+            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self)) }
+            .operations {
+                Op("charge", varying: .generated(Fee.self), .int(0 ... 10).named("bump")) { gauge, fee, bump in
+                    gauge.add(value: fee.cents + Int(bump))
+                }
+            }
+
+        let verdict = await spec.verify(against: { ctx in
+            MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+        })
+
+        XCTAssertEqual(verdict.verdict, .equivalent)
+        XCTAssertGreaterThan(
+            verdict.qualification.seamPositions["Fee.cents"] ?? 0,
+            0,
+            "the argument's model fields are declared surface, same as a .generates adoption"
+        )
+        XCTAssertGreaterThan(
+            verdict.qualification.seamPositions["charge.bump"] ?? 0,
+            0,
+            "a scalar argument beside a generated one keeps its own op-scoped track"
+        )
+    }
+
     func testDroppingTheBoundaryCallDiverges() async {
         let verdict = await gauge().verify(against: { ctx in
             SilentGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
