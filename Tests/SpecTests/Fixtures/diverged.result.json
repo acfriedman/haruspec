@@ -30,6 +30,13 @@
       "PromoCart"
     ],
     "operations" : 3,
+    "origins" : [
+      {
+        "label" : "PromoCart",
+        "source" : "HaruspecSpecTests/SpecPrototypeTests.swift",
+        "symbol" : "RoundBugCart"
+      }
+    ],
     "probes" : 385,
     "seamPositions" : {
       "coffeeQty" : 2
@@ -83,7 +90,7 @@
     },
     "verdict" : "diverged"
   },
-  "schemaVersion" : 1,
+  "schemaVersion" : 2,
   "stability" : {
     "outcomes" : [
       {

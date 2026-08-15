@@ -75,6 +75,41 @@ final class QualificationTests: XCTestCase {
         )
     }
 
+    // MARK: - Origins (which sources the covered labels came from)
+
+    /// The label is not a type name — `PromoCart` is answered here by two different classes — so the
+    /// verdict carries the declarations themselves rather than leaving an audit to search for the name.
+    func testALiveVerdictNamesWhereItsCoveredLabelsAreDeclared() async {
+        let verdict = await cart(system: makeGood).verify(against: makeRefactor)
+
+        let origins = verdict.qualification.origins
+        XCTAssertEqual(Set(origins.map(\.label)), ["PromoCart"])
+        XCTAssertEqual(
+            Set(origins.compactMap(\.symbol)),
+            ["GoodCart", "RefactorCart"],
+            "baseline and candidate both — a PR audit needs the sources the candidate introduced"
+        )
+        for origin in origins {
+            XCTAssertEqual(origin.source?.hasSuffix("SpecPrototypeTests.swift"), true, "\(origin)")
+        }
+    }
+
+    /// On replay the golden comes from the plan, so only the current build declares anything — which
+    /// is the side a PR is judged on anyway. The line must describe that build, not the recording.
+    func testAReplayVerdictNamesTheSourcesThisBuildRan() async {
+        let plan = await cart(system: makeGood).record()
+        let verdict = await cart(system: makeGood).verify(replaying: plan)
+
+        XCTAssertEqual(Set(verdict.qualification.origins.compactMap(\.symbol)), ["GoodCart"])
+    }
+
+    func testTheQualificationBlockRendersTheDeclaringSources() async {
+        let markdown = await cart(system: makeGood).verify(against: makeRefactor).markdownReport()
+
+        XCTAssertTrue(markdown.contains("PromoCart ← GoodCart ("), markdown)
+        XCTAssertTrue(markdown.contains("RefactorCart ("), markdown)
+    }
+
     // MARK: - Boundary-schedule truncation (the exploration card's "says nothing about the 11 it dropped")
 
     func testATruncatedBoundaryScheduleReportsItsDroppedEdges() async {

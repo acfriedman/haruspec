@@ -73,83 +73,6 @@ public struct SpecVerdict: Codable, Sendable {
     public var coverage: Coverage {
         result.coverage
     }
-
-    /// A compact rendering built from the diff's public surface (a caller / LLM would print this).
-    public func report() -> String {
-        var lines = ["\(TraceDiff.banner(verdict))  \(diff.baselineName) → \(diff.candidateName)",
-                     "  explored: \(exploration.summary)"]
-        lines += stabilityLines
-        if let fraction = coverage.fraction {
-            var line = "  coverage: \(Int((fraction * 100).rounded()))% "
-                + "of \(coverage.declared.count) declared boundaries"
-            // Printed at 0 too: a spec that declared domains and swept none of them is exactly the
-            // case worth saying out loud, and gating the clause on `> 0` hid it.
-            if let domain = coverage.domainFraction, !coverage.domainExercised.isEmpty || domain == 0 {
-                line += " · domain-swept \(Int((domain * 100).rounded()))%"
-            }
-            lines.append(line)
-            for gap in coverage.unrecordedReach {
-                lines.append("    ⚠︎ unrecorded reach: \(gap.boundary) (replay fell back to live)")
-            }
-            for gap in coverage.unmatchedDomains {
-                lines.append("    ⚠︎ declared domain matched nothing: \(gap.boundary) (nothing read that seam)")
-            }
-        }
-        lines += qualificationReportLines
-        if diff.divergences.isEmpty {
-            lines.append("  behavior matches across everything explored (0 divergences)")
-        } else {
-            lines.append("  \(diff.divergences.count) divergence(s):")
-            for divergence in diff.divergences {
-                let mark = divergence.classification == .intended ? "✓ intended " : "≠ "
-                lines.append("    \(mark)\(divergence.label): \(divergence.detail)")
-            }
-        }
-        lines += failingOrderLines
-        let seams = counterexampleSeamPairs
-        if !seams.isEmpty {
-            lines.append("  ↳ counterexample: \(seams.map { "\($0.key)=\($0.value)" }.joined(separator: " "))")
-        }
-        return lines.joined(separator: "\n")
-    }
-
-    /// The failing call sequence, and — when it came from the out-of-order stratum — which declared
-    /// precondition it broke. Triage differs: a divergence on a path the author said shouldn't happen
-    /// is a defensive-code finding, not a regression on the described surface.
-    private var failingOrderLines: [String] {
-        guard let failing = failingOrder else {
-            return []
-        }
-        var lines = ["  ↳ failing order: \(failing.joined(separator: " → "))"]
-        if let violated = violatedPreconditions, !violated.isEmpty {
-            lines.append("    ⚠︎ out-of-order: breaks \(violated.joined(separator: ", "))")
-        }
-        return lines
-    }
-
-    /// The counterexample's seam values as `(key, value)` pairs, e.g. `("add.quantity", "1,20")` —
-    /// one entry per reading, so a repeatedly-read seam shows which position was extreme. Shared by
-    /// `report()` and `htmlReport()` so the extraction lives in one place.
-    ///
-    /// Every value type renders, not only integers: a categorical argument (`.oneOf(Catalog.all)`) is
-    /// the input a counterexample most needs to name, and dropping it left the reader with a quantity
-    /// and no SKU.
-    var counterexampleSeamPairs: [(key: String, value: String)] {
-        guard let tracks = counterexample?.tracks else { return [] }
-        let rendered = tracks.compactMapValues { values -> String? in
-            values.isEmpty ? nil : values.map(Self.render).joined(separator: ",")
-        }
-        return rendered.sorted { $0.key < $1.key }.map { (key: $0.key, value: $0.value) }
-    }
-
-    /// Unquoted for a report line — `add.sku=COFFEE` reads better than `add.sku="COFFEE"`, and the
-    /// serialized cassette is the artifact anything machine-read should use.
-    private static func render(_ value: CanonicalValue) -> String {
-        if case let .string(text) = value {
-            return text
-        }
-        return value.canonicalString
-    }
 }
 
 /// The golden template and everything resolved off it (see `goldenSurface()`).
@@ -170,6 +93,13 @@ public extension Spec {
     func verify(
         against candidate: @escaping (SeamContext) -> S,
         declaring intent: Intent = .none
+    ) async -> SpecVerdict {
+        await collectingOrigins { await differentialVerdict(against: candidate, declaring: intent) }
+    }
+
+    private func differentialVerdict(
+        against candidate: @escaping (SeamContext) -> S,
+        declaring intent: Intent
     ) async -> SpecVerdict {
         let surface = await goldenSurface()
         let (golden, plan, qualification) = (surface.golden, surface.plan, surface.qualification)

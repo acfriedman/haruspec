@@ -31,8 +31,13 @@ public macro Traced(_ typeLabel: String? = nil, timing: Bool = false) =
 /// `@Traced`; usable directly for selective instrumentation. The argument is the stable type label
 /// used to build the event name `"<typeLabel>.<method>"`. Pass `timed: true` to also record the
 /// method's duration as a signpost interval.
+///
+/// `declaredBy` names the concrete type the method belongs to, which the *label* deliberately doesn't:
+/// with it and the expansion's own file, the body registers a `TraceOrigin` when it runs, so a verdict
+/// can say which sources its covered labels came from. `@Traced` fills it in; a hand-written
+/// `@TracedMethod` may leave it off and lose only the type half of that line.
 @attached(body)
-public macro TracedMethod(_ typeLabel: String, timed: Bool = false) =
+public macro TracedMethod(_ typeLabel: String, timed: Bool = false, declaredBy: String? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedMethodMacro")
 
 /// Mark a method inside a `@Traced` type to also record its duration as a signpost interval — the

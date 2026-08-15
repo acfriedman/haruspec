@@ -13,6 +13,7 @@ import PackageDescription
 ///   HaruspecMacros      — the `@Traced` / `@TracedMethod` declarations (opt-in zero-code method capture).
 ///   HaruspecMacroPlugin — the compiler-plugin implementation of those macros (the only SwiftSyntax user).
 ///   HaruspecSeams       — the record-once/replay-into-both seam harness (Cassette + injected value seams).
+///   HaruspecAudit       — capture-completeness auditing (resolve a verdict's origins to source).
 ///   HaruspecSpec    — the developer-facing `Spec { … }.verify(against:)` DSL.
 ///   Haruspec            — the umbrella: one `import Haruspec` re-exports the whole consumer surface above.
 ///   HaruspecDemo        — a sample application (a checkout module) that exercises the engine end-to-end.
@@ -34,6 +35,7 @@ let package = Package(
         .library(name: "HaruspecDispatchSeam", targets: ["HaruspecDispatchSeam"]),
         .library(name: "HaruspecMacros", targets: ["HaruspecMacros"]),
         .library(name: "HaruspecSeams", targets: ["HaruspecSeams"]),
+        .library(name: "HaruspecAudit", targets: ["HaruspecAudit"]),
         .library(name: "HaruspecDemo", targets: ["HaruspecDemo"]),
         .executable(name: "haruspec", targets: ["HaruspecCLI"])
     ],
@@ -85,8 +87,14 @@ let package = Package(
             "HaruspecTrace",
             "HaruspecDemo",
             "HaruspecMCP",
-            "HaruspecSpec"
+            "HaruspecSpec",
+            "HaruspecAudit"
         ], path: "Sources/CLI"),
+
+        // Capture-completeness auditing: resolving what a verdict covered back to the sources an
+        // audit has to read. Depends on Trace alone (it reads `TraceOrigin`), so the Spec layer can
+        // consume its findings without a cycle.
+        .target(name: "HaruspecAudit", dependencies: ["HaruspecTrace"], path: "Sources/Audit"),
 
         // The developer-facing Spec DSL (result-builder + Haruspec.verify). Prototype.
         .target(name: "HaruspecSpec", dependencies: [
@@ -111,6 +119,10 @@ let package = Package(
         ]),
 
         .testTarget(name: "HaruspecCoreTests", dependencies: ["HaruspecCore"], path: "Tests/CoreTests"),
+        .testTarget(name: "HaruspecAuditTests", dependencies: [
+            "HaruspecAudit",
+            "HaruspecTrace"
+        ], path: "Tests/AuditTests"),
         .testTarget(name: "HaruspecTraceTests", dependencies: [
             "HaruspecCore",
             "HaruspecTrace",
