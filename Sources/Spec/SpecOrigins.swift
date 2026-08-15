@@ -26,7 +26,16 @@ extension Spec {
         // The audit rides the same wrapper because it needs exactly what this collected. No configured
         // root means no audit and no claim: `blindSpots` stays nil and every surface says "not audited".
         guard let root = AuditRoot.fromEnvironment() else { return verdict }
-        return verdict.audited(against: root, declaring: intent)
+        return verdict.audited(against: root, declaring: mergingAcceptances(into: intent))
+    }
+
+    /// The subject's own accepted channels joined onto a port's declaration: spec-level facts about
+    /// the baseline's sources, check-site facts about this candidate, one set for the audit to
+    /// resolve.
+    func mergingAcceptances(into intent: Intent) -> Intent {
+        var declared = intent
+        declared.acceptedBlindSpots += acceptedBlindSpots
+        return declared
     }
 }
 

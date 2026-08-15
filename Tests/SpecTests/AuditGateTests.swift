@@ -108,6 +108,44 @@ final class AuditGateTests: XCTestCase {
         )
     }
 
+    func testASpecLevelAcceptanceCoversEveryCandidate() async {
+        // `.accepts(uncaptured:)` is the subject-fact form: the bypass lives in the baseline's own
+        // sources, so no check site should have to repeat it. The merge is what the env-driven path
+        // feeds the audit (`collectingOrigins`); the verdict shape it produces is pinned end to end.
+        let spec = ledger(system: makeBypassingLedger).accepts(uncaptured: "NotificationCenter.default")
+
+        XCTAssertEqual(
+            spec.mergingAcceptances(into: .none).acceptedBlindSpots,
+            ["NotificationCenter.default"]
+        )
+        XCTAssertEqual(
+            spec.mergingAcceptances(into: Intent { Accepts(uncaptured: "Combine") }).acceptedBlindSpots,
+            ["Combine", "NotificationCenter.default"],
+            "a port's own acceptance and the subject's compose, not replace"
+        )
+
+        let verdict = await spec
+            .verify(against: makeBypassingLedger)
+            .audited(against: packageRoot, declaring: spec.mergingAcceptances(into: .none))
+
+        XCTAssertEqual(verdict.verdict, .equivalent)
+        XCTAssertEqual(verdict.qualification.blindSpots, ["NotificationCenter.default (declared)"])
+    }
+
+    func testTheFirstAuditWinsSoExplicitAndEnvDrivenCompose() async {
+        let once = await ledger(system: makeBypassingLedger)
+            .verify(against: makeBypassingLedger)
+            .audited(against: packageRoot)
+        let twice = once.audited(against: packageRoot)
+
+        XCTAssertEqual(twice.qualification.blindSpots, once.qualification.blindSpots)
+        XCTAssertEqual(
+            twice.coverage.blindSpots.count,
+            once.coverage.blindSpots.count,
+            "re-auditing an audited verdict must not stack a second copy of its gaps"
+        )
+    }
+
     // MARK: - The clean case, and what "clean" is allowed to mean
 
     func testACleanSubjectClaimsAuditedOnlyAfterReadingItsSource() async {

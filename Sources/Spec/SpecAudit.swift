@@ -31,7 +31,7 @@ public enum AuditRoot {
     }
 }
 
-extension SpecVerdict {
+public extension SpecVerdict {
     /// Audit what this verdict covered and fold the result back into it: blind spots onto the
     /// qualification block, undeclared ones onto the coverage as gaps, and the verdict re-resolved
     /// over that coverage.
@@ -39,7 +39,13 @@ extension SpecVerdict {
     /// Applied after the whole verification rather than inside it because the origin set is only
     /// complete once every capture has run — and because the finding is a property of the *sources*,
     /// identical across the replays a stability run folds together.
-    func audited(against root: URL, declaring intent: Intent) -> SpecVerdict {
+    ///
+    /// Public so a test or host tool that knows its own checkout (`#filePath`, a repo argument) can
+    /// audit explicitly, mirroring `ContinuousRun`'s explicit form beside its env-driven one. The
+    /// first audit wins: a verdict already carrying blind spots returns unchanged, so the explicit
+    /// call composes with a run where `HARUSPEC_SOURCE_ROOT` already audited inside `verify`.
+    func audited(against root: URL, declaring intent: Intent = .none) -> SpecVerdict {
+        guard qualification.blindSpots == nil else { return self }
         // An audit over no declarations read nothing, and "nothing found in nothing" must not print
         // as a clean bill of health.
         guard !qualification.origins.isEmpty else { return self }
@@ -49,7 +55,7 @@ extension SpecVerdict {
 
     /// The same verdict with an audit's outcome applied. Split out so a caller holding its own
     /// `AuditReport` (the CLI, a host tool auditing a recorded `result.json`) folds it in identically.
-    func noting(_ outcome: AuditOutcome) -> SpecVerdict {
+    internal func noting(_ outcome: AuditOutcome) -> SpecVerdict {
         SpecVerdict(
             schemaVersion: schemaVersion,
             result: VerificationResult(diff: result.diff, coverage: coverage.noting(outcome)),

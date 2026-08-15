@@ -195,6 +195,9 @@ public struct Spec<S> {
     /// The builds a catalog can enumerate, declared via `.candidates { }`. Empty for a spec whose
     /// suite checks each build inline (`check(_:expecting:_:)`), which is the ordinary case.
     var candidates: [Candidate<S>] = []
+    /// Channels the spec accepts as uncaptured for every candidate, via `.accepts(uncaptured:)` —
+    /// merged into each verification's intent where the audit resolves declarations.
+    var acceptedBlindSpots: [String] = []
     var exploreOrdering = false
     var maxOrderings = 100
     var orderingRepeats = 2
@@ -258,6 +261,20 @@ public struct Spec<S> {
     /// Declared acceptable deltas.
     public func tolerate(_ spec: Tolerance) -> Spec<S> {
         var copy = self; copy.tolerances = spec; return copy
+    }
+
+    /// Accept that the *subject* reaches an effect channel the capture cannot see — the spec-level
+    /// home of `Accepts(uncaptured:)`, for a blind spot every candidate shares because it lives in
+    /// the baseline's own sources (a legacy singleton fanning out through the global center).
+    ///
+    /// Spec-level deliberately, where port intent deliberately is not: an intent declared on the spec
+    /// leaked one port's excuses to every candidate, but an uncaptured channel in covered baseline
+    /// code IS every candidate's shared context — the same reasoning that puts `Tolerance` here. A
+    /// channel only one port introduces still belongs at its check site, via `Intent`.
+    public func accepts(uncaptured channels: String...) -> Spec<S> {
+        var copy = self
+        copy.acceptedBlindSpots += channels
+        return copy
     }
 
     /// What to vary — seam domains and/or call ordering.
