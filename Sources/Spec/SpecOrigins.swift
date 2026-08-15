@@ -22,7 +22,7 @@ extension Spec {
     ) async -> SpecVerdict {
         let origins = OriginCollector()
         let verdict = await TraceOrigins.$collector.withValue(origins) { await verification() }
-            .noting(origins: subjectOrigins(in: origins.snapshot))
+            .noting(origins: subjectOrigins(from: origins))
         // The audit rides the same wrapper because it needs exactly what this collected. No configured
         // root means no audit and no claim: `blindSpots` stays nil and every surface says "not audited".
         guard let root = AuditRoot.fromEnvironment() else { return verdict }
@@ -39,12 +39,14 @@ extension Spec {
     }
 
     /// The reached origins that belong to the *subject* — every traced label minus the collaborators
-    /// the spec declared with `.injects(_:)`. Filtered before the verdict ever holds them, because
-    /// the origin list IS the audit's denominator ("declared in", the files a completeness check has
-    /// to read): a collaborator double's interactions are captured at its boundary, so its sources —
-    /// including a wrapped singleton with no Swift source at all — are the fixture's, not the claim's.
-    func subjectOrigins(in origins: [TraceOrigin]) -> [TraceOrigin] {
-        origins.filter { !injectedLabels.contains($0.label) }
+    /// the run injected through `SeamContext.inject`. Filtered before the verdict ever holds them,
+    /// because the origin list IS the audit's denominator ("declared in", the files a completeness
+    /// check has to read): a collaborator double's interactions are captured at its boundary, so its
+    /// sources — including a wrapped singleton with no Swift source at all — are the fixture's, not
+    /// the claim's.
+    private func subjectOrigins(from collector: OriginCollector) -> [TraceOrigin] {
+        let injected = collector.injectedLabels
+        return collector.snapshot.filter { !injected.contains($0.label) }
     }
 }
 

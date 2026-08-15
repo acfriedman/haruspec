@@ -45,6 +45,7 @@ public struct TraceOrigin: Codable, Hashable, Sendable, Comparable {
 public final class OriginCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var origins: Set<TraceOrigin> = []
+    private var injected: Set<String> = []
 
     public init() {}
 
@@ -53,9 +54,23 @@ public final class OriginCollector: @unchecked Sendable {
         origins.insert(origin)
     }
 
+    /// Record that `label` is an injected collaborator boundary in this verification — declared by
+    /// the act of injection itself (`SeamContext.inject`), not restated as data anywhere.
+    public func noteInjected(label: String) {
+        lock.lock(); defer { lock.unlock() }
+        injected.insert(label)
+    }
+
     public var snapshot: [TraceOrigin] {
         lock.lock(); defer { lock.unlock() }
         return origins.sorted()
+    }
+
+    /// The labels handed in as collaborators. Everything else reached under capture is the subject —
+    /// which is exactly the completeness audit's denominator.
+    public var injectedLabels: Set<String> {
+        lock.lock(); defer { lock.unlock() }
+        return injected
     }
 }
 
@@ -67,4 +82,12 @@ public final class OriginCollector: @unchecked Sendable {
 /// default under swift-testing) cannot pool their origins into each other's verdicts.
 public enum TraceOrigins {
     @TaskLocal public static var collector: OriginCollector?
+}
+
+/// A type that knows the trace label its events carry. Conformance is emitted by `@Traced` and
+/// `@TracedForwarder`, so any instrumented instance can state its own label — which is what lets an
+/// injection point (`SeamContext.inject`) register a collaborator without anyone typing the label a
+/// second time.
+public protocol TraceLabeled {
+    var traceLabel: String { get }
 }

@@ -17,6 +17,17 @@ public struct SeamContext {
     public let notifications: NotificationCenter
     let cassette: Cassette
 
+    /// Hand a recording double to the subject as an injected collaborator. The act of injection is
+    /// the declaration: the double states its own trace label (`TraceLabeled`, emitted by `@Traced` /
+    /// `@TracedForwarder`), and that label leaves the completeness audit's denominator — the
+    /// interaction is captured at this boundary, so the double's sources are the fixture's, not the
+    /// subject's. A traced collaborator constructed *around* this call is not registered, and its
+    /// sources gate: over-reporting stays the safe direction.
+    public func inject<D: TraceLabeled>(_ double: D) -> D {
+        TraceOrigins.collector?.noteInjected(label: double.traceLabel)
+        return double
+    }
+
     public func int(_ seam: String, default value: Int64) -> Int64 {
         cassette.int(seam: seam, live: { value })
     }
@@ -198,9 +209,6 @@ public struct Spec<S> {
     /// Channels the spec accepts as uncaptured for every candidate, via `.accepts(uncaptured:)` —
     /// merged into each verification's intent where the audit resolves declarations.
     var acceptedBlindSpots: [String] = []
-    /// Trace labels that are injected collaborators rather than the subject, via `.injects(_:)` —
-    /// excluded from the completeness audit's denominator.
-    var injectedLabels: Set<String> = []
     var exploreOrdering = false
     var maxOrderings = 100
     var orderingRepeats = 2
@@ -277,24 +285,6 @@ public struct Spec<S> {
     public func accepts(uncaptured channels: String...) -> Spec<S> {
         var copy = self
         copy.acceptedBlindSpots += channels
-        return copy
-    }
-
-    /// Name the trace labels this spec hands in as *collaborators* — recording doubles constructed in
-    /// `.system` and injected into the subject — so the completeness audit reads the subject's
-    /// sources and not the fixture's.
-    ///
-    /// The boundary argument: both sides of a differential call through the *same* double, and the
-    /// interaction is captured at that boundary (`Analytics.track`, with its arguments). What the
-    /// double does beyond it is held identical by construction, so a divergence cannot hide there —
-    /// auditing it would gate the verdict on the fixture's internals. The subject's own sources stay
-    /// in the denominator: a direct global post *there* routes around the recorder and still abstains.
-    ///
-    /// Undeclared, every traced label is audited — over-reporting is the safe direction, and the exit
-    /// is this one reviewable line.
-    public func injects(_ labels: String...) -> Spec<S> {
-        var copy = self
-        copy.injectedLabels.formUnion(labels)
         return copy
     }
 

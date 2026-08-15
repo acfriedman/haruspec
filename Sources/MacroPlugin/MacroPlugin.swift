@@ -40,6 +40,29 @@ public struct TracedMacro: MemberAttributeMacro {
     }
 }
 
+extension TracedMacro: ExtensionMacro {
+    /// The `TraceLabeled` conformance: an instrumented instance can state the label its events carry,
+    /// so an injection point registers a collaborator by asking the double rather than being told.
+    /// `nonisolated`, because the label is a constant and the conformer may be an actor (or a
+    /// global-actor-isolated class), whose isolated members could not satisfy the protocol.
+    public static func expansion(
+        of node: AttributeSyntax,
+        attachedTo declaration: some DeclGroupSyntax,
+        providingExtensionsOf type: some TypeSyntaxProtocol,
+        conformingTo _: [TypeSyntax],
+        in _: some MacroExpansionContext
+    ) throws -> [ExtensionDeclSyntax] {
+        let typeLabel = stringArgument(of: node) ?? typeName(of: declaration) ?? "Unknown"
+        return try [ExtensionDeclSyntax(
+            """
+            extension \(type.trimmed): TraceLabeled {
+                nonisolated public var traceLabel: String { \(literal: typeLabel) }
+            }
+            """
+        )]
+    }
+}
+
 // MARK: - @Timed (marker)
 
 /// A no-op peer macro. Its only job is to be a legal attribute that `@Traced` can detect on a method
@@ -259,10 +282,14 @@ public struct TracedForwarderMacro: PeerMacro {
         // Rooted in NSObject so the forwarder can back an Obj-C `id<Protocol>` injection point when the
         // protocol refines an Obj-C (`@objc`) seam — harmless for a Swift-only forwarder, required for an
         // Obj-C-injected one. `super.init()` runs after the stored wrapper is set (Swift two-phase init).
+        // `TraceLabeled` for the same reason `@Traced` emits it: the instance can state its label to an
+        // injection point.
         let source = """
-        final class \(generatedName): NSObject, \(protoName) {
+        final class \(generatedName): NSObject, \(protoName), TraceLabeled {
             private let __wrapped: \(wrapping)
             init(_ wrapped: \(wrapping) = \(wrappedDefault)) { __wrapped = wrapped; super.init() }
+
+            nonisolated var traceLabel: String { \(quotedLiteral(label)) }
 
         \(members.joined(separator: "\n\n"))
         }
@@ -427,6 +454,12 @@ public struct SeamedMethodMacro: BodyMacro {
 // MARK: - Shared helpers
 
 /// Extract the first positional string-literal argument of a macro attribute, if present.
+/// `label` as Swift source for a string literal — labels are plain identifiers, but escape anyway so
+/// a pathological one cannot break out of the generated expression.
+private func quotedLiteral(_ value: String) -> String {
+    StringLiteralExprSyntax(content: value).description
+}
+
 private func stringArgument(of node: AttributeSyntax) -> String? {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self),
           let first = arguments.first, first.label == nil,

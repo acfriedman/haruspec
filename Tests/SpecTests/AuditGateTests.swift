@@ -158,9 +158,11 @@ final class AuditGateTests: XCTestCase {
 
     // MARK: - Subject vs collaborator (the audit's denominator)
 
-    private func announcingLedger() -> Spec<AuditSubject> {
+    private func announcingLedger(
+        make: @escaping (SeamContext) -> AuditSubject
+    ) -> Spec<AuditSubject> {
         Spec<AuditSubject>("audit.announcing-ledger")
-            .system { ctx in AnnouncingLedger(center: ctx.notifications, announcer: RecordingAnnouncer()) }
+            .system(make)
             .operations {
                 Op("add") { ledger, seams in
                     ledger.add(cents: Int(seams.int("cents", default: 500)))
@@ -174,11 +176,14 @@ final class AuditGateTests: XCTestCase {
 
     func testAnInjectedCollaboratorsSourcesAreTheFixturesNotTheSubjects() async {
         // The collaborator's declaring file carries a real bypass — but both sides call through the
-        // same double, and the interaction is recorded at its boundary. Declaring the label injected
-        // takes its sources out of the denominator entirely, so the subject reads audited-clean.
-        let verdict = await announcingLedger()
-            .injects("Announcer")
-            .verify(against: { ctx in AnnouncingLedger(center: ctx.notifications, announcer: RecordingAnnouncer()) })
+        // same double, and the interaction is recorded at its boundary. Handing it through
+        // `ctx.inject` IS the declaration: the double states its own label, and its sources leave
+        // the denominator entirely, so the subject reads audited-clean.
+        let injected = { (ctx: SeamContext) -> AuditSubject in
+            AnnouncingLedger(center: ctx.notifications, announcer: ctx.inject(RecordingAnnouncer()))
+        }
+        let verdict = await announcingLedger(make: injected)
+            .verify(against: injected)
             .audited(against: packageRoot)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
@@ -189,11 +194,14 @@ final class AuditGateTests: XCTestCase {
         )
     }
 
-    func testAnUndeclaredCollaboratorStillGates() async {
-        // Without the declaration the audit over-reports — the safe direction. The exit is the
-        // one-line `.injects`, reviewable like every other declaration.
-        let verdict = await announcingLedger()
-            .verify(against: { ctx in AnnouncingLedger(center: ctx.notifications, announcer: RecordingAnnouncer()) })
+    func testACollaboratorConstructedAroundTheInjectionPointStillGates() async {
+        // Not handed through `ctx.inject` = not registered: the audit over-reports — the safe
+        // direction — and the exit is routing the construction through the injection point.
+        let bare = { (ctx: SeamContext) -> AuditSubject in
+            AnnouncingLedger(center: ctx.notifications, announcer: RecordingAnnouncer())
+        }
+        let verdict = await announcingLedger(make: bare)
+            .verify(against: bare)
             .audited(against: packageRoot)
 
         XCTAssertEqual(verdict.verdict, .cannotVerify)

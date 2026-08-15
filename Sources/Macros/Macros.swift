@@ -8,6 +8,8 @@
 // The generated bodies record to the ambient `TraceContext.current`, so instrumented types need no
 // recorder property and are inert outside a capture window.
 
+import HaruspecTrace
+
 /// Instrument every instance method of a class (or actor) with entry/exit trace capture.
 ///
 /// Pass a stable label to decouple the trace from the concrete type name — useful when the same
@@ -23,7 +25,11 @@
 /// the attribute goes on the real type rather than a DEBUG-only copy of it, and a migration
 /// candidate stays one unconditional class. (The module is still linked in release; only the
 /// generated behavior is gated.)
+/// Also emits a `TraceLabeled` conformance, so an instrumented instance can state the label its
+/// events carry — which is what `SeamContext.inject` reads to register a collaborator boundary
+/// without the label being typed a second time.
 @attached(memberAttribute)
+@attached(extension, conformances: TraceLabeled, names: named(traceLabel))
 public macro Traced(_ typeLabel: String? = nil, timing: Bool = false) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedMacro")
 
