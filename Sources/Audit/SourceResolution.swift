@@ -24,9 +24,15 @@ public struct SourceResolution: Sendable, Equatable {
         !files.isEmpty
     }
 
+    /// The declaration that could not be read, named as the instrumentation knew it — `nil` when
+    /// there is nothing to report because it resolved.
+    public var unresolvedSymbol: String? {
+        isResolved ? nil : origin.symbol ?? origin.label
+    }
+
     /// How the qualification block names an unresolved declaration — a blind spot with a reason, so a
     /// clean lint over everything else can never read as clean over the whole subject.
     public var unresolvedDescription: String? {
-        isResolved ? nil : "\(origin.symbol ?? origin.label) (no source found)"
+        unresolvedSymbol.map { "\($0) (no source found)" }
     }
 }

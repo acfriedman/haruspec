@@ -100,7 +100,10 @@ let package = Package(
         .target(name: "HaruspecSpec", dependencies: [
             "HaruspecCore",
             "HaruspecTrace",
-            "HaruspecSeams"
+            "HaruspecSeams",
+            // The capture-completeness audit runs inside a verification (see SpecAudit.swift), so the
+            // Spec layer links it; the dependency points down the stack, and Audit stays Core-free.
+            "HaruspecAudit"
         ], path: "Sources/Spec"),
 
         // The consumer umbrella. Re-export only (`@_exported import` of the five consumer modules) —
@@ -159,6 +162,7 @@ let package = Package(
             "HaruspecTrace",
             "HaruspecMacros",
             "HaruspecSeams",
+            "HaruspecAudit",
             "LegacyObjC"
         ], path: "Tests/SpecTests", resources: [
             // The committed result.json the decode-compat test and the CLI smoke run render.

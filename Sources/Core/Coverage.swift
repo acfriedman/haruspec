@@ -31,6 +31,21 @@ public struct Coverage: Codable, Sendable, Equatable {
         /// A typo'd key is the usual cause. A seam read only on a branch the golden run didn't take is
         /// the honest one, and the verdict is still right there: that domain varied nothing.
         case unmatchedDomain
+        /// A covered declaration reaches an effect channel nothing records — a direct
+        /// `NotificationCenter.default` post, a `Timer`, a Combine publisher. The capture-completeness
+        /// audit finds these statically; the `boundary` is the channel it names.
+        ///
+        /// The hardest trigger of the three, because it is the only one where the *diff itself* is
+        /// silent: an unrecorded seam read at least happened during a replay we watched, whereas
+        /// effects leaving this way never entered either trace, so nothing about the comparison looks
+        /// wrong. Declarable as an accepted blind spot (`Accepts(uncaptured:)`), which is the one way
+        /// back to green — and it stays named on the report.
+        case bypassedChannel
+        /// A covered declaration whose source the audit could not read at all: no file found for the
+        /// stamped `#fileID` or the wrapped class. Different fact about the auditor than
+        /// `bypassedChannel`, same fact about the verdict — it cannot claim it saw every channel — so
+        /// it fails the same way. The `boundary` names the declaration.
+        case unauditableSource
     }
 
     /// One uncovered boundary.
@@ -98,12 +113,22 @@ public struct Coverage: Codable, Sendable, Equatable {
         gaps.filter { $0.reason == .unmatchedDomain }
     }
 
-    /// Can an `EQUIVALENT` diff be *trusted* over this coverage? Only when the surface is known and no
-    /// boundary fell back to live. v1 hard rule: unrecorded reach downgrades to `CANNOT-VERIFY`; a low
-    /// but gap-free fraction is reported, not gated (a declared `CoveragePolicy` threshold is future
-    /// work). An unknown surface (no registry) is never trusted.
+    /// Effect channels a covered declaration reaches around the recorder, and declarations whose
+    /// source could not be read — the capture-completeness audit's gating findings. Empty on a run
+    /// where the audit never ran, which is why `Qualification.blindSpots` (nil = not audited) is what
+    /// the report reads: coverage says whether anything gates, the qualification says whether anyone
+    /// looked.
+    public var blindSpots: [Gap] {
+        gaps.filter { $0.reason == .bypassedChannel || $0.reason == .unauditableSource }
+    }
+
+    /// Can an `EQUIVALENT` diff be *trusted* over this coverage? Only when the surface is known, no
+    /// boundary fell back to live, and nothing the audit ran over left the captured surface. v1 hard
+    /// rule: unrecorded reach downgrades to `CANNOT-VERIFY`; a low but gap-free fraction is reported,
+    /// not gated (a declared `CoveragePolicy` threshold is future work). An unknown surface (no
+    /// registry) is never trusted.
     public var trustsEquivalent: Bool {
-        !declared.isEmpty && unrecordedReach.isEmpty && unmatchedDomains.isEmpty
+        !declared.isEmpty && unrecordedReach.isEmpty && unmatchedDomains.isEmpty && blindSpots.isEmpty
     }
 
     public init() {

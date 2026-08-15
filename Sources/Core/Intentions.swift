@@ -227,6 +227,26 @@ public struct Omits: Intention {
     }
 }
 
+/// The subject reaches an effect channel the capture cannot see, and the author accepts that — the
+/// only exit from a capture-completeness gate: `Accepts(uncaptured: "Timer / RunLoop")`.
+///
+/// Weaker than it looks on purpose. Every other intention excuses a divergence the diff *found*;
+/// this one excuses a whole channel the diff could never have found, so it does not remove the
+/// channel from the verdict — it moves it from "gates" to "named blind spot on the report," which is
+/// what the README disclaimer promises a reader. Named by channel, so accepting `Timer` says nothing
+/// about Combine.
+public struct Accepts: Intention {
+    let channel: String
+
+    public init(uncaptured channel: String) {
+        self.channel = channel
+    }
+
+    public func apply(to intent: inout Intent) {
+        intent.acceptedBlindSpots.append(channel)
+    }
+}
+
 /// The change alters an event's payload — a specific field, or (with no fields named) any of them.
 /// Declaring one field does NOT excuse a change to another field of the same event.
 public struct Changes: Intention {

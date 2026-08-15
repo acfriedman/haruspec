@@ -1,4 +1,5 @@
 import Foundation
+import HaruspecCore
 import HaruspecTrace
 
 // The audit's denominator, carried onto the verdict: which sources the covered labels were declared
@@ -15,10 +16,17 @@ extension Spec {
     /// and every replay pass of a stability run is the same build. Scoped rather than process-wide, so
     /// specs running in parallel — the default under swift-testing — cannot pool sources into each
     /// other's verdicts.
-    func collectingOrigins(_ verification: () async -> SpecVerdict) async -> SpecVerdict {
+    func collectingOrigins(
+        declaring intent: Intent,
+        _ verification: () async -> SpecVerdict
+    ) async -> SpecVerdict {
         let origins = OriginCollector()
         let verdict = await TraceOrigins.$collector.withValue(origins) { await verification() }
-        return verdict.noting(origins: origins.snapshot)
+            .noting(origins: origins.snapshot)
+        // The audit rides the same wrapper because it needs exactly what this collected. No configured
+        // root means no audit and no claim: `blindSpots` stays nil and every surface says "not audited".
+        guard let root = AuditRoot.fromEnvironment() else { return verdict }
+        return verdict.audited(against: root, declaring: intent)
     }
 }
 

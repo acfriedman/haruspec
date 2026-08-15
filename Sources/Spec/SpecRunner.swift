@@ -94,7 +94,9 @@ public extension Spec {
         against candidate: @escaping (SeamContext) -> S,
         declaring intent: Intent = .none
     ) async -> SpecVerdict {
-        await collectingOrigins { await differentialVerdict(against: candidate, declaring: intent) }
+        await collectingOrigins(declaring: intent) {
+            await differentialVerdict(against: candidate, declaring: intent)
+        }
     }
 
     private func differentialVerdict(

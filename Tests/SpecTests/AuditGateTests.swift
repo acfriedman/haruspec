@@ -1,0 +1,165 @@
+import Foundation
+import HaruspecAudit
+import HaruspecCore
+import HaruspecMacros
+import HaruspecSeams
+@testable import HaruspecSpec
+import HaruspecTrace
+import XCTest
+
+// The capture-completeness gate, end to end: a real spec run, a real source tree, a real verdict.
+//
+// The first test is the whole card in one assertion pair — the *diff* is EQUIVALENT (both sides run
+// the same code, so nothing could differ) while the *verdict* abstains. That gap is the failure mode
+// the audit exists for: effects leaving through an unrecorded channel never enter either trace, so
+// nothing about the comparison looks wrong.
+
+/// A subject whose effects leave through the global center — no injected collaborator, exactly like
+/// a faithful port of legacy code. Both sides of the differential are this same class: identical
+/// behavior, so an EQUIVALENT diff is guaranteed and the only thing left to catch is the channel.
+@Traced("BypassLedger")
+final class BypassingLedger: AuditSubject {
+    private var cents = 0
+
+    func add(cents: Int) {
+        self.cents += cents
+        NotificationCenter.default.post(name: .init("LedgerChanged"), object: nil, userInfo: ["total": self.cents])
+    }
+
+    func total() -> Int {
+        cents
+    }
+}
+
+private func makeBypassingLedger(_: SeamContext) -> AuditSubject {
+    BypassingLedger()
+}
+
+final class AuditGateTests: XCTestCase {
+    /// The checkout the audit reads — this file is `<root>/Tests/SpecTests/AuditGateTests.swift`.
+    private var packageRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private func ledger(system: @escaping (SeamContext) -> AuditSubject) -> Spec<AuditSubject> {
+        Spec<AuditSubject>("audit.ledger")
+            .system(system)
+            .operations {
+                Op("add") { ledger, seams in
+                    ledger.add(cents: Int(seams.int("cents", default: 500)))
+                }
+                Op("total") { _ = $0.total() }.last()
+            }
+            .vary {
+                Seam("cents", .int(1 ... 100))
+            }
+    }
+
+    // MARK: - The gate
+
+    func testAnUndeclaredBypassAbstainsNamingTheChannel() async {
+        let verdict = await ledger(system: makeBypassingLedger)
+            .verify(against: makeBypassingLedger)
+            .audited(against: packageRoot, declaring: .none)
+
+        XCTAssertEqual(
+            verdict.diff.verdict,
+            .equivalent,
+            "the diff cannot see this: identical code, and the escaping effect entered neither trace"
+        )
+        XCTAssertEqual(verdict.verdict, .cannotVerify, "an unseen channel may not read as a pass")
+        XCTAssertEqual(verdict.qualification.blindSpots, ["NotificationCenter.default"])
+        XCTAssertEqual(
+            verdict.coverage.blindSpots.map(\.reason),
+            [.bypassedChannel],
+            "the downgrade goes through coverage, so nothing new decides the verdict"
+        )
+    }
+
+    func testADeclaredBlindSpotReturnsToGreenAndStaysNamed() async {
+        let verdict = await ledger(system: makeBypassingLedger)
+            .verify(against: makeBypassingLedger)
+            .audited(
+                against: packageRoot,
+                declaring: Intent { Accepts(uncaptured: "NotificationCenter.default") }
+            )
+
+        XCTAssertEqual(verdict.verdict, .equivalent)
+        XCTAssertEqual(
+            verdict.qualification.blindSpots,
+            ["NotificationCenter.default (declared)"],
+            "declaring moves a channel out of the gate, never off the verdict"
+        )
+        XCTAssertTrue(verdict.coverage.blindSpots.isEmpty)
+    }
+
+    func testDeclaringOneChannelSaysNothingAboutAnother() async {
+        let verdict = await ledger(system: makeBypassingLedger)
+            .verify(against: makeBypassingLedger)
+            .audited(against: packageRoot, declaring: Intent { Accepts(uncaptured: "Timer / RunLoop") })
+
+        XCTAssertEqual(verdict.verdict, .cannotVerify)
+        XCTAssertEqual(
+            verdict.qualification.blindSpots,
+            ["NotificationCenter.default", "Timer / RunLoop (declared, not found)"]
+        )
+    }
+
+    // MARK: - The clean case, and what "clean" is allowed to mean
+
+    func testACleanSubjectClaimsAuditedOnlyAfterReadingItsSource() async {
+        let verdict = await ledger(system: makeInjectedLedger)
+            .verify(against: makeRestructuredLedger)
+            .audited(against: packageRoot, declaring: .none)
+
+        XCTAssertEqual(verdict.verdict, .equivalent)
+        XCTAssertEqual(verdict.qualification.blindSpots, [], "audited and clean is a claim, and it holds here")
+    }
+
+    func testAnAuditOverNoDeclarationsClaimsNothing() async {
+        let verdict = await ledger(system: makeInjectedLedger)
+            .verify(against: makeRestructuredLedger)
+            .noting(origins: [])
+            .audited(against: packageRoot, declaring: .none)
+
+        XCTAssertNil(
+            verdict.qualification.blindSpots,
+            "nothing found in nothing is not a clean bill of health"
+        )
+    }
+
+    func testAnUnreadableDeclarationGatesLikeABypass() async {
+        let verdict = await ledger(system: makeInjectedLedger)
+            .verify(against: makeRestructuredLedger)
+            .noting(origins: [TraceOrigin(label: "Ledger", symbol: "LedgerThatMoved", source: nil)])
+            .audited(against: packageRoot, declaring: .none)
+
+        XCTAssertEqual(verdict.verdict, .cannotVerify)
+        XCTAssertEqual(verdict.qualification.blindSpots, ["LedgerThatMoved (no source found)"])
+        XCTAssertEqual(verdict.coverage.blindSpots.map(\.reason), [.unauditableSource])
+    }
+
+    // MARK: - Where the root comes from
+
+    func testTheRootIsEnvironmentSuppliedAndItsAbsenceDisablesTheAudit() {
+        XCTAssertEqual(
+            AuditRoot.fromEnvironment([AuditRoot.environmentKey: "/tmp/checkout"])?.path,
+            "/tmp/checkout"
+        )
+        XCTAssertNil(AuditRoot.fromEnvironment([:]))
+        XCTAssertNil(AuditRoot.fromEnvironment([AuditRoot.environmentKey: ""]))
+    }
+
+    func testAVerifyRunWithNoConfiguredRootLeavesTheVerdictUnaudited() async {
+        let verdict = await ledger(system: makeBypassingLedger).verify(against: makeBypassingLedger)
+
+        XCTAssertNil(
+            verdict.qualification.blindSpots,
+            "an adopter who has not wired a root reads 'not audited', which is visibly not 'clean'"
+        )
+        XCTAssertEqual(verdict.verdict, .equivalent)
+    }
+}
