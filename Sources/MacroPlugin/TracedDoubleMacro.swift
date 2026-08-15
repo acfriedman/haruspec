@@ -13,8 +13,9 @@ import SwiftSyntaxMacros
 /// `"<label>.<method>"`, so it defaults to the type's zero, is recorded into the plan, sweeps when a
 /// spec declares a domain for that key in `.vary`, and replays identically.
 ///
-/// A return type with no sensible zero (an object, a collection) is refused at expansion time rather
-/// than defaulted badly — hand-write that double, or give the method a domain-backed shape.
+/// Collections return their genuine empty, an optional custom type returns `nil`, and a required
+/// custom type — which has no universal zero — resolves the factory the spec declared with
+/// `.generates(_:_:)`, trapping fail-fast at the first call when none was.
 public struct TracedDoubleMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
@@ -42,7 +43,7 @@ public struct TracedDoubleMacro: PeerMacro {
                 if isStaticOrClass(function.modifiers) {
                     continue
                 }
-                try members.append(doubleMethod(function, label: label, symbol: generatedName, file: file))
+                members.append(doubleMethod(function, label: label, symbol: generatedName, file: file))
             } else if let variable = decl.as(VariableDeclSyntax.self), !isStaticOrClass(variable.modifiers) {
                 throw MacroError(
                     "@TracedDouble cannot synthesize the property requirement "
@@ -74,9 +75,9 @@ public struct TracedDoubleMacro: PeerMacro {
         label: String,
         symbol: String,
         file: String?
-    ) throws -> String {
+    ) -> String {
         let key = "\(label).\(function.name.text)"
-        let body = try tracedBody(
+        let body = tracedBody(
             function: function,
             label: key,
             innerBody: defaultedReturn(of: function, key: key),
@@ -90,12 +91,19 @@ public struct TracedDoubleMacro: PeerMacro {
     }
 
     /// The synthesized body: nothing for `Void`, a seam read with the type's zero as its default for
-    /// value returns. The seam key doubles as the `.vary` override point — `Seam("Inventory.stock",
-    /// .int(0 ... 5))` turns the constant into swept surface with no change to the double.
-    private static func defaultedReturn(of function: FunctionDeclSyntax, key: String) throws -> String {
+    /// scalar returns, the type's empty for collections, `nil` for optionals, and — for a custom type,
+    /// which has no universal zero — the factory the spec declared with `.generates(_:_:)`, resolved
+    /// fail-fast at the first call. Every seam key doubles as the `.vary` override point —
+    /// `Seam("Inventory.stock", .int(0 ... 5))` turns a zero into swept surface with no change to the
+    /// double, and a factory's field keys (`"<key>.<field>"`) sweep the same way.
+    private static func defaultedReturn(of function: FunctionDeclSyntax, key: String) -> String {
         guard let returnType = function.signature.returnClause?.type.trimmedDescription else { return "" }
-        // `Int!` and `Int?` accept a bare `Int`, so a defaulted read satisfies either spelling.
-        let bare = returnType.hasSuffix("!") || returnType.hasSuffix("?")
+        // `Int!` accepts a bare `Int`, so a defaulted read satisfies it. A `?` is remembered: `nil` is
+        // the one genuine zero an *optional* custom type has. An IUO custom type is treated as
+        // required — `!` is legacy spelling for "callers assume non-nil", and a silent nil default
+        // would move the failure into the subject's force-unwrap.
+        let isOptional = returnType.hasSuffix("?")
+        let bare = isOptional || returnType.hasSuffix("!")
             ? String(returnType.dropLast())
             : returnType
         let read = quotedLiteral(key)
@@ -121,11 +129,44 @@ public struct TracedDoubleMacro: PeerMacro {
         case "String":
             return "return __seams.string(\(read), default: \"\")"
         default:
-            throw MacroError(
-                "@TracedDouble has no sensible default for '\(returnType)', returned by "
-                    + "'\(function.name.text)' — hand-write this double, or reshape the boundary "
-                    + "so the read is a value a domain can generate"
-            )
+            if let empty = emptyLiteral(for: bare) {
+                return "return \(empty)"
+            }
+            // A custom type: the spec's declared factory, or nil where the signature allows it.
+            return isOptional
+                ? "return __seams.valueIfDeclared(\(bare).self, key: \(read))"
+                : "return __seams.value(\(bare).self, key: \(read))"
         }
+    }
+
+    /// The genuine empty for a collection-shaped return, or `nil` when the type isn't one. Sugar and
+    /// generic spellings alike, so a pasted Obj-C interface's `[String: Any]` and a Swift protocol's
+    /// `Dictionary<String, Any>` land on the same zero.
+    private static func emptyLiteral(for type: String) -> String? {
+        if type.hasPrefix("[") {
+            return topLevelColon(in: type) ? "[:]" : "[]"
+        }
+        if type.hasPrefix("Array<") || type.hasPrefix("Set<") {
+            return "[]"
+        }
+        if type.hasPrefix("Dictionary<") {
+            return "[:]"
+        }
+        return nil
+    }
+
+    /// Whether a `[...]` spelling is a dictionary — a `:` at bracket depth 1 (`[String: Int]`), not
+    /// one nested inside an element type (`[[String: Int]]` is an *array* of dictionaries).
+    private static func topLevelColon(in type: String) -> Bool {
+        var depth = 0
+        for character in type {
+            switch character {
+            case "[", "<", "(": depth += 1
+            case "]", ">", ")": depth -= 1
+            case ":" where depth == 1: return true
+            default: break
+            }
+        }
+        return false
     }
 }

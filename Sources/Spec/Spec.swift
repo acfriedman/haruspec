@@ -23,6 +23,9 @@ public protocol SeamDouble: TraceLabeled {
 public struct SeamContext {
     public let notifications: NotificationCenter
     let cassette: Cassette
+    /// Per-type factories for synthesized custom-type returns, declared via `Spec.generates(_:_:)`
+    /// and consulted by generated doubles (`value(_:key:)` below). Keyed by the returned type.
+    var makers: [ObjectIdentifier: (SeamContext, String) -> Any] = [:]
 
     /// Hand a recording double to the subject as an injected collaborator. The act of injection is
     /// the declaration: the double states its own trace label (`TraceLabeled`, emitted by `@Traced` /
@@ -52,6 +55,41 @@ public struct SeamContext {
 
     public func bool(_ seam: String, default value: Bool) -> Bool {
         cassette.bool(seam: seam, live: { value })
+    }
+
+    /// A synthesized custom-type return — the declared factory for `type`, applied to this context.
+    /// There is no universal zero for a custom type, so an undeclared one **traps, fail-fast**, naming
+    /// the declaration to write. The factory reads its fields through seams, which is what makes the
+    /// value recorded, domain-sweepable, and identical on replay.
+    public func value<T>(_ type: T.Type, key: String) -> T {
+        guard let made = valueIfDeclared(type, key: key) else {
+            preconditionFailure(
+                """
+                no generator declared for \(T.self) (needed by the synthesized return "\(key)") — \
+                declare one on the spec:
+
+                    .generates(\(T.self).self) { seams, key in
+                        \(T.self)(…: seams.int("\\(key).…", default: 0), …)
+                    }
+
+                (read every field through `seams`, so the value replays) — or hand-write this double
+                """
+            )
+        }
+        return made
+    }
+
+    /// The optional-return path: a declared factory if there is one, else `nil` — which IS the
+    /// sensible zero for an optional, so `-> Receipt?` needs no declaration until a spec wants the
+    /// non-nil branch explored.
+    public func valueIfDeclared<T>(_ type: T.Type, key: String) -> T? {
+        guard let make = makers[ObjectIdentifier(type)] else { return nil }
+        guard let made = make(self, key) as? T else {
+            // Unreachable through `generates(_:_:)`, whose signature ties the key to the closure's
+            // return type — this guards only a hand-assembled context.
+            preconditionFailure("the generator registered for \(T.self) produced a different type")
+        }
+        return made
     }
 
     /// The categorical read, paired with `.oneOf(…)`: an input whose interesting values are named
@@ -227,6 +265,9 @@ public struct Spec<S> {
     /// Channels the spec accepts as uncaptured for every candidate, via `.accepts(uncaptured:)` —
     /// merged into each verification's intent where the audit resolves declarations.
     var acceptedBlindSpots: [String] = []
+    /// Custom-type factories for synthesized double returns, via `.generates(_:_:)` — threaded into
+    /// every capture's `SeamContext`.
+    var valueMakers: [ObjectIdentifier: (SeamContext, String) -> Any] = [:]
     var exploreOrdering = false
     var maxOrderings = 100
     var orderingRepeats = 2
@@ -303,6 +344,21 @@ public struct Spec<S> {
     public func accepts(uncaptured channels: String...) -> Spec<S> {
         var copy = self
         copy.acceptedBlindSpots += channels
+        return copy
+    }
+
+    /// How to build a `T` when a synthesized double must return one (`@TracedDouble`, a custom-type
+    /// requirement). One declaration per type, on the spec — both sides of every differential build
+    /// their values through the same factory.
+    ///
+    /// `key` is the synthesized seam key (`"<label>.<method>"`); **read every varying field through
+    /// `seams`, namespaced under it** — `seams.int("\(key).cents", default: 0)` — so the value is
+    /// recorded like any other seam, sweeps when a spec declares a domain for that field's key, and
+    /// replays identically. A factory that invents values outside the seams (a `Date()`, a random)
+    /// breaks replay determinism the same way any unseamed read does.
+    public func generates<T>(_ type: T.Type, _ make: @escaping (SeamContext, String) -> T) -> Spec<S> {
+        var copy = self
+        copy.valueMakers[ObjectIdentifier(type)] = { make($0, $1) }
         return copy
     }
 

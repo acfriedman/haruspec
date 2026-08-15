@@ -16,6 +16,14 @@ import XCTest
 protocol Metering: AnyObject {
     func record(value: Int)
     func threshold() -> Int
+    func tariff() -> Fee
+    func lastFee() -> Fee?
+    func history() -> [Int]
+}
+
+/// A custom return type — no universal zero, so the spec declares its factory (`.generates`).
+struct Fee: Equatable {
+    let cents: Int
 }
 
 protocol Gauge: AnyObject {
@@ -36,8 +44,17 @@ private final class MeteredGauge: Gauge {
 
     func add(value: Int) {
         meter.record(value: value)
+        // The custom returns steer behavior: the fee's cents ride the payload, the optional's absence
+        // takes a branch, the collection's emptiness another — all synthesized. Read unconditionally:
+        // a domain declared on a read the golden template never reaches is an unmatchedDomain gate.
+        let surcharge = value + meter.tariff().cents
+        let repeated = meter.lastFee() != nil || !meter.history().isEmpty
         if value > meter.threshold() {
-            center.post(name: .init("OverThreshold"), object: nil, userInfo: ["value": value])
+            center.post(
+                name: .init("OverThreshold"),
+                object: nil,
+                userInfo: ["value": surcharge, "repeated": repeated]
+            )
         }
     }
 }
@@ -53,8 +70,14 @@ private final class SilentGauge: Gauge {
     }
 
     func add(value: Int) {
+        let surcharge = value + meter.tariff().cents
+        let repeated = meter.lastFee() != nil || !meter.history().isEmpty
         if value > meter.threshold() {
-            center.post(name: .init("OverThreshold"), object: nil, userInfo: ["value": value])
+            center.post(
+                name: .init("OverThreshold"),
+                object: nil,
+                userInfo: ["value": surcharge, "repeated": repeated]
+            )
         }
     }
 }
@@ -67,6 +90,11 @@ final class TracedDoubleTests: XCTestCase {
                 Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
                     gauge.add(value: Int(value))
                 }
+            }
+            // The custom return's factory: every field a seam read under the synthesized key, so the
+            // fee is recorded, sweepable at "Meter.tariff.cents", and identical on both sides.
+            .generates(Fee.self) { seams, key in
+                Fee(cents: Int(seams.int("\(key).cents", default: 3)))
             }
         if sweepingThreshold {
             spec = spec.vary {
@@ -102,6 +130,34 @@ final class TracedDoubleTests: XCTestCase {
             verdict.qualification.seamPositions["Meter.threshold"] ?? 0,
             0,
             "the double's return is declared surface: recorded, varied, and reported like any seam"
+        )
+    }
+
+    func testACustomReturnComesFromTheDeclaredFactory() async {
+        // tariff() -> Fee has no zero: the .generates factory builds it from seam reads, so the
+        // surcharge lands in the payload deterministically. lastFee() -> Fee? defaults nil and
+        // history() -> [Int] defaults empty with no declaration at all — "repeated" stays false.
+        let verdict = await gauge().verify(against: { ctx in
+            MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+        })
+
+        XCTAssertEqual(verdict.verdict, .equivalent)
+    }
+
+    func testAFactoryFieldSweepsLikeAnyOtherSeam() async {
+        let verdict = await gauge()
+            .vary {
+                Seam("Meter.tariff.cents", .int(1 ... 9))
+            }
+            .verify(against: { ctx in
+                MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+            })
+
+        XCTAssertEqual(verdict.verdict, .equivalent)
+        XCTAssertGreaterThan(
+            verdict.qualification.seamPositions["Meter.tariff.cents"] ?? 0,
+            0,
+            "a custom return's field is declared surface — swept and reported like an op argument"
         )
     }
 

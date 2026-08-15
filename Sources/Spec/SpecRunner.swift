@@ -195,7 +195,7 @@ public extension Spec {
         // The SUT posts through a center that records, so a notification takes the same path and the
         // same recorder lookup as every other kind of event. There is no second mechanism.
         let center = RecordingNotificationCenter()
-        let context = SeamContext(notifications: center, cassette: cassette)
+        let context = SeamContext(notifications: center, cassette: cassette, makers: valueMakers)
         let system = make(context)
         // Task-locals are inherited across `await`, so binding once around the whole loop still
         // reaches an operation that suspends — which is what lets an op drive an actor.

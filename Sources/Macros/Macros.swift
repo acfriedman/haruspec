@@ -49,8 +49,17 @@ public macro Traced(_ typeLabel: String? = nil, timing: Bool = false) =
 /// the interaction at the boundary is the behavior a differential checks, and everything past it is
 /// fixture. A value-returning requirement reads the seam `"<label>.<method>"` — the type's zero by
 /// default, swept when a spec declares a domain for that key in `.vary`, recorded and replayed like
-/// any other seam. A return with no sensible zero is refused at expansion time: hand-write that
-/// double instead of shipping a bad default.
+/// any other seam. Collections return their genuine empty, and an optional custom type returns `nil`.
+///
+/// A *required* custom type has no universal zero, so the spec declares its factory once:
+///
+///     .generates(Receipt.self) { seams, key in
+///         Receipt(totalCents: Int(seams.int("\(key).totalCents", default: 0)))
+///     }
+///
+/// Every field read through `seams` under the synthesized key is recorded, domain-sweepable
+/// (`Seam("API.fetch.totalCents", .int(0 ... 99_999))`), and identical on replay. An undeclared
+/// required custom type traps fail-fast at the first call, naming the declaration to write.
 @attached(peer, names: prefixed(Traced))
 public macro TracedDouble(label: String, as generatedName: String? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedDoubleMacro")
