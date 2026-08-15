@@ -6,7 +6,7 @@ import HaruspecTrace
 import XCTest
 
 // Repro of the example-xcode-migration failure: a @TracedForwarder baseline over a legacy class,
-// diffed against a behaviorally-identical @Traced port, driven by the same ops + .observing(on: .default).
+// diffed against a behaviorally-identical @Traced port, driven by the same ops.
 // If the faithful port DIVERGES here, the bug is in the Haruspec mechanism (forwarder / capture), not the app.
 
 /// NSObject models with IUO-imported-style signatures — to exercise the same `objcObject` (KVC)
