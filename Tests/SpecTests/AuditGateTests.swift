@@ -35,6 +35,16 @@ private func makeBypassingLedger(_: SeamContext) -> AuditSubject {
     BypassingLedger()
 }
 
+/// A recording collaborator double whose *declaring file is this one* — which carries a deliberate
+/// `NotificationCenter.default` reach. That placement is the point of the scoping tests: an audit
+/// that reads collaborator sources gates the subject on this file; one scoped by `.injects` does not.
+@Traced("Announcer")
+final class RecordingAnnouncer: Announcing {
+    func announce(total: Int) {
+        _ = total
+    }
+}
+
 final class AuditGateTests: XCTestCase {
     /// The checkout the audit reads — this file is `<root>/Tests/SpecTests/AuditGateTests.swift`.
     private var packageRoot: URL {
@@ -144,6 +154,50 @@ final class AuditGateTests: XCTestCase {
             once.coverage.blindSpots.count,
             "re-auditing an audited verdict must not stack a second copy of its gaps"
         )
+    }
+
+    // MARK: - Subject vs collaborator (the audit's denominator)
+
+    private func announcingLedger() -> Spec<AuditSubject> {
+        Spec<AuditSubject>("audit.announcing-ledger")
+            .system { ctx in AnnouncingLedger(center: ctx.notifications, announcer: RecordingAnnouncer()) }
+            .operations {
+                Op("add") { ledger, seams in
+                    ledger.add(cents: Int(seams.int("cents", default: 500)))
+                }
+                Op("total") { _ = $0.total() }.last()
+            }
+            .vary {
+                Seam("cents", .int(1 ... 100))
+            }
+    }
+
+    func testAnInjectedCollaboratorsSourcesAreTheFixturesNotTheSubjects() async {
+        // The collaborator's declaring file carries a real bypass — but both sides call through the
+        // same double, and the interaction is recorded at its boundary. Declaring the label injected
+        // takes its sources out of the denominator entirely, so the subject reads audited-clean.
+        let verdict = await announcingLedger()
+            .injects("Announcer")
+            .verify(against: { ctx in AnnouncingLedger(center: ctx.notifications, announcer: RecordingAnnouncer()) })
+            .audited(against: packageRoot)
+
+        XCTAssertEqual(verdict.verdict, .equivalent)
+        XCTAssertEqual(verdict.qualification.blindSpots, [], "the fixture's file must not gate the subject")
+        XCTAssertFalse(
+            verdict.qualification.origins.contains { $0.label == "Announcer" },
+            "an injected label leaves the denominator, not just the findings"
+        )
+    }
+
+    func testAnUndeclaredCollaboratorStillGates() async {
+        // Without the declaration the audit over-reports — the safe direction. The exit is the
+        // one-line `.injects`, reviewable like every other declaration.
+        let verdict = await announcingLedger()
+            .verify(against: { ctx in AnnouncingLedger(center: ctx.notifications, announcer: RecordingAnnouncer()) })
+            .audited(against: packageRoot)
+
+        XCTAssertEqual(verdict.verdict, .cannotVerify)
+        XCTAssertEqual(verdict.qualification.blindSpots, ["NotificationCenter.default"])
     }
 
     // MARK: - The clean case, and what "clean" is allowed to mean

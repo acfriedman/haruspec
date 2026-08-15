@@ -70,3 +70,37 @@ func makeInjectedLedger(_ ctx: SeamContext) -> AuditSubject {
 func makeRestructuredLedger(_ ctx: SeamContext) -> AuditSubject {
     RestructuredLedger(center: ctx.notifications)
 }
+
+// MARK: - A subject with an injected collaborator
+
+/// What the ledger announces through — a collaborator boundary. The audit's question is where the
+/// *implementation* of this protocol lives, and whether its file is the subject's problem.
+protocol Announcing: AnyObject {
+    func announce(total: Int)
+}
+
+/// A subject that hands its announcements to an injected collaborator. This file stays clean: the
+/// call is recorded at the collaborator's boundary, and what the collaborator does past it is the
+/// fixture's business (see `AuditGateTests`, where the implementation deliberately lives in the
+/// bypass-carrying file).
+@Traced("Ledger")
+final class AnnouncingLedger: AuditSubject {
+    private let center: NotificationCenter
+    private let announcer: Announcing
+    private var cents = 0
+
+    init(center: NotificationCenter, announcer: Announcing) {
+        self.center = center
+        self.announcer = announcer
+    }
+
+    func add(cents: Int) {
+        self.cents += cents
+        center.post(name: .init("LedgerChanged"), object: nil, userInfo: ["total": self.cents])
+        announcer.announce(total: self.cents)
+    }
+
+    func total() -> Int {
+        cents
+    }
+}

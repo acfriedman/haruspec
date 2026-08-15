@@ -198,6 +198,9 @@ public struct Spec<S> {
     /// Channels the spec accepts as uncaptured for every candidate, via `.accepts(uncaptured:)` —
     /// merged into each verification's intent where the audit resolves declarations.
     var acceptedBlindSpots: [String] = []
+    /// Trace labels that are injected collaborators rather than the subject, via `.injects(_:)` —
+    /// excluded from the completeness audit's denominator.
+    var injectedLabels: Set<String> = []
     var exploreOrdering = false
     var maxOrderings = 100
     var orderingRepeats = 2
@@ -274,6 +277,24 @@ public struct Spec<S> {
     public func accepts(uncaptured channels: String...) -> Spec<S> {
         var copy = self
         copy.acceptedBlindSpots += channels
+        return copy
+    }
+
+    /// Name the trace labels this spec hands in as *collaborators* — recording doubles constructed in
+    /// `.system` and injected into the subject — so the completeness audit reads the subject's
+    /// sources and not the fixture's.
+    ///
+    /// The boundary argument: both sides of a differential call through the *same* double, and the
+    /// interaction is captured at that boundary (`Analytics.track`, with its arguments). What the
+    /// double does beyond it is held identical by construction, so a divergence cannot hide there —
+    /// auditing it would gate the verdict on the fixture's internals. The subject's own sources stay
+    /// in the denominator: a direct global post *there* routes around the recorder and still abstains.
+    ///
+    /// Undeclared, every traced label is audited — over-reporting is the safe direction, and the exit
+    /// is this one reviewable line.
+    public func injects(_ labels: String...) -> Spec<S> {
+        var copy = self
+        copy.injectedLabels.formUnion(labels)
         return copy
     }
 
