@@ -31,19 +31,39 @@ public struct Qualification: Codable, Sendable, Equatable {
     /// audit has not run — rendered as "not audited", never as an empty (clean) list. The audit card
     /// fills this in when it lands; until then the placeholder keeps the block from overstating.
     public let blindSpots: [String]?
+    /// Where the covered labels are declared, collected from the instrumentation as it ran (see
+    /// `TraceOrigin`). This is the audit's denominator made explicit: the files a completeness check
+    /// has to read, and — where `source` is nil — the reached behavior it structurally cannot read.
+    public let origins: [TraceOrigin]
 
     public init(
         coveredClasses: [String],
         operations: Int,
         probes: Int,
         seamPositions: [String: Int],
-        blindSpots: [String]?
+        blindSpots: [String]?,
+        origins: [TraceOrigin] = []
     ) {
         self.coveredClasses = coveredClasses
         self.operations = operations
         self.probes = probes
         self.seamPositions = seamPositions
         self.blindSpots = blindSpots
+        self.origins = origins
+    }
+
+    /// The same qualification with the origins one verification collected. Assembled here rather than
+    /// at `liveQualification` because the surface is resolved off the *golden* template, before a
+    /// candidate has run — and a candidate's sources are the ones a PR audit most needs to name.
+    func noting(origins: [TraceOrigin]) -> Qualification {
+        Qualification(
+            coveredClasses: coveredClasses,
+            operations: operations,
+            probes: probes,
+            seamPositions: seamPositions,
+            blindSpots: blindSpots,
+            origins: origins
+        )
     }
 }
 
@@ -55,6 +75,7 @@ extension SpecVerdict {
     var qualificationEntries: [(label: String, value: String)] {
         [
             (label: "covered", value: coveredEntry),
+            (label: "declared in", value: sourcesEntry),
             (label: "orderings", value: orderingsEntry),
             (label: "seams", value: seamsEntry),
             (label: "NOT seen", value: blindSpotEntry),
@@ -67,6 +88,7 @@ extension SpecVerdict {
     var qualificationReportLines: [String] {
         [
             "  covered: \(coveredEntry)",
+            "  declared in: \(sourcesEntry)",
             "  seams: \(seamsEntry)",
             "  blind spots: \(blindSpotEntry)"
         ]
@@ -79,6 +101,19 @@ extension SpecVerdict {
         let ops = qualification.operations
         let probes = qualification.probes
         return "\(classes) — \(ops) op\(ops == 1 ? "" : "s") · \(probes) probe\(probes == 1 ? "" : "s")"
+    }
+
+    /// Which sources the covered labels came from — grouped by label, because the interesting case is
+    /// exactly the one that made a name search useless: several declarations answering to one label.
+    private var sourcesEntry: String {
+        guard !qualification.origins.isEmpty else {
+            return "unregistered — no instrumented method ran under capture"
+        }
+        let byLabel = Dictionary(grouping: qualification.origins, by: \.label)
+        return byLabel.keys.sorted().map { label in
+            "\(label) ← \(byLabel[label, default: []].map(\.declarationEntry).joined(separator: ", "))"
+        }
+        .joined(separator: " · ")
     }
 
     private var orderingsEntry: String {

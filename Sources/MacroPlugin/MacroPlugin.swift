@@ -29,7 +29,14 @@ public struct TracedMacro: MemberAttributeMacro {
 
         let typeLabel = stringArgument(of: node) ?? typeName(of: declaration) ?? "Unknown"
         let timed = (boolArgument(of: node, name: "timing") ?? false) || hasAttribute(function, named: "Timed")
-        return ["@TracedMethod(\(literal: typeLabel), timed: \(raw: timed ? "true" : "false"))"]
+        // `declaredBy` is the *concrete* type, which the label deliberately isn't: `@Traced("Cart")` can
+        // sit on `SwiftCartActor`, and two ports can share one label. Only this macro sees both, so it
+        // hands the type down to the body macro, which pairs it with the file (see `TraceOrigin`).
+        let declaredBy = typeName(of: declaration) ?? typeLabel
+        return ["""
+        @TracedMethod(\(literal: typeLabel), timed: \(raw: timed ? "true" : "false"), \
+        declaredBy: \(literal: declaredBy))
+        """]
     }
 }
 
@@ -57,7 +64,7 @@ public struct TracedMethodMacro: BodyMacro {
     public static func expansion(
         of node: AttributeSyntax,
         providingBodyFor declaration: some DeclSyntaxProtocol & WithOptionalCodeBlockSyntax,
-        in _: some MacroExpansionContext
+        in context: some MacroExpansionContext
     ) throws -> [CodeBlockItemSyntax] {
         guard let function = declaration.as(FunctionDeclSyntax.self) else { return [] }
 
@@ -66,11 +73,21 @@ public struct TracedMethodMacro: BodyMacro {
         // The instrumented work is the method's own statements, run inside the `__oracleBody` shim.
         let original = function.body?.statements.description ?? ""
 
+        // The *method's* location, not the type's: a type split across extensions registers each file
+        // it actually declares behavior in, which is precisely what an audit has to read.
+        let file = context.location(of: declaration, at: .afterLeadingTrivia, filePathMode: .fileID)?
+            .file.trimmedDescription
+
         let body = tracedBody(
             function: function,
             label: "\(typeLabel).\(function.name.text)",
             innerBody: original,
-            timed: timed
+            timed: timed,
+            origin: originArguments(
+                label: typeLabel,
+                symbol: stringArgument(of: node, name: "declaredBy"),
+                sourceExpression: file
+            )
         )
 
         // Instrument only under #if DEBUG, so `@Traced` can sit on a type that ships. Release keeps
@@ -93,11 +110,19 @@ public struct TracedMethodMacro: BodyMacro {
 /// Both the baseline (`@Traced`, `innerBody` = the method's own statements) and the port
 /// (`@TracedForwarder`, `innerBody` = a `__wrapped.<method>(…)` forwarding call) run this one emitter,
 /// so their instrumentation stays byte-for-byte aligned and their traces diff cleanly.
+/// The `noteOrigin` argument list an instrumented body registers itself with. `sourceExpression` is
+/// already a Swift expression — a `#fileID` string literal from the expansion context, or nil where the
+/// behavior has no Swift source to point at.
+private func originArguments(label: String, symbol: String?, sourceExpression: String?) -> String {
+    "\(literalString(label)), symbol: \(symbol.map(literalString) ?? "nil"), source: \(sourceExpression ?? "nil")"
+}
+
 private func tracedBody(
     function: FunctionDeclSyntax,
     label rawLabel: String,
     innerBody: String,
-    timed: Bool
+    timed: Bool,
+    origin: String
 ) -> String {
     let label = literalString(rawLabel)
 
@@ -128,6 +153,7 @@ private func tracedBody(
 
     var lines: [String] = [
         "let __oracle = TraceContext.active",
+        "__oracle?.noteOrigin(\(origin))",
         "__oracle?.call(\(label), subject: self\(callArgs))",
         "\(nestedSignature) { \(innerBody)",
         "}"
@@ -217,7 +243,7 @@ public struct TracedForwarderMacro: PeerMacro {
                 if isStaticOrClass(function.modifiers) {
                     continue
                 }
-                members.append(forwardingMethod(function, label: label))
+                members.append(forwardingMethod(function, label: label, wrapping: wrapping))
             } else if let variable = decl.as(VariableDeclSyntax.self) {
                 if isStaticOrClass(variable.modifiers) {
                     continue
@@ -245,7 +271,11 @@ public struct TracedForwarderMacro: PeerMacro {
     }
 
     /// One traced forwarding method: same signature as the requirement, body forwards to `__wrapped`.
-    private static func forwardingMethod(_ function: FunctionDeclSyntax, label: String) -> String {
+    private static func forwardingMethod(
+        _ function: FunctionDeclSyntax,
+        label: String,
+        wrapping: String
+    ) -> String {
         // Forward each parameter under its external argument label (dropping `_`), passing the value
         // by internal name — reproducing the imported call, IUOs and all, with no unwrap.
         let forwarded = function.signature.parameterClause.parameters.map { param -> String in
@@ -262,11 +292,16 @@ public struct TracedForwarderMacro: PeerMacro {
         let isVoid = returnType == nil || returnType == "Void" || returnType == "()"
         let innerBody = isVoid ? call : "return \(call)"
 
+        // No `source:`. The generated forwarder does live in the protocol's file, but the *behavior*
+        // lives in the Obj-C class it wraps — pointing an audit at the pasted-interface file would
+        // read as "audited" while the code that can bypass a channel was never opened. The wrapped
+        // type name is what a reader (or a later Obj-C path) has to go on.
         let body = tracedBody(
             function: function,
             label: "\(label).\(function.name.text)",
             innerBody: innerBody,
-            timed: false
+            timed: false,
+            origin: originArguments(label: label, symbol: wrapping, sourceExpression: nil)
         )
         let generics = function.genericParameterClause?.trimmedDescription ?? ""
         let whereClause = function.genericWhereClause.map { " \($0.trimmedDescription)" } ?? ""

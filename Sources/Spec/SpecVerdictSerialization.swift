@@ -32,8 +32,9 @@ public enum SpecVerdictError: Error, Equatable, CustomStringConvertible {
 public extension SpecVerdict {
     /// The one verdict schema this engine writes and renders. Version 1 introduced the stamp itself
     /// together with the qualification block (and `Exploration`'s boundary-edge fields) — an
-    /// unstamped artifact predates all three.
-    static let supportedSchemaVersion = 1
+    /// unstamped artifact predates all three. Version 2 added the qualification's `origins`: where the
+    /// covered labels are declared, which a version-1 artifact cannot supply and must not pretend to.
+    static let supportedSchemaVersion = 2
 
     static func canonicalEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()

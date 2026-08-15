@@ -34,12 +34,25 @@ public final class TraceRecorder: @unchecked Sendable {
     /// Mirror intervals to Instruments too, so the same run is inspectable with Apple tooling.
     private let signposter = OSSignposter(subsystem: "com.haruspec.trace", category: "interval")
 
+    /// The audit's source map for this capture, picked up from the ambient binding (see `TraceOrigins`).
+    /// Held here rather than looked up per call because a traced method can run on a thread with no
+    /// task — the same reason `TraceContext` keeps a thread-local beside its task-local.
+    private let origins: OriginCollector?
+
     public init(name: String, clock: TraceClock = WallClock()) {
         self.name = name
         self.clock = clock
+        origins = TraceOrigins.collector
     }
 
     // MARK: - Public recording API
+
+    /// Register where a traced label is declared. Emitted by `@Traced`/`@TracedForwarder` into every
+    /// instrumented body, so a label registers exactly when it is reached under capture. Cheap when
+    /// nothing is collecting (a nil check), and idempotent — the collector is a set.
+    public func noteOrigin(_ label: String, symbol: String? = nil, source: String? = nil) {
+        origins?.note(TraceOrigin(label: label, symbol: symbol, source: source))
+    }
 
     /// Record a function/method entry. Increments call-nesting depth.
     public func call(
