@@ -37,28 +37,33 @@ public extension Spec {
 
     /// The whole body of a migration test case: verify this build, print its report, and throw unless it
     /// earned `expected`. The test asserts nothing itself, because there is nothing left to decide.
+    /// Returned (discardably) so a test can additionally pin what rode along with the verdict — a
+    /// qualification line, a declared blind spot — without running the campaign twice.
+    @discardableResult
     func check(
         _ name: String,
         expecting expected: TraceDiff.Verdict = .equivalent,
         declaring intent: Intent = .none,
         reportsIn directory: URL? = nil,
         _ make: @escaping (SeamContext) -> S
-    ) async throws {
-        try await verify(name, expecting: expected, declaring: intent, reportsIn: directory, make)
-            .check(in: self.name)
+    ) async throws -> SpecVerdict {
+        let candidate = await verify(name, expecting: expected, declaring: intent, reportsIn: directory, make)
+        try candidate.check(in: self.name)
+        return candidate.verdict
     }
 }
 
 public extension SpecProviding {
     /// Verify one build against this declaration's baseline and throw unless it earned `expected` —
     /// the whole body of a migration test case, called on the spec type itself.
+    @discardableResult
     func check(
         _ name: String,
         expecting expected: TraceDiff.Verdict = .equivalent,
         declaring intent: Intent = .none,
         reportsIn directory: URL? = nil,
         _ make: @escaping (SeamContext) -> System
-    ) async throws {
+    ) async throws -> SpecVerdict {
         try await spec.check(name, expecting: expected, declaring: intent, reportsIn: directory, make)
     }
 }
