@@ -244,6 +244,10 @@ public struct Spec<S> {
     /// Total differential runs this spec may spend, declared via `Budget(runs:)`. `nil` lets each axis
     /// take its own size (`maxOrderings` × `SpecDefaults.variantCount`).
     var explorationBudget: Int?
+    /// Op-scoped keys whose domains the engine supplied rather than the author — set by
+    /// `.operations(derivedFrom:)`, rendered on every verdict so a green from a defaulted surface
+    /// says so.
+    var derivedDefaultSeams: Set<String> = []
 
     public init(_ name: String) {
         self.name = name
@@ -263,8 +267,15 @@ public struct Spec<S> {
     /// the declared surface. Order between `.operations` and `.vary` doesn't matter — both write the
     /// same dictionary, and a collision between the two traps rather than letting one silently win.
     public func operations(@OperationsBuilder<S> _ build: () -> [Op<S>]) -> Spec<S> {
+        adopting(build())
+    }
+
+    /// The one merge for an op list, authored or derived: fold each op's declared argument domains,
+    /// generated-model fields, and factories into the spec, with the collision rules that keep a key
+    /// from being defined twice.
+    func adopting(_ ops: [Op<S>]) -> Spec<S> {
         var copy = self
-        copy.operations = build()
+        copy.operations = ops
         for operation in copy.operations {
             for argument in operation.argumentDomains {
                 precondition(

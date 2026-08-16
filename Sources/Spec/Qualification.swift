@@ -35,6 +35,11 @@ public struct Qualification: Codable, Sendable, Equatable {
     /// `TraceOrigin`). This is the audit's denominator made explicit: the files a completeness check
     /// has to read, and — where `source` is nil — the reached behavior it structurally cannot read.
     public let origins: [TraceOrigin]
+    /// Seams whose domains the engine defaulted (`.operations(derivedFrom:)`) rather than the author
+    /// declared. Rendered per seam, so a green over a defaulted surface says so — the honesty line
+    /// that makes derived specs safe to offer. `nil` on verdicts serialized before the field existed;
+    /// rendering treats that as none.
+    public let derivedDefaults: [String]?
 
     public init(
         coveredClasses: [String],
@@ -42,7 +47,8 @@ public struct Qualification: Codable, Sendable, Equatable {
         probes: Int,
         seamPositions: [String: Int],
         blindSpots: [String]?,
-        origins: [TraceOrigin] = []
+        origins: [TraceOrigin] = [],
+        derivedDefaults: [String]? = nil
     ) {
         self.coveredClasses = coveredClasses
         self.operations = operations
@@ -50,6 +56,7 @@ public struct Qualification: Codable, Sendable, Equatable {
         self.seamPositions = seamPositions
         self.blindSpots = blindSpots
         self.origins = origins
+        self.derivedDefaults = derivedDefaults
     }
 
     /// The same qualification with the origins one verification collected. Assembled here rather than
@@ -62,7 +69,8 @@ public struct Qualification: Codable, Sendable, Equatable {
             probes: probes,
             seamPositions: seamPositions,
             blindSpots: blindSpots,
-            origins: origins
+            origins: origins,
+            derivedDefaults: derivedDefaults
         )
     }
 
@@ -75,7 +83,8 @@ public struct Qualification: Codable, Sendable, Equatable {
             probes: probes,
             seamPositions: seamPositions,
             blindSpots: blindSpots,
-            origins: origins
+            origins: origins,
+            derivedDefaults: derivedDefaults
         )
     }
 }
@@ -145,11 +154,16 @@ extension SpecVerdict {
         guard !qualification.seamPositions.isEmpty else {
             return "none declared — no seam value was varied"
         }
+        let derived = Set(qualification.derivedDefaults ?? [])
         var text = qualification.seamPositions.sorted { $0.key < $1.key }
             .map { seam, positions in
-                positions == 0
-                    ? "\(seam) (declared, never read)"
-                    : "\(seam) (\(positions) position\(positions == 1 ? "" : "s"))"
+                var notes = positions == 0
+                    ? ["declared, never read"]
+                    : ["\(positions) position\(positions == 1 ? "" : "s")"]
+                if derived.contains(seam) {
+                    notes.append("derived default")
+                }
+                return "\(seam) (\(notes.joined(separator: " · ")))"
             }
             .joined(separator: ", ")
         let scheduled = exploration.boundaryEdgesScheduled
@@ -193,12 +207,15 @@ extension Spec {
             operations: operations.count,
             probes: exploration.runs,
             seamPositions: seamPositions(in: golden.tracks, varied: seamDomains.keys),
-            blindSpots: nil
+            blindSpots: nil,
+            derivedDefaults: derivedDefaultSeams.sorted()
         )
     }
 
     /// The replay qualification: the plan already pins the surface — classes, varied seams, and the
     /// golden template all come from it, so the block describes what was recorded, not a re-derivation.
+    /// The replay qualification: the plan already pins the surface, and derived-ness comes from the
+    /// spec value itself — specs are code, present at replay, so nothing is stored to drift.
     func replayQualification(of plan: SpecPlan, operations: Int, probes: Int) -> Qualification {
         Qualification(
             coveredClasses: plan.coveredClasses,
@@ -208,7 +225,8 @@ extension Spec {
                 in: plan.probes.first?.cassette.tracks ?? [:],
                 varied: plan.variedSeams
             ),
-            blindSpots: nil
+            blindSpots: nil,
+            derivedDefaults: derivedDefaultSeams.sorted()
         )
     }
 }

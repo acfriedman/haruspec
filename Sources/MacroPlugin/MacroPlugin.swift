@@ -556,6 +556,7 @@ struct Plugin: CompilerPlugin {
         TimedMarkerMacro.self,
         TracedForwarderMacro.self,
         TracedDoubleMacro.self,
+        DerivedOpsMacro.self,
         SeamedMacro.self,
         SeamedMethodMacro.self
     ]

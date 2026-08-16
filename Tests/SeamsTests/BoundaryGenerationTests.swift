@@ -55,6 +55,57 @@ final class BoundaryGenerationTests: XCTestCase {
         XCTAssertEqual(edges, [.string("SAVE10"), .string("save10"), .string("NOPE")])
     }
 
+    // MARK: - Magnitude ladders (the undeclared-value domain)
+
+    func testAMagnitudeDomainLaddersEveryDecadeRolloverBothSigns() {
+        let edges = SeamDomain.intMagnitudes(-10000 ... 10000).boundaryValues
+
+        // Zero and ±1 lead (the guard-clause cluster); each rollover carries a step either side;
+        // ascending, so a trimmed budget drops the large magnitudes and keeps the small.
+        XCTAssertEqual(
+            Array(edges.prefix(9)),
+            [.int(0), .int(1), .int(-1), .int(9), .int(10), .int(11), .int(-9), .int(-10), .int(-11)]
+        )
+        XCTAssertTrue(edges.contains(.int(9999)) && edges.contains(.int(-9999)))
+        XCTAssertTrue(edges.contains(.int(10000)) && edges.contains(.int(-10000)))
+        XCTAssertFalse(edges.contains(.int(10001)), "nothing outside the declared span")
+    }
+
+    func testAnUnsignedMagnitudeDomainHasNoNegativeSide() {
+        let edges = SeamDomain.intMagnitudes(0 ... 100).boundaryValues
+
+        XCTAssertEqual(edges, [.int(0), .int(1), .int(9), .int(10), .int(11), .int(99), .int(100)])
+    }
+
+    func testADoubleMagnitudeDomainLaddersFractionalDecades() {
+        let edges = SeamDomain.doubleMagnitudes(-1000 ... 1000).boundaryValues
+
+        XCTAssertTrue(edges.contains(.double(0.001)) && edges.contains(.double(-0.001)))
+        XCTAssertTrue(edges.contains(.double(1000)) && edges.contains(.double(-1000)))
+        XCTAssertEqual(edges.first, .double(0))
+    }
+
+    func testMagnitudeSamplingStaysInRangeAndVisitsSmallAndLargeDecades() {
+        var rng = SplitMix64(seed: 7)
+        var small = 0, large = 0
+        for _ in 0 ..< 200 {
+            guard case let .int(value) = SeamDomain.intMagnitudes(-10000 ... 10000).sample(using: &rng) else {
+                return XCTFail("an int domain samples ints")
+            }
+            XCTAssertTrue((-10000 ... 10000).contains(value))
+            if abs(value) < 10 {
+                small += 1
+            }
+            if abs(value) >= 1000 {
+                large += 1
+            }
+        }
+        // Log-uniform: the smalls arrive as a real share, which uniform sampling over ±10k never
+        // gives them (expected ~5 of 200 uniform; a decade-first draw yields ~40).
+        XCTAssertGreaterThan(small, 10, "small magnitudes must be a real share of the fill")
+        XCTAssertGreaterThan(large, 10, "large magnitudes too")
+    }
+
     // MARK: - The schedule
 
     func testTheFirstVariantsAreTheEdgesInOrder() {

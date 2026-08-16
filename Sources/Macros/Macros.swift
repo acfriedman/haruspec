@@ -137,6 +137,40 @@ public macro TracedForwarder(
 ) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedForwarderMacro")
 
+/// Derive a spec's op catalog from the boundary protocol — the mechanical two-thirds of an
+/// `.operations` block (method bindings, type-heuristic domains) generated so only the semantic
+/// residue is authored.
+///
+///     @DerivedOps
+///     protocol Cart: AnyObject {
+///         func add(_ product: Product!, quantity: Int) async
+///         func applyPromo(_ code: String!) async -> Bool
+///         func checkout() async -> Receipt!
+///     }
+///     // → enum DerivedCart: one DerivedOp per requirement
+///
+///     Spec<Cart>("cart").system { … }.operations(derivedFrom: DerivedCart.self) {
+///         Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
+///         Amend("checkout").last()
+///     }
+///
+/// The heuristics: numeric parameters default to a magnitude ladder (`SeamDomain.intMagnitudes` /
+/// `.doubleMagnitudes` — decade boundaries ±1 as scheduled edges, log-uniform random fill, negatives
+/// included, spans width-fitted per type); `Bool` defaults to both values; every derived op repeats
+/// `0 ... 3` so op *absence* is explored; return values are discarded (the trace is what a
+/// differential compares). Domains the engine defaulted are marked "derived default" on every verdict.
+///
+/// What is deliberately *not* derived: a `String` parameter is pending — its interesting values are
+/// magic ("SAVE10"), and a random default would sweep only the nothing-matches branch — so an
+/// unresolved one traps at spec construction naming the declaration to write. A custom-typed
+/// parameter maps to `.generated(T.self)` and requires the model's `SeamGenerated` conformance (the
+/// compile error is the prompt to write one). Ordering constraints are never derived: an "invalid"
+/// ordering is a valid differential probe, so `.after`/`.last` stay authored. Property, `static`,
+/// and generic requirements are skipped — replace those with authored `Op`s if they matter.
+@attached(peer, names: prefixed(Derived))
+public macro DerivedOps() =
+    #externalMacro(module: "HaruspecMacroPlugin", type: "DerivedOpsMacro")
+
 // MARK: - @Seamed (un-injected reach)
 
 /// Route a type's **un-injected** nondeterminism through the harness. Legacy code that calls a bare

@@ -126,6 +126,23 @@ enum SpecDefaults {
     /// How many times the sampler revisits every shape. Each pass draws at most one ordering per shape,
     /// so this bounds the work when most shapes are exhausted and the budget still isn't spent.
     static let shapePasses = 8
+    /// The span a derived integer argument fuzzes over (`SeamDomain.intMagnitudes`): four decades,
+    /// both signs — nothing was declared about the value, so every magnitude is a hypothesis and
+    /// negatives are probes like any other (a divergence on `-1` is a finding, not noise). Narrow
+    /// widths get the span their type can represent: the emitted conversions trap on overflow, so
+    /// the domain must never claim a value the parameter cannot take.
+    static let derivedIntSpan: ClosedRange<Int64> = -10000 ... 10000
+    /// `Int8`-safe (±127) and `UInt8`-safe (0–255) clips of the same ladder.
+    static let derivedTinyIntSpan: ClosedRange<Int64> = -100 ... 100
+    static let derivedUnsignedSpan: ClosedRange<Int64> = 0 ... 10000
+    static let derivedUnsignedTinySpan: ClosedRange<Int64> = 0 ... 100
+    /// The derived `Double` span (`SeamDomain.doubleMagnitudes`): decades from per-mille to a
+    /// thousand, both signs — fractional magnitudes included because rates and factors live there.
+    static let derivedDoubleSpan: ClosedRange<Double> = -1000 ... 1000
+    /// How many times a derived op appears per sequence. A *range from zero*, because absence is what
+    /// reaches the states a fixed count never does (a checkout on an empty cart) — the same reasoning
+    /// as `.repeating(0 ... n)`, applied as the default rather than the exception.
+    static let derivedRepetition: ClosedRange<Int> = 0 ... 3
 }
 
 // MARK: - The resolved plan

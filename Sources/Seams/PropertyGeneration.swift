@@ -63,6 +63,18 @@ public enum SeamDomain: Sendable {
     /// values are named rather than ranged (a promo code that is sometimes valid, a status string,
     /// an enum's raw values). Prefer the `oneOf` sugar below, which rejects an empty set.
     case anyOf([CanonicalValue])
+    /// A decade-stratified span — the domain for a value *nothing* was declared about, so the
+    /// interesting magnitudes are unknown and every decade is a hypothesis. Boundary values ladder
+    /// the magnitude transitions (`0, ±1, ±9/10/11, ±99/100/101, …`) where off-by-one and
+    /// digit-rollover bugs live, and random fill is log-uniform — a decade first, then a value
+    /// within it — so small values arrive as often as large ones (uniform over a wide span almost
+    /// never draws the smalls, which is where code actually branches). Distinct from `.int` on
+    /// purpose: an authored range is a declared judgment about which values matter, and it keeps
+    /// its author's edge schedule.
+    case intMagnitudes(ClosedRange<Int64>)
+    /// The floating-point counterpart: decades extend *below* one (`±0.001 …`) because fractional
+    /// magnitudes — rates, factors — are where doubles branch.
+    case doubleMagnitudes(ClosedRange<Double>)
 
     func sample(using rng: inout SplitMix64) -> CanonicalValue {
         switch self {
@@ -71,8 +83,51 @@ public enum SeamDomain: Sendable {
         case let .anyOf(values):
             // Non-empty by construction via `oneOf`; a hand-built empty set has nothing to vary.
             values.isEmpty ? .null : values[Int(UInt64.random(in: 0 ..< UInt64(values.count), using: &rng))]
+        case let .intMagnitudes(range):
+            .int(Self.logUniform(in: range, using: &rng))
+        case let .doubleMagnitudes(range):
+            .double(Self.logUniform(in: range, using: &rng))
         }
     }
+
+    /// Log-uniform integer draw: decade first (0–9 counts as the first), then uniform within it,
+    /// sign uniform where the range admits one, clamped into the range.
+    private static func logUniform(in range: ClosedRange<Int64>, using rng: inout SplitMix64) -> Int64 {
+        let limit = Swift.max(range.upperBound, -range.lowerBound)
+        var decadeFloors: [Int64] = [0]
+        var floor: Int64 = 10
+        while floor <= limit {
+            decadeFloors.append(floor)
+            guard floor <= limit / 10 else { break }
+            floor *= 10
+        }
+        let chosen = decadeFloors[Int(UInt64.random(in: 0 ..< UInt64(decadeFloors.count), using: &rng))]
+        let ceiling = Swift.min(chosen == 0 ? 9 : chosen * 10 - 1, limit)
+        var value = Int64.random(in: chosen ... Swift.max(chosen, ceiling), using: &rng)
+        if range.lowerBound < 0, Bool.random(using: &rng) {
+            value = -value
+        }
+        return Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
+    }
+
+    /// Log-uniform double draw over `smallestMagnitude … span`, sign uniform where admitted. Zero
+    /// arrives via the boundary schedule, not the fill.
+    private static func logUniform(in range: ClosedRange<Double>, using rng: inout SplitMix64) -> Double {
+        let limit = Swift.max(range.upperBound, -range.lowerBound)
+        let exponent = Double.random(
+            in: log10(SeamDomain.smallestDoubleMagnitude) ... log10(Swift.max(limit, 1)),
+            using: &rng
+        )
+        var value = pow(10, exponent)
+        if range.lowerBound < 0, Bool.random(using: &rng) {
+            value = -value
+        }
+        return Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
+    }
+
+    /// Where the fractional decade ladder bottoms out: per-mille scale, below which differences
+    /// stop being distinguishable through the tolerance layer anyway.
+    static let smallestDoubleMagnitude = 0.001
 }
 
 public extension SeamDomain {
@@ -102,6 +157,31 @@ public extension SeamDomain {
             return orderedUnique(values.map(CanonicalValue.double))
         case let .anyOf(values):
             return orderedUnique(values)
+        case let .intMagnitudes(range):
+            // Zero and ±1 first (the guard-clause cluster), then each decade rollover with one step
+            // either side, ascending — so a trimmed budget drops the large magnitudes, not the small.
+            var ladder: [Int64] = [0, 1, -1]
+            var boundary: Int64 = 10
+            let limit = Swift.max(range.upperBound, -range.lowerBound)
+            while boundary <= limit {
+                ladder += [boundary - 1, boundary, boundary + 1]
+                ladder += [-(boundary - 1), -boundary, -(boundary + 1)]
+                guard boundary <= limit / 10 else { break }
+                boundary *= 10
+            }
+            ladder += [range.lowerBound, range.upperBound]
+            return orderedUnique(ladder.filter(range.contains).map(CanonicalValue.int))
+        case let .doubleMagnitudes(range):
+            // Every power of ten in span, both signs, fractional decades included.
+            var ladder: [Double] = [0]
+            var magnitude = SeamDomain.smallestDoubleMagnitude
+            let limit = Swift.max(range.upperBound, -range.lowerBound)
+            while magnitude <= limit {
+                ladder += [magnitude, -magnitude]
+                magnitude *= 10
+            }
+            ladder += [range.lowerBound, range.upperBound]
+            return orderedUnique(ladder.filter(range.contains).map(CanonicalValue.double))
         }
     }
 
