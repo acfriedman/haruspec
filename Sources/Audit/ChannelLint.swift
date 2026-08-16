@@ -90,6 +90,22 @@ public struct ChannelLint: Sendable {
         ChannelRule(
             channel: "delayed dispatch",
             spellings: ["dispatch_after", "asyncAfter("]
+        ),
+        // Position decides: a typed context *parameter* is the injection point doing its job (the
+        // green path once persistence is handed in); the same names as a receiver, a local, or a
+        // chain off the app delegate are state leaving through a store nothing records.
+        ChannelRule(
+            channel: "Core Data",
+            spellings: [
+                "NSManagedObjectContext",
+                "NSPersistentContainer",
+                "NSEntityDescription",
+                "NSFetchRequest",
+                "persistentContainer",
+                "ModelContext",
+                "ModelContainer"
+            ],
+            positionDecides: true
         )
     ]
 

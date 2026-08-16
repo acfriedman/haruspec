@@ -204,6 +204,49 @@ final class ChannelLintTests: XCTestCase {
         XCTAssertEqual(report.findings.map(\.file), ["App/Discounts.m"])
     }
 
+    func testADirectManagedObjectContextReachIsACoreDataBypass() throws {
+        try write(
+            """
+            @implementation CartManager
+            - (void)archiveOrder {
+                NSManagedObjectContext *context = delegate.persistentContainer.viewContext;
+                [context save:NULL];
+            }
+            @end
+            """,
+            to: "App/CartManager.m"
+        )
+
+        let report = audit([TraceOrigin(label: "Cart", symbol: "CartManager")])
+
+        XCTAssertFalse(report.isClean)
+        XCTAssertEqual(report.blindSpots, ["Core Data"], "state leaving through a store nothing records")
+    }
+
+    func testAnInjectedContextParameterIsNotACoreDataBypass() throws {
+        // The green path: persistence handed in at an injection point the harness can override.
+        try write(
+            """
+            @implementation CartManager
+            - (instancetype)initWithContext:(NSManagedObjectContext *)context {
+                _context = context;
+                return self;
+            }
+            @end
+            """,
+            to: "App/CartManager.m"
+        )
+
+        let report = audit([TraceOrigin(label: "Cart", symbol: "CartManager")])
+
+        XCTAssertTrue(report.isClean, report.blindSpots.joined(separator: ", "))
+        XCTAssertEqual(
+            report.findings.map(\.use),
+            [.injectableDefault],
+            "reported for review, gating nothing — the parameter is the injection point"
+        )
+    }
+
     func testEachFileIsReadOnceEvenWhenSeveralLabelsShareIt() throws {
         try write(
             """
