@@ -89,6 +89,19 @@ final class AuditGateTests: XCTestCase {
         )
     }
 
+    func testASpecLevelAcceptanceReachesAnExplicitAudit() async {
+        // The declaration lives on the spec; the audit is invoked explicitly on the returned verdict.
+        // The two audit paths (env-driven inside the verify, explicit afterwards) must resolve the
+        // same acceptances, so the acceptance rides the verdict to wherever the audit happens.
+        let verdict = await ledger(system: makeBypassingLedger)
+            .accepts(uncaptured: "NotificationCenter.default")
+            .verify(against: makeBypassingLedger)
+            .audited(against: packageRoot)
+
+        XCTAssertEqual(verdict.verdict, .equivalent, "a declared channel does not gate\n\(verdict.report())")
+        XCTAssertEqual(verdict.qualification.blindSpots, ["NotificationCenter.default (declared)"])
+    }
+
     func testADeclaredBlindSpotReturnsToGreenAndStaysNamed() async {
         let verdict = await ledger(system: makeBypassingLedger)
             .verify(against: makeBypassingLedger)

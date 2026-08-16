@@ -35,6 +35,11 @@ public struct SpecVerdict: Codable, Sendable {
     /// How the verdict behaved across repeated replays. `.singleRun` where repetition never happened
     /// (the live differential, a one-pass replay) — reported as unmeasured, never as reproduced.
     public let stability: Stability
+    /// Channels the spec and check site declared acceptable as uncaptured, carried on the verdict so
+    /// *every* audit path resolves the same declarations — the env-driven audit inside a verify and
+    /// an explicit `audited(against:)` afterwards must not disagree. `nil` on artifacts recorded
+    /// before the field existed; treated as none declared.
+    public let acceptedBlindSpots: [String]?
 
     public init(
         schemaVersion: Int = SpecVerdict.supportedSchemaVersion,
@@ -45,7 +50,8 @@ public struct SpecVerdict: Codable, Sendable {
         exploration: Exploration,
         qualification: Qualification,
         violatedPreconditions: [String]? = nil,
-        stability: Stability = .singleRun
+        stability: Stability = .singleRun,
+        acceptedBlindSpots: [String]? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.result = result
@@ -56,6 +62,7 @@ public struct SpecVerdict: Codable, Sendable {
         self.qualification = qualification
         self.violatedPreconditions = violatedPreconditions
         self.stability = stability
+        self.acceptedBlindSpots = acceptedBlindSpots
     }
 
     /// The resolved verdict, with stability applied above coverage: disagreeing replays flip *any*
@@ -195,7 +202,12 @@ public extension Spec {
         // The SUT posts through a center that records, so a notification takes the same path and the
         // same recorder lookup as every other kind of event. There is no second mechanism.
         let center = RecordingNotificationCenter()
-        let context = SeamContext(notifications: center, cassette: cassette, makers: valueMakers)
+        let context = SeamContext(
+            notifications: center,
+            cassette: cassette,
+            makers: valueMakers,
+            resourceMakers: specResourceMakers
+        )
         let system = make(context)
         // Task-locals are inherited across `await`, so binding once around the whole loop still
         // reaches an operation that suspends — which is what lets an op drive an actor.

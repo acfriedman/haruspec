@@ -79,6 +79,63 @@ final class SwiftKiosk: Kiosk {
     }
 }
 
+/// A capture resource: infrastructure the subject runs on — the engine-side stand-in for an
+/// isolated in-memory store. Not a boundary; state in it is observed through `tally()`.
+final class TallyBook {
+    var rows: [Int] = []
+}
+
+/// A baseline whose behavior *is* its interaction with injected state — the persistence-bearing
+/// subject shape, scaled down.
+final class RegisterManager {
+    private let book: TallyBook
+    private let center: NotificationCenter
+
+    init(book: TallyBook, center: NotificationCenter) {
+        self.book = book
+        self.center = center
+    }
+
+    func punch(amount: Int) {
+        book.rows.append(max(0, amount))
+    }
+
+    func tally() -> Int {
+        let total = book.rows.reduce(0, +)
+        center.post(name: .init("RegisterDidTally"), object: nil, userInfo: ["total": total])
+        return total
+    }
+}
+
+@DerivedOps
+@TracedForwarder(wrapping: RegisterManager.self, label: "Register")
+protocol Register: AnyObject {
+    init(book: TallyBook, center: NotificationCenter)
+    func punch(amount: Int)
+    func tally() -> Int
+}
+
+@Traced("Register")
+final class SwiftRegister: Register {
+    private let book: TallyBook
+    private let center: NotificationCenter
+
+    init(book: TallyBook, center: NotificationCenter) {
+        self.book = book
+        self.center = center
+    }
+
+    func punch(amount: Int) {
+        book.rows.append(max(0, amount))
+    }
+
+    func tally() -> Int {
+        let total = book.rows.reduce(0, +)
+        center.post(name: .init("RegisterDidTally"), object: nil, userInfo: ["total": total])
+        return total
+    }
+}
+
 final class DerivedSystemTests: XCTestCase {
     /// The collapsed spec: one entry point, no `.system`, no `.vary` — the authored residue alone.
     private var spec: Spec<Kiosk> {
@@ -141,6 +198,28 @@ final class DerivedSystemTests: XCTestCase {
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
         XCTAssertTrue(verdict.stability.isStable, "the derived system must replay deterministically")
+    }
+
+    func testACaptureResourceResolvesAConstructorParameterNoDoubleServes() async {
+        // The persistence-bearing-subject shape: the injected state is a resource (.provides), built
+        // fresh per capture for isolation, and observed through the subject's own read op — which is
+        // what makes hidden state comparable surface.
+        let spec = Spec<Register>("register.derived", derivedFrom: DerivedRegister.self)
+            .provides(TallyBook.self) { _ in TallyBook() }
+            .vary {
+                Ordering(max: 4)
+                Budget(runs: 60)
+            }
+
+        let verdict = await spec.verify(against: { context in
+            SwiftRegister(book: context.resolve(TallyBook.self), center: context.notifications)
+        })
+
+        XCTAssertEqual(
+            verdict.verdict,
+            .equivalent,
+            "fresh-per-capture resources must keep probes independent\n\(verdict.report())"
+        )
     }
 
     func testResolveConstructsAndRegistersTheConformanceMatchedDouble() {

@@ -247,6 +247,42 @@ final class ChannelLintTests: XCTestCase {
         )
     }
 
+    func testADelegateDigSuppliedAsAnInitDefaultDoesNotGate() throws {
+        // The migration-prep shape: the designated init takes the context, and plain -init defaults
+        // it to the app delegate's container — a chain in argument position, not a reach.
+        try write(
+            """
+            @implementation ProductStore
+            - (instancetype)init {
+                AppDelegate *delegate = (AppDelegate *)UIApplication.sharedApplication.delegate;
+                return [self initWithContext:delegate.persistentContainer.viewContext];
+            }
+            @end
+            """,
+            to: "App/ProductStore.m"
+        )
+
+        let report = audit([TraceOrigin(label: "ProductStore", symbol: "ProductStore")])
+
+        XCTAssertTrue(report.isClean, report.blindSpots.joined(separator: ", "))
+        XCTAssertEqual(report.injectableDefaults.count, 1)
+    }
+
+    func testAChainedContextReceiverStillGates() throws {
+        try write(
+            """
+            @implementation ProductStore
+            - (void)save {
+                [delegate.persistentContainer.viewContext save:NULL];
+            }
+            @end
+            """,
+            to: "App/ProductStore.m"
+        )
+
+        XCTAssertFalse(audit([TraceOrigin(label: "ProductStore", symbol: "ProductStore")]).isClean)
+    }
+
     func testEachFileIsReadOnceEvenWhenSeveralLabelsShareIt() throws {
         try write(
             """

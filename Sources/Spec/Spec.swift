@@ -37,6 +37,10 @@ public struct SeamContext {
     /// Per-type factories for synthesized custom-type returns, declared via `Spec.generates(_:_:)`
     /// and consulted by generated doubles (`value(_:key:)` below). Keyed by the returned type.
     var makers: [ObjectIdentifier: (SeamContext, String) -> Any] = [:]
+    /// Capture-scoped resources, declared via `Spec.provides(_:_:)` and consulted by `resolve(_:)`
+    /// for a constructor parameter no double serves — an isolated store, a scratch directory. Built
+    /// fresh each capture, like `notifications` (the built-in resource this generalizes).
+    var resourceMakers: [ObjectIdentifier: (SeamContext) -> Any] = [:]
 
     /// Hand a recording double to the subject as an injected collaborator. The act of injection is
     /// the declaration: the double states its own trace label (`TraceLabeled`, emitted by `@Traced` /
@@ -257,6 +261,8 @@ public struct Spec<S> {
     /// Custom-type factories for synthesized double returns, via `.generates(_:_:)` — threaded into
     /// every capture's `SeamContext`.
     var valueMakers: [ObjectIdentifier: (SeamContext, String) -> Any] = [:]
+    /// Capture-scoped resource factories, via `.provides(_:_:)` — threaded the same way.
+    var specResourceMakers: [ObjectIdentifier: (SeamContext) -> Any] = [:]
     var exploreOrdering = false
     var maxOrderings = 100
     var orderingRepeats = 2
@@ -368,6 +374,20 @@ public struct Spec<S> {
     public func generates<T>(_ type: T.Type, _ make: @escaping (SeamContext, String) -> T) -> Spec<S> {
         var copy = self
         copy.valueMakers[ObjectIdentifier(type)] = { make($0, $1) }
+        return copy
+    }
+
+    /// Provide a capture-scoped resource: how to build a `T` when a derived system's constructor
+    /// parameter wants one and no `@TracedDouble` serves it — an isolated in-memory store, a scratch
+    /// directory. The maker runs once per capture, so every probe gets a fresh, isolated instance:
+    /// this is `notifications` (the built-in resource) generalized to types the engine cannot know.
+    ///
+    /// A resource is infrastructure the subject runs *on*, not a boundary the diff observes — nothing
+    /// is recorded at it. State it holds becomes comparable through the subject's own read surface,
+    /// so a spec that provides a store should also drive the ops that read it back.
+    public func provides<T>(_ type: T.Type, _ make: @escaping (SeamContext) -> T) -> Spec<S> {
+        var copy = self
+        copy.specResourceMakers[ObjectIdentifier(type)] = { make($0) }
         return copy
     }
 

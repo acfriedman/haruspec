@@ -112,7 +112,8 @@ extension SpecVerdict {
             exploration: exploration,
             qualification: qualification,
             violatedPreconditions: violatedPreconditions,
-            stability: stability
+            stability: stability,
+            acceptedBlindSpots: acceptedBlindSpots
         )
     }
 }

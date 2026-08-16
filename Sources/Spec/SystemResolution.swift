@@ -30,10 +30,18 @@ public extension SeamContext {
     /// Derived system factories call this per collaborator parameter. Zero or several candidates
     /// trap naming the fix, because a guessed collaborator would be a silent wiring change.
     func resolve<P>(_ boundary: P.Type) -> P {
-        // Matched by type identity against what each double declares it serves — a generic
+        let key = ObjectIdentifier(boundary)
+        // A declared capture resource wins: it is spec-authored, per-capture, and observed through
+        // the subject's own surface rather than recorded at a boundary.
+        if let make = resourceMakers[key] {
+            guard let resource = make(self) as? P else {
+                preconditionFailure(".provides(\(boundary).self) returned a value that is not a \(boundary)")
+            }
+            return resource
+        }
+        // Otherwise matched by type identity against what each double declares it serves — a generic
         // metatype-conformance cast (`is P.Type`) does not consult protocol conformances, so the
         // declaration route is also the only honest one.
-        let key = ObjectIdentifier(boundary)
         let candidates = SeamDoubleRegistry.all.filter { double in
             double.servedBoundaries.contains { ObjectIdentifier($0) == key }
         }
@@ -57,8 +65,10 @@ public extension SeamContext {
                 + " — resolution must be unambiguous. Author the system: "
                 + ".system { context in … context.double(\(candidates.map { "\($0)" }.sorted()[0]).self) … }"
         }
-        return "no double serves \(boundary) — declare one: paste its protocol under "
-            + "@TracedDouble(label: …) refining \(boundary), or author the wiring: "
+        return "nothing serves \(boundary) — declare it: paste its protocol under "
+            + "@TracedDouble(label: …) refining \(boundary) (a recorded collaborator), provide it "
+            + "as a capture resource: .provides(\(boundary).self) { context in … } (isolated "
+            + "infrastructure, observed through the subject's reads), or author the wiring: "
             + ".system { context in … }"
     }
 }

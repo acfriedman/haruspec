@@ -23,10 +23,13 @@ extension Spec {
         let origins = OriginCollector()
         let verdict = await TraceOrigins.$collector.withValue(origins) { await verification() }
             .noting(origins: subjectOrigins(from: origins))
+            // Declarations ride the verdict, so a later explicit `audited(against:)` resolves the
+            // same acceptances the env-driven audit below would — the two paths cannot disagree.
+            .declaring(accepted: mergingAcceptances(into: intent).acceptedBlindSpots)
         // The audit rides the same wrapper because it needs exactly what this collected. No configured
         // root means no audit and no claim: `blindSpots` stays nil and every surface says "not audited".
         guard let root = AuditRoot.fromEnvironment() else { return verdict }
-        return verdict.audited(against: root, declaring: mergingAcceptances(into: intent))
+        return verdict.audited(against: root)
     }
 
     /// The subject's own accepted channels joined onto a port's declaration: spec-level facts about
@@ -63,7 +66,24 @@ extension SpecVerdict {
             exploration: exploration,
             qualification: qualification.noting(origins: origins),
             violatedPreconditions: violatedPreconditions,
-            stability: stability
+            stability: stability,
+            acceptedBlindSpots: acceptedBlindSpots
+        )
+    }
+
+    /// The same verdict carrying the declared-acceptable channels — spec-level and check-site merged.
+    func declaring(accepted: [String]) -> SpecVerdict {
+        SpecVerdict(
+            schemaVersion: schemaVersion,
+            result: result,
+            orderingsExplored: orderingsExplored,
+            failingOrder: failingOrder,
+            counterexample: counterexample,
+            exploration: exploration,
+            qualification: qualification,
+            violatedPreconditions: violatedPreconditions,
+            stability: stability,
+            acceptedBlindSpots: accepted
         )
     }
 }

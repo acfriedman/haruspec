@@ -50,7 +50,9 @@ public extension SpecVerdict {
         // as a clean bill of health.
         guard !qualification.origins.isEmpty else { return self }
         let report = AuditReport.audit(origins: qualification.origins, root: root)
-        return noting(report.outcome(accepting: intent.acceptedBlindSpots))
+        // The verdict carries the spec's and check site's declarations, so an explicit audit resolves
+        // exactly what the env-driven one inside the verify would have.
+        return noting(report.outcome(accepting: intent.acceptedBlindSpots + (acceptedBlindSpots ?? [])))
     }
 
     /// The same verdict with an audit's outcome applied. Split out so a caller holding its own
@@ -65,7 +67,8 @@ public extension SpecVerdict {
             exploration: exploration,
             qualification: qualification.noting(blindSpots: outcome.entries),
             violatedPreconditions: violatedPreconditions,
-            stability: stability
+            stability: stability,
+            acceptedBlindSpots: acceptedBlindSpots
         )
     }
 }

@@ -136,14 +136,25 @@ public struct ChannelLint: Sendable {
     /// paren, or as a default inside a parameter list — is the injection point doing its job. Anything
     /// else gates, including `let center = NotificationCenter.default`: a global cached into a field is
     /// the temporal hole injection is *supposed* to close, not an instance of it being closed.
+    ///
+    /// The spelling may sit *inside* a member chain (`delegate.persistentContainer.viewContext` as a
+    /// whole argument), so the position that decides is the chain's, not the token's: walk forward
+    /// over the chain to see whether a message send follows, and backward over it to the delimiter.
     static func use(of spelling: String, in line: String) -> ChannelUse {
         guard let match = line.range(of: spelling) else { return .bypass }
-        let after = line[match.upperBound...].drop { $0 == " " || $0 == "\t" }.first
-        if let after, after.isLetter || after == "." {
+        var end = match.upperBound
+        while end < line.endIndex, line[end].isLetter || line[end].isNumber || line[end] == "." || line[end] == "_" {
+            end = line.index(after: end)
+        }
+        let after = line[end...].drop { $0 == " " || $0 == "\t" }.first
+        if let after, after.isLetter {
             return .bypass
         }
         let prefix = line[..<match.lowerBound]
-        guard let before = prefix.last(where: { $0 != " " && $0 != "\t" }) else { return .bypass }
+        let chain: Set<Character> = [".", "_", "*", ")", " ", "\t"]
+        guard let before = prefix.last(where: { !($0.isLetter || $0.isNumber || chain.contains($0)) }) else {
+            return .bypass
+        }
         if before == ":" || before == "," || before == "(" {
             return .injectableDefault
         }
