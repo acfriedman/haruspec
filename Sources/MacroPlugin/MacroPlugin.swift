@@ -287,7 +287,13 @@ public struct TracedForwarderMacro: PeerMacro {
             members.append(resolvingInit(designated))
         }
 
-        let wrappedDefault = sharedAccessor.map { "\(wrapping).\($0)" } ?? "\(wrapping)()"
+        // With a pasted init, construction is the protocol's business and the bare `W()` default
+        // disappears — it assumed an NSObject-style `-init`, which a Swift baseline may not have,
+        // and a compiled default argument fails even for callers who never use it. Without one, the
+        // historical default stands (`shared:` accessor, or the wrapped type's own `init()`).
+        let wrappedDefault = pastedInits.isEmpty
+            ? " = \(sharedAccessor.map { "\(wrapping).\($0)" } ?? "\(wrapping)()")"
+            : ""
 
         // Rooted in NSObject so the forwarder can back an Obj-C `id<Protocol>` injection point when the
         // protocol refines an Obj-C (`@objc`) seam — harmless for a Swift-only forwarder, required for an
@@ -297,7 +303,7 @@ public struct TracedForwarderMacro: PeerMacro {
         let source = """
         final class \(generatedName): NSObject, \(protoName), TraceLabeled {
             private let __wrapped: \(wrapping)
-            init(_ wrapped: \(wrapping) = \(wrappedDefault)) { __wrapped = wrapped; super.init() }
+            init(_ wrapped: \(wrapping)\(wrappedDefault)) { __wrapped = wrapped; super.init() }
 
             nonisolated var traceLabel: String { \(quotedLiteral(label)) }
 

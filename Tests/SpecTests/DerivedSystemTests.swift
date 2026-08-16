@@ -22,22 +22,13 @@ protocol PrinterDouble: ReceiptPrinting {
     func printLine(total: Int)
 }
 
-/// The production collaborator behind the plain init — what the harness swaps out, never sees.
-private struct ConsolePrinter: ReceiptPrinting {
-    func printLine(total _: Int) {}
-}
-
-/// The "legacy" baseline: constructor-injected collaborators, exactly the CartManager shape —
-/// including the plain init that defaults them to production instances (the forwarder's generated
-/// `init(_ wrapped: KioskManager = KioskManager())` relies on it, as `+sharedManager` shapes do).
+/// The baseline: a plain Swift class with constructor-injected collaborators and — deliberately —
+/// no `init()`. A pasted init suppresses the forwarder's `= KioskManager()` default, so nothing
+/// requires the NSObject-style no-arg init a Swift baseline often lacks.
 final class KioskManager {
     private let printer: ReceiptPrinting
     private let center: NotificationCenter
     private var cents = 0
-
-    convenience init() {
-        self.init(printer: ConsolePrinter(), center: .default)
-    }
 
     init(printer: ReceiptPrinting, center: NotificationCenter) {
         self.printer = printer
@@ -131,6 +122,25 @@ final class DerivedSystemTests: XCTestCase {
         })
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
+    }
+
+    func testAPureSwiftContinuousRoundTripRunsOnTheDerivedSystem() async throws {
+        // The continuous shape, Swift to Swift: record the plan from the derived system, replay it
+        // against the same build — no Obj-C anywhere, no `.system`, no `.vary`. This is the spec a
+        // Swift-only subject ships to CI.
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kiosk-derived-\(UUID().uuidString).haruspec-plan")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let bounded = spec.vary {
+            Ordering(max: 4)
+            Budget(runs: 60)
+        }
+
+        _ = try await bounded.record(to: url)
+        let verdict = try await bounded.verify(replayingContentsOf: url)
+
+        XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
+        XCTAssertTrue(verdict.stability.isStable, "the derived system must replay deterministically")
     }
 
     func testResolveConstructsAndRegistersTheConformanceMatchedDouble() {
