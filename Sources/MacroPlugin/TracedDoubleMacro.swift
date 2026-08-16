@@ -52,6 +52,15 @@ public struct TracedDoubleMacro: PeerMacro {
             }
         }
 
+        // The boundaries this double serves, read off the pasted protocol's inheritance clause — the
+        // refinement is the registry entry `SeamContext.resolve(_:)` matches by type identity.
+        let boundaries = (proto.inheritanceClause?.inheritedTypes ?? [])
+            .map(\.type.trimmedDescription)
+            .filter { $0 != "AnyObject" && $0 != "NSObjectProtocol" }
+        let served = boundaries.isEmpty
+            ? ""
+            : "\n    static var servedBoundaries: [Any.Type] { [\(boundaries.map { "\($0).self" }.joined(separator: ", "))] }\n"
+
         // NSObject-rooted for the same reason the forwarder is: the double usually backs an Obj-C
         // `id<Protocol>` injection point. `SeamDouble` is what lets `context.double(_:)` construct and
         // register it in one move.
@@ -61,7 +70,7 @@ public struct TracedDoubleMacro: PeerMacro {
             init(_ seams: SeamContext) { __seams = seams; super.init() }
 
             nonisolated var traceLabel: String { \(quotedLiteral(label)) }
-
+        \(served)
         \(members.joined(separator: "\n\n"))
         }
         """

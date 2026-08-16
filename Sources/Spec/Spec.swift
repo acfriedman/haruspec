@@ -16,6 +16,17 @@ import HaruspecTrace
 /// `SeamContext.double(_:)` can construct-and-register in one move.
 public protocol SeamDouble: TraceLabeled {
     init(_ seams: SeamContext)
+    /// The collaborator boundaries this double serves — the protocols its pasted declaration
+    /// refines, emitted by `@TracedDouble` from the inheritance clause. `SeamContext.resolve(_:)`
+    /// matches these by type identity, so the pasted refinement *is* the registry entry.
+    static var servedBoundaries: [Any.Type] { get }
+}
+
+public extension SeamDouble {
+    /// A hand-written double serves nothing declaratively; it is still constructible explicitly.
+    static var servedBoundaries: [Any.Type] {
+        []
+    }
 }
 
 /// Handed to the system factory and seam reads: the `NotificationCenter` to inject (so observation works
@@ -222,7 +233,15 @@ public func Budget(runs: Int) -> Variation {
 /// reads declaratively without losing Swift's type-checking, autocomplete, or rename-safety.
 public struct Spec<S> {
     public let name: String
-    var makeSystem: (SeamContext) -> S = { _ in fatalError("Spec.system(_:) was not set") }
+    var makeSystem: (SeamContext) -> S = { _ in
+        fatalError(
+            "this spec has no system factory — author it (.system { context in … }), or let the "
+                + "derivation supply it: paste the baseline's init into the @TracedForwarder protocol "
+                + "and @DerivedOps emits the wiring (collaborators resolve to their @TracedDouble "
+                + "doubles, NotificationCenter to the capture's)"
+        )
+    }
+
     var operations: [Op<S>] = []
     var tolerances: Tolerance = .strict
     var seamDomains: [String: SeamDomain] = [:]

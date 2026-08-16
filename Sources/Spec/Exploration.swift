@@ -139,6 +139,11 @@ enum SpecDefaults {
     /// The derived `Double` span (`SeamDomain.doubleMagnitudes`): decades from per-mille to a
     /// thousand, both signs — fractional magnitudes included because rates and factors live there.
     static let derivedDoubleSpan: ClosedRange<Double> = -1000 ... 1000
+    /// Exploration defaults a derived spec runs at when `.vary` declares nothing: ordering variation
+    /// on (it is half the point of deriving a surface) at a bounded sample, and a budget that keeps
+    /// an unconfigured spec's cost predictable. `.vary` overrides either.
+    static let derivedOrderingMax = 50
+    static let derivedBudget = 1200
     /// How many times a derived op appears per sequence. A *range from zero*, because absence is what
     /// reaches the states a fixed count never does (a checkout on an empty cart) — the same reasoning
     /// as `.repeating(0 ... n)`, applied as the default rather than the exception.

@@ -260,6 +260,7 @@ public struct TracedForwarderMacro: PeerMacro {
         let sharedAccessor = stringArgument(of: node, name: "shared")
 
         var members: [String] = []
+        var pastedInits: [InitializerDeclSyntax] = []
         for member in proto.memberBlock.members {
             let decl = member.decl
             if let function = decl.as(FunctionDeclSyntax.self), function.body == nil {
@@ -274,7 +275,16 @@ public struct TracedForwarderMacro: PeerMacro {
                 if let property = forwardingProperty(variable) {
                     members.append(property)
                 }
+            } else if let initializer = decl.as(InitializerDeclSyntax.self) {
+                pastedInits.append(initializer)
+                members.append(mirrorInit(initializer, wrapping: wrapping))
             }
+        }
+        // The first pasted init is the designated one: derive the wiring a spec would otherwise
+        // author — collaborators resolved to their synthesized doubles, the notification center to
+        // the capture's isolated one. `resolve` traps informatively when a parameter has no double.
+        if let designated = pastedInits.first {
+            members.append(resolvingInit(designated))
         }
 
         let wrappedDefault = sharedAccessor.map { "\(wrapping).\($0)" } ?? "\(wrapping)()"
@@ -334,6 +344,41 @@ public struct TracedForwarderMacro: PeerMacro {
         let whereClause = function.genericWhereClause.map { " \($0.trimmedDescription)" } ?? ""
         return "    func \(function.name.text)\(generics)\(function.signature.trimmedDescription)"
             + "\(whereClause) {\n\(indent(body))\n    }"
+    }
+
+    /// A pasted `init` requirement mirrors 1:1 onto the wrapped class — which is also what satisfies
+    /// the requirement on the generated conformer, so the protocol can carry the construction
+    /// contract without burdening it.
+    private static func mirrorInit(_ initializer: InitializerDeclSyntax, wrapping: String) -> String {
+        let parameters = initializer.signature.parameterClause.parameters
+        let forwarded = parameters.map { param -> String in
+            let external = param.firstName.text
+            let internalName = (param.secondName ?? param.firstName).text
+            return external == "_" ? internalName : "\(external): \(internalName)"
+        }.joined(separator: ", ")
+        return "    convenience init\(initializer.signature.parameterClause.trimmedDescription) {\n"
+            + "        self.init(\(wrapping)(\(forwarded)))\n"
+            + "    }"
+    }
+
+    /// The derived system wiring: each parameter of the designated pasted init resolves by type —
+    /// the capture's notification center for a `NotificationCenter`, the conformance-matched
+    /// synthesized double for a collaborator boundary. What this cannot resolve, `resolve` reports
+    /// at spec construction with the authored `.system { }` spelled out.
+    private static func resolvingInit(_ initializer: InitializerDeclSyntax) -> String {
+        let arguments = initializer.signature.parameterClause.parameters.map { param -> String in
+            let external = param.firstName.text
+            let internalName = (param.secondName ?? param.firstName).text
+            let spelled = param.type.trimmedDescription
+            let bare = spelled.hasSuffix("!") || spelled.hasSuffix("?") ? String(spelled.dropLast()) : spelled
+            let value = bare == "NotificationCenter" || bare == "NSNotificationCenter"
+                ? "__context.notifications"
+                : "__context.resolve(\(bare).self)"
+            return external == "_" ? value : "\(external == "_" ? internalName : external): \(value)"
+        }.joined(separator: ", ")
+        return "    convenience init(resolving __context: SeamContext) {\n"
+            + "        self.init(\(arguments))\n"
+            + "    }"
     }
 
     /// A read-only `var x: T { get }` requirement forwards as a plain computed property (untraced).

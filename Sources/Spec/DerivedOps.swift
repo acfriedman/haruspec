@@ -17,6 +17,16 @@ import HaruspecSeams
 public protocol DerivedOperations {
     associatedtype System
     static var derivedOps: [DerivedOp<System>] { get }
+    /// The derived system factory — emitted when the protocol carries a pasted `init` requirement
+    /// and a `@TracedForwarder` sibling (the forwarder's `init(resolving:)` holds the wiring).
+    /// `nil` when construction has to be authored.
+    static var derivedSystem: ((SeamContext) -> System)? { get }
+}
+
+public extension DerivedOperations {
+    static var derivedSystem: ((SeamContext) -> System)? {
+        nil
+    }
 }
 
 // MARK: - One derived argument
@@ -415,7 +425,41 @@ public extension Spec {
         }
         var copy = adopting(ops)
         copy.derivedDefaultSeams = derivedDefaults
+        // Derived specs explore by default: ordering variation and a bounded budget are part of what
+        // "derive it" means, so `.vary` becomes the override site rather than the on-switch. An
+        // explicit `.vary` — before or after — wins.
+        if !copy.exploreOrdering {
+            copy.exploreOrdering = true
+            copy.maxOrderings = SpecDefaults.derivedOrderingMax
+        }
+        if copy.explorationBudget == nil {
+            copy.explorationBudget = SpecDefaults.derivedBudget
+        }
         return copy
+    }
+}
+
+public extension Spec {
+    /// The collapsed spec: name, derived catalog, and the authored residue — one entry point.
+    ///
+    ///     Spec<Cart>("cart.objc-to-swift", derivedFrom: DerivedCart.self) {
+    ///         Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
+    ///         Amend("checkout").last()
+    ///     }
+    ///
+    /// The system factory comes from the catalog when the protocol pasted its `init` (a
+    /// `@TracedForwarder` sibling derives the wiring); otherwise `.system { }` is still authored.
+    /// Exploration runs at the derived defaults; `.vary` overrides them.
+    init<D: DerivedOperations>(
+        _ name: String,
+        derivedFrom source: D.Type,
+        @OperationOverridesBuilder<S> overriding build: () -> [OperationOverride<S>] = { [] }
+    ) where D.System == S {
+        self.init(name)
+        if let derived = D.derivedSystem {
+            self = system(derived)
+        }
+        self = operations(derivedFrom: source, overriding: build)
     }
 }
 

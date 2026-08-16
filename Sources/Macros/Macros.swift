@@ -167,6 +167,12 @@ public macro TracedForwarder(
 /// compile error is the prompt to write one). Ordering constraints are never derived: an "invalid"
 /// ordering is a valid differential probe, so `.after`/`.last` stay authored. Property, `static`,
 /// and generic requirements are skipped — replace those with authored `Op`s if they matter.
+///
+/// With a `@TracedForwarder` sibling and a pasted `init` requirement, the *system* derives too:
+/// the catalog carries a factory built on the forwarder's `init(resolving:)`, so
+/// `Spec(_:derivedFrom:)` needs no `.system { }` — collaborators resolve to their `@TracedDouble`
+/// doubles by declared boundary, a `NotificationCenter` parameter takes the capture's isolated
+/// center, and anything unresolvable traps naming the authored wiring to write.
 @attached(peer, names: prefixed(Derived))
 public macro DerivedOps() =
     #externalMacro(module: "HaruspecMacroPlugin", type: "DerivedOpsMacro")

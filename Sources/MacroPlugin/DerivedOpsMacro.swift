@@ -39,6 +39,20 @@ public struct DerivedOpsMacro: PeerMacro {
             )
         }
 
+        // With a @TracedForwarder sibling and a pasted init requirement, the system factory derives
+        // too: the forwarder's generated `init(resolving:)` carries the wiring, so the whole
+        // `.system { }` closure collapses into the catalog.
+        var systemEntry = ""
+        let hasPastedInit = proto.memberBlock.members.contains { $0.decl.is(InitializerDeclSyntax.self) }
+        if hasPastedInit, let forwarder = forwarderName(of: proto) {
+            systemEntry = """
+
+                static var derivedSystem: ((SeamContext) -> \(system))? {
+                    { \(forwarder)(resolving: $0) }
+                }
+            """
+        }
+
         let source = """
         enum Derived\(protoName): DerivedOperations {
             typealias System = \(system)
@@ -47,9 +61,22 @@ public struct DerivedOpsMacro: PeerMacro {
         \(entries.joined(separator: ",\n"))
                 ]
             }
+        \(systemEntry)
         }
         """
         return [DeclSyntax("\(raw: source)")]
+    }
+
+    /// The sibling `@TracedForwarder`'s generated type name, when the protocol carries one — the two
+    /// macros never talk, but both see the same attribute list.
+    private static func forwarderName(of proto: ProtocolDeclSyntax) -> String? {
+        for element in proto.attributes {
+            guard let attribute = element.as(AttributeSyntax.self),
+                  attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "TracedForwarder"
+            else { continue }
+            return stringArgument(of: attribute, name: "as") ?? "Traced\(proto.name.text)"
+        }
+        return nil
     }
 
     /// One `DerivedOp(...)` entry: the argument list and the forwarding call, both written from the
