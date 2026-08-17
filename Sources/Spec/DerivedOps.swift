@@ -21,11 +21,34 @@ public protocol DerivedOperations {
     /// and a `@TracedForwarder` sibling (the forwarder's `init(resolving:)` holds the wiring).
     /// `nil` when construction has to be authored.
     static var derivedSystem: ((SeamContext) -> System)? { get }
+    /// The boundary's observed properties, one per `var` requirement — the derivation's half of
+    /// `.observes(_:)`. Empty when the protocol declares none.
+    static var derivedProperties: [DerivedProperty<System>] { get }
 }
 
 public extension DerivedOperations {
     static var derivedSystem: ((SeamContext) -> System)? {
         nil
+    }
+
+    static var derivedProperties: [DerivedProperty<System>] {
+        []
+    }
+}
+
+/// One property derived from a protocol `var` requirement: its name, the fully qualified label its
+/// writes carry (the `@TracedForwarder` sibling's label when there is one, the protocol's name
+/// otherwise), and the mechanical read-back the end-state snapshot uses.
+public struct DerivedProperty<S> {
+    public let name: String
+    public let label: String
+    /// Async for the same reason `Observed.read` is: an actor port witnesses `{ get async }`.
+    public let read: (S) async -> Any
+
+    public init(_ name: String, label: String, read: @escaping (S) async -> Any) {
+        self.name = name
+        self.label = label
+        self.read = read
     }
 }
 
@@ -425,6 +448,11 @@ public extension Spec {
         }
         var copy = adopting(ops)
         copy.derivedDefaultSeams = derivedDefaults
+        // The protocol's `var` requirements become observed properties: snapshot at every capture
+        // boundary, write timeline compared under `Tolerance.mutationOrder`.
+        copy.observedProperties += D.derivedProperties.map { property in
+            Observed(property.label, property.read)
+        }
         // Derived specs explore by default: ordering variation and a bounded budget are part of what
         // "derive it" means, so `.vary` becomes the override site rather than the on-switch. An
         // explicit `.vary` — before or after — wins.

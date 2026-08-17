@@ -1,4 +1,5 @@
 import Foundation
+import HaruspecCore
 
 /// Where a traced label's behavior is **declared** — the source map an audit needs to know which files
 /// it must read before it can claim a verdict saw every effect channel.
@@ -90,4 +91,32 @@ public enum TraceOrigins {
 /// second time.
 public protocol TraceLabeled {
     var traceLabel: String { get }
+}
+
+/// A type that states how much of its property-write timeline its instrumentation records — the
+/// per-side fact the mutation-order diff refuses to guess (see `MutationCapture`). The capture reads
+/// it off the system under test and stamps the trace; a system declaring nothing captures `.none`.
+public protocol MutationCapturing {
+    var mutationCapture: MutationCapture { get }
+}
+
+/// The `@Traced` conformance: observer instrumentation on every stored property, so the whole write
+/// timeline is recorded. A marker with a default, so macro-generated code names a protocol rather
+/// than an enum case from a module the use site may not import.
+public protocol FullMutationCapture: MutationCapturing {}
+
+public extension FullMutationCapture {
+    var mutationCapture: MutationCapture {
+        .full
+    }
+}
+
+/// The `@TracedForwarder` conformance: the generated setter records writes that cross the wrapper,
+/// and nothing records the wrapped object's internal writes — boundary capture.
+public protocol BoundaryMutationCapture: MutationCapturing {}
+
+public extension BoundaryMutationCapture {
+    var mutationCapture: MutationCapture {
+        .boundary
+    }
 }

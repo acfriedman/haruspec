@@ -10,9 +10,11 @@ import SwiftSyntaxMacros
 /// the declaration to write. The authored residue arrives later, as `Amend(...)` amendments in
 /// `.operations(derivedFrom:)`.
 ///
-/// Skipped, deliberately: property requirements (state is captured via observation, not driven),
-/// `static`/`class` members (no instance), and generic requirements (no single binding to write).
-/// A skipped requirement that matters becomes an authored `Op` in a plain `.operations` block.
+/// Property requirements derive as **observed properties** (`DerivedProperty`) rather than ops:
+/// state is snapshot at the capture boundary and its writes join the diff, not driven as calls.
+/// Skipped, deliberately: `static`/`class` members (no instance) and generic requirements (no single
+/// binding to write). A skipped requirement that matters becomes an authored `Op` in a plain
+/// `.operations` block.
 public struct DerivedOpsMacro: PeerMacro {
     public static func expansion(
         of _: AttributeSyntax,
@@ -25,13 +27,7 @@ public struct DerivedOpsMacro: PeerMacro {
         let protoName = proto.name.text
         let system = "any \(protoName)"
 
-        var entries: [String] = []
-        for member in proto.memberBlock.members {
-            guard let function = member.decl.as(FunctionDeclSyntax.self), function.body == nil,
-                  !isStaticOrClass(function.modifiers), function.genericParameterClause == nil
-            else { continue }
-            entries.append(derivedOp(function))
-        }
+        let (entries, properties) = derivedEntries(of: proto)
         guard !entries.isEmpty else {
             throw MacroError(
                 "@DerivedOps found no derivable requirement on '\(protoName)' — "
@@ -53,6 +49,21 @@ public struct DerivedOpsMacro: PeerMacro {
             """
         }
 
+        // `var` requirements derive as observed properties: the spec snapshots each at the capture
+        // boundary and scopes the write-timeline diff to exactly these labels.
+        var propertiesEntry = ""
+        if !properties.isEmpty {
+            propertiesEntry = """
+
+
+                static var derivedProperties: [DerivedProperty<\(system)>] {
+                    [
+            \(properties.joined(separator: ",\n"))
+                    ]
+                }
+            """
+        }
+
         let source = """
         enum Derived\(protoName): DerivedOperations {
             typealias System = \(system)
@@ -61,10 +72,55 @@ public struct DerivedOpsMacro: PeerMacro {
         \(entries.joined(separator: ",\n"))
                 ]
             }
-        \(systemEntry)
+        \(systemEntry)\(propertiesEntry)
         }
         """
         return [DeclSyntax("\(raw: source)")]
+    }
+
+    /// Walk the requirements once: methods become op entries, `var`s become observed properties.
+    private static func derivedEntries(of proto: ProtocolDeclSyntax) -> (ops: [String], properties: [String]) {
+        var entries: [String] = []
+        var properties: [String] = []
+        let labelRoot = forwarderLabel(of: proto) ?? proto.name.text
+        for member in proto.memberBlock.members {
+            if let variable = member.decl.as(VariableDeclSyntax.self), !isStaticOrClass(variable.modifiers),
+               let binding = variable.bindings.first,
+               let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text {
+                properties.append(derivedProperty(name, labelRoot: labelRoot, isAsync: hasAsyncGetter(binding)))
+                continue
+            }
+            guard let function = member.decl.as(FunctionDeclSyntax.self), function.body == nil,
+                  !isStaticOrClass(function.modifiers), function.genericParameterClause == nil
+            else { continue }
+            entries.append(derivedOp(function))
+        }
+        return (entries, properties)
+    }
+
+    /// One `DerivedProperty(...)` entry for a `var` requirement. A `{ get async }` requirement —
+    /// how an actor port witnesses a property — reads back with `await`.
+    private static func derivedProperty(_ name: String, labelRoot: String, isAsync: Bool) -> String {
+        "            DerivedProperty(\(quotedLiteral(name)), "
+            + "label: \(quotedLiteral("\(labelRoot).\(name)"))) { __sut in \(isAsync ? "await " : "")__sut.\(name) }"
+    }
+
+    /// Whether a var requirement's accessor block declares `get async`.
+    private static func hasAsyncGetter(_ binding: PatternBindingSyntax) -> Bool {
+        guard case let .accessors(accessors) = binding.accessorBlock?.accessors else { return false }
+        return accessors.contains { $0.effectSpecifiers?.asyncSpecifier != nil }
+    }
+
+    /// The sibling `@TracedForwarder`'s trace label, when the protocol carries one — property labels
+    /// must match what the instrumentation records, and the forwarder's label is that root.
+    private static func forwarderLabel(of proto: ProtocolDeclSyntax) -> String? {
+        for element in proto.attributes {
+            guard let attribute = element.as(AttributeSyntax.self),
+                  attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "TracedForwarder"
+            else { continue }
+            return stringArgument(of: attribute, name: "label")
+        }
+        return nil
     }
 
     /// The sibling `@TracedForwarder`'s generated type name, when the protocol carries one — the two

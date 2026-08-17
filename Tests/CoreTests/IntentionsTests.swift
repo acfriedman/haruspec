@@ -12,6 +12,7 @@ final class IntentionsTests: XCTestCase {
             Emits("LoyaltyPointsEarned")
             Omits("LegacyPing")
             Changes("CheckoutDidComplete", field: "totalCents")
+            Reorders("Cart.itemCount", "Cart.total")
         }
 
         XCTAssertEqual(intent.expectedDomainMigrations.count, 1)
@@ -21,6 +22,7 @@ final class IntentionsTests: XCTestCase {
         XCTAssertEqual(intent.expectedNewEvents, ["LoyaltyPointsEarned"])
         XCTAssertEqual(intent.expectedRemovedEvents, ["LegacyPing"])
         XCTAssertEqual(intent.expectedValueChanges, ["CheckoutDidComplete": ["totalCents"]])
+        XCTAssertEqual(intent.expectedReorders, ["Cart.itemCount", "Cart.total"])
     }
 
     /// A queue is declared by label, whichever discipline it has: the *move* is what is declared,

@@ -28,8 +28,15 @@ import HaruspecTrace
 /// Also emits a `TraceLabeled` conformance, so an instrumented instance can state the label its
 /// events carry — which is what `SeamContext.inject` reads to register a collaborator boundary
 /// without the label being typed a second time.
+///
+/// Stored `var` properties are instrumented too (`@TracedProperty` — a `didSet` recording each
+/// committed write as a `stateChange`), and the type conforms to `FullMutationCapture` to say so:
+/// the whole write timeline is on the trace, which is what lets the mutation-order diff compare it.
+/// Computed and observed properties are skipped — an accessor macro cannot add observers where
+/// accessors already exist — so a type whose observable state is all passthrough contributes writes
+/// only where they actually commit.
 @attached(memberAttribute)
-@attached(extension, conformances: TraceLabeled, names: named(traceLabel))
+@attached(extension, conformances: TraceLabeled, FullMutationCapture, names: named(traceLabel))
 public macro Traced(_ typeLabel: String? = nil, timing: Bool = false) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedMacro")
 
@@ -76,6 +83,16 @@ public macro TracedDouble(label: String, as generatedName: String? = nil) =
 @attached(body)
 public macro TracedMethod(_ typeLabel: String, timed: Bool = false, declaredBy: String? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedMethodMacro")
+
+/// Record every committed write to a **stored** property as a `stateChange` trace event, via a
+/// `didSet` observer. Normally applied automatically by `@Traced`; usable directly for selective
+/// instrumentation. The event label is `"<typeLabel>.<name>"`, the value is the property's committed
+/// value (what an observer of the property would read at that moment), and writes during `init`
+/// never record — observers don't fire there. `declaredBy` feeds the audit's origin map, as on
+/// `@TracedMethod`.
+@attached(accessor, names: named(didSet))
+public macro TracedProperty(_ typeLabel: String, declaredBy: String? = nil) =
+    #externalMacro(module: "HaruspecMacroPlugin", type: "TracedPropertyMacro")
 
 /// Mark a method inside a `@Traced` type to also record its duration as a signpost interval — the
 /// method-level opt-in for timing. It is a no-op on its own; `@Traced` reads it when instrumenting.

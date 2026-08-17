@@ -123,9 +123,19 @@ public enum BehavioralDiff {
             baseline = baseline.filter { $0.tier == .semantic }
             candidate = candidate.filter { $0.tier == .semantic }
         }
-        /// A structural divergence is advisory (reported, non-failing) in `.advisory` mode.
-        func advisory(_ tier: EventTier) -> Bool {
-            spec.structuralComparison == .advisory && tier == .structural
+        // The write timeline compares only between captures that could both record it (`.full` on
+        // both sides — see `MutationCapture`). Anything less and one side's silence would read as the
+        // subject having stopped writing; the events leave the diff and the verdict's qualification
+        // names the abstention. Snapshots are harness-read, so they survive under every capability.
+        if rawBaseline.mutationCapture != .full || rawCandidate.mutationCapture != .full {
+            baseline = baseline.filter { $0.kind != .stateChange }
+            candidate = candidate.filter { $0.kind != .stateChange }
+        }
+        /// A divergence is advisory (reported, non-failing) when its event sits in a tier or timeline
+        /// the spec compares advisorily: the structural tier under `.advisory`, and observed-property
+        /// writes under the default `MutationOrderPolicy.advisory`.
+        func advisory(_ event: TraceEvent) -> Bool {
+            isAdvisory(event, under: spec)
         }
 
         var scratch = DiffScratch()
@@ -176,7 +186,7 @@ public enum BehavioralDiff {
         baseline: [TraceEvent],
         candidate: [TraceEvent],
         spec: Tolerance,
-        advisory: (EventTier) -> Bool,
+        advisory: (TraceEvent) -> Bool,
         into scratch: inout DiffScratch
     ) {
         let baselineSig = baseline.map(signature)
@@ -192,7 +202,7 @@ public enum BehavioralDiff {
                 baseline[baselineIndex],
                 candidate[candidateIndex],
                 spec: spec,
-                isAdvisory: advisory(baseline[baselineIndex].tier),
+                isAdvisory: advisory(baseline[baselineIndex]),
                 into: &scratch
             )
         }

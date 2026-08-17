@@ -209,6 +209,10 @@ public extension Spec {
             resourceMakers: specResourceMakers
         )
         let system = make(context)
+        // The system states what its instrumentation can see of property writes (`@Traced` = full,
+        // `@TracedForwarder` = boundary), and the trace carries it — the diff needs both sides'
+        // answers before it may compare write timelines.
+        recorder.declareMutationCapture((system as? MutationCapturing)?.mutationCapture ?? .none)
         // Task-locals are inherited across `await`, so binding once around the whole loop still
         // reaches an operation that suspends — which is what lets an op drive an actor.
         await TraceContext.$current.withValue(recorder) {
@@ -221,6 +225,13 @@ public extension Spec {
         // to have finished, or the snapshot is a race rather than a reading.
         if await DispatchSeam.quiesce() == false {
             recorder.marker("⟨haruspec: work still outstanding at snapshot⟩")
+        }
+        // The end-state snapshots: after quiescence (a racing read is not a reading), the harness
+        // itself reads each observed property back. Harness-read on both sides by construction, so
+        // they compare under every `MutationCapture` capability — the state contract that stays
+        // gating even while write *order* is advisory.
+        for property in observedProperties {
+            await recorder.snapshot(property.label, value: RuntimeValue.canonical(property.read(system)))
         }
         return recorder.trace()
     }
@@ -238,8 +249,12 @@ public extension Spec {
         let baseline = await capture(make: make, order: order, cassette: Cassette(replaying: cassette))
         let replay = Cassette(replaying: cassette)
         let candidateTrace = await capture(make: candidate, order: order, cassette: replay)
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidateTrace, tolerances: tolerances)
-            .classified(against: intent)
+        let diff = BehavioralDiff.compare(
+            baseline: baseline,
+            candidate: candidateTrace,
+            tolerances: effectiveTolerances
+        )
+        .classified(against: intent)
         return (diff, replay)
     }
 

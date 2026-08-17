@@ -40,7 +40,7 @@ extension BehavioralDiff {
     static func reconcileUnmatched(
         _ alignment: Alignment,
         spec: Tolerance,
-        advisory: (EventTier) -> Bool,
+        advisory: (TraceEvent) -> Bool,
         into scratch: inout DiffScratch
     ) {
         let (baseline, candidate) = (alignment.baseline, alignment.candidate)
@@ -60,7 +60,7 @@ extension BehavioralDiff {
                             candidateSeq: candidate[candidateIndex].seq,
                             detail: "event order changed (baseline #\(baseline[baselineIndex].seq) "
                                 + "→ candidate #\(candidate[candidateIndex].seq))",
-                            isAdvisory: advisory(baseline[baselineIndex].tier)
+                            isAdvisory: advisory(baseline[baselineIndex])
                         )
                     )
                 }
@@ -69,7 +69,7 @@ extension BehavioralDiff {
                     baseline[baselineIndex],
                     candidate[candidateIndex],
                     spec: spec,
-                    isAdvisory: advisory(baseline[baselineIndex].tier),
+                    isAdvisory: advisory(baseline[baselineIndex]),
                     into: &scratch
                 )
             } else if spec.domainMigration != .ignored,
@@ -91,7 +91,7 @@ extension BehavioralDiff {
                             + "(\(baseline[baselineIndex].domain) → \(candidate[candidateIndex].domain))",
                         fromDomain: baseline[baselineIndex].domain.description,
                         toDomain: candidate[candidateIndex].domain.description,
-                        isAdvisory: advisory(baseline[baselineIndex].tier)
+                        isAdvisory: advisory(baseline[baselineIndex])
                             || spec.domainMigration == .advisory
                     )
                 )
@@ -100,7 +100,7 @@ extension BehavioralDiff {
                     baseline[baselineIndex],
                     candidate[candidateIndex],
                     spec: spec,
-                    isAdvisory: advisory(baseline[baselineIndex].tier),
+                    isAdvisory: advisory(baseline[baselineIndex]),
                     into: &scratch
                 )
             } else {
@@ -111,7 +111,7 @@ extension BehavioralDiff {
                         baselineSeq: baseline[baselineIndex].seq,
                         candidateSeq: nil,
                         detail: "\(baseline[baselineIndex].kind.rawValue) present in baseline, absent in candidate",
-                        isAdvisory: advisory(baseline[baselineIndex].tier)
+                        isAdvisory: advisory(baseline[baselineIndex])
                     )
                 )
             }
@@ -124,7 +124,7 @@ extension BehavioralDiff {
                     baselineSeq: nil,
                     candidateSeq: candidate[candidateIndex].seq,
                     detail: "\(candidate[candidateIndex].kind.rawValue) present in candidate, absent in baseline",
-                    isAdvisory: advisory(candidate[candidateIndex].tier)
+                    isAdvisory: advisory(candidate[candidateIndex])
                 )
             )
         }

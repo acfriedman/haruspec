@@ -58,6 +58,12 @@ public struct Intent: Sendable, Equatable {
     /// port of fire-and-forget work is the canonical case: everything after the call now waits.
     public var expectedOrderingAdditions: [String]
 
+    /// Events (by label) the change deliberately reorders — `reordered`. Property writes under
+    /// `MutationOrderPolicy.gating` are the motivating case: a port that computes its state in a
+    /// different order declares the labels it moves, and only those. The DSL spelling is
+    /// `Reorders(_:)`.
+    public var expectedReorders: [String]
+
     /// Movements of work between isolation domains the change intends — a port's one-line summary
     /// (`DomainMove(from: "queue(serial):com.emporium.cart", to: "actor:SwiftCartActor")`) rather
     /// than one declaration per migrated event. Declaring one pair does NOT excuse another.
@@ -81,6 +87,7 @@ public struct Intent: Sendable, Equatable {
         expectedOrderingRelaxations: [DomainName] = [],
         expectedOrderingLosses: [String] = [],
         expectedOrderingAdditions: [String] = [],
+        expectedReorders: [String] = [],
         expectedDomainMigrations: [DomainMove] = [],
         acceptedBlindSpots: [String] = []
     ) {
@@ -90,6 +97,7 @@ public struct Intent: Sendable, Equatable {
         self.expectedOrderingRelaxations = expectedOrderingRelaxations
         self.expectedOrderingLosses = expectedOrderingLosses
         self.expectedOrderingAdditions = expectedOrderingAdditions
+        self.expectedReorders = expectedReorders
         self.expectedDomainMigrations = expectedDomainMigrations
         self.acceptedBlindSpots = acceptedBlindSpots
     }
@@ -117,7 +125,9 @@ public struct Intent: Sendable, Equatable {
             return expectedDomainMigrations.contains {
                 $0.matches(label: divergence.label, from: divergence.fromDomain, to: divergence.toDomain)
             }
-        case .reordered, .timingRegression:
+        case .reordered:
+            return expectedReorders.contains(divergence.label)
+        case .timingRegression:
             return false // not yet expressible as declared intent — always collateral for now
         }
     }
@@ -157,7 +167,7 @@ extension Intent: Codable {
     enum CodingKeys: String, CodingKey {
         case expectedNewEvents, expectedRemovedEvents, expectedValueChanges
         case expectedOrderingRelaxations, expectedOrderingLosses, expectedOrderingAdditions
-        case expectedDomainMigrations, acceptedBlindSpots
+        case expectedReorders, expectedDomainMigrations, acceptedBlindSpots
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -173,6 +183,8 @@ extension Intent: Codable {
             .decodeIfPresent([String].self, forKey: .expectedOrderingLosses) ?? []
         expectedOrderingAdditions = try container
             .decodeIfPresent([String].self, forKey: .expectedOrderingAdditions) ?? []
+        expectedReorders = try container
+            .decodeIfPresent([String].self, forKey: .expectedReorders) ?? []
         expectedDomainMigrations = try container
             .decodeIfPresent([DomainMove].self, forKey: .expectedDomainMigrations) ?? []
         acceptedBlindSpots = try container

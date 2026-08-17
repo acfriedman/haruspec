@@ -47,8 +47,12 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// as a fact about the subject. Without the bump those plans fail on an unrecognized spelling
     /// rather than on the one message that helps — re-record. Bumped to 5 when events began carrying
     /// `spawnedBy`: a version-4 plan has no happens-before edges, and a replay against one would read
-    /// their absence as the subject having stopped spawning work.
-    public static let supportedSchemaVersion = 6
+    /// their absence as the subject having stopped spawning work. Bumped to 6 when a queue domain
+    /// gained its ordering discipline (`queue(serial):` / `queue(concurrent):`). Bumped to 7 when
+    /// property capture landed: goldens now carry `.stateChange` / `.snapshot` events and a
+    /// `mutationCapture` stamp — a version-6 plan's silence about writes would read as the subject
+    /// never writing.
+    public static let supportedSchemaVersion = 7
 
     public var schemaVersion: Int
     public var specName: String
@@ -240,7 +244,7 @@ public extension Spec {
             let diff = BehavioralDiff.compare(
                 baseline: probe.golden,
                 candidate: current,
-                tolerances: tolerances
+                tolerances: effectiveTolerances
             )
             .classified(against: intent)
             replays.append(replay)

@@ -39,6 +39,7 @@ public enum Canonicalizer {
     /// Produce the canonical form of a whole trace under a tolerance spec.
     public static func canonicalize(_ trace: Trace, spec: Tolerance) -> Trace {
         let ignoredNotifications = Set(spec.ignoredNotificationNames)
+        let observedState = spec.observedStateLabels.map(Set.init)
         var events = trace.events.filter { event in
             if spec.ignoredKinds.contains(event.kind) {
                 return false
@@ -46,6 +47,17 @@ public enum Canonicalizer {
             // Opt-out denylist: drop named notification channels (see `ignoredNotificationNames`).
             if event.kind == .notification, ignoredNotifications.contains(event.label) {
                 return false
+            }
+            // Property writes: an `.ignored` policy drops the timeline wholly; a scoped comparison
+            // drops writes to anything but the observed properties (a port's private state is not
+            // surface). The raw trace keeps everything — this is diff-time, like the denylist above.
+            if event.kind == .stateChange {
+                if spec.mutationOrder == .ignored {
+                    return false
+                }
+                if let observedState, !observedState.contains(event.label) {
+                    return false
+                }
             }
             return true
         }
@@ -60,6 +72,11 @@ public enum Canonicalizer {
             events[index].spawnedBy = events[index].spawnedBy.flatMap { renumbered[$0] }
             events[index].seq = index // re-densify the logical clock after any filtering
         }
-        return Trace(name: trace.name, schemaVersion: trace.schemaVersion, events: events)
+        return Trace(
+            name: trace.name,
+            schemaVersion: trace.schemaVersion,
+            mutationCapture: trace.mutationCapture,
+            events: events
+        )
     }
 }

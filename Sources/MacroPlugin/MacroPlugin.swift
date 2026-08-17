@@ -15,6 +15,9 @@ public struct TracedMacro: MemberAttributeMacro {
         providingAttributesFor member: some DeclSyntaxProtocol,
         in _: some MacroExpansionContext
     ) throws -> [AttributeSyntax] {
+        if let variable = member.as(VariableDeclSyntax.self) {
+            return propertyAttributes(for: variable, node: node, declaration: declaration)
+        }
         guard let function = member.as(FunctionDeclSyntax.self), function.body != nil else { return [] }
         // Skip type methods — there is no instance `self` to attribute the events to.
         if function.modifiers.contains(where: {
@@ -38,6 +41,31 @@ public struct TracedMacro: MemberAttributeMacro {
         declaredBy: \(literal: declaredBy))
         """]
     }
+
+    /// Stamp `@TracedProperty` onto every **stored instance `var`**, so each committed write records a
+    /// `stateChange` — the write timeline that makes the type's conformance to `FullMutationCapture`
+    /// true. Skipped, deliberately: `let` (never written), computed/observed properties (an accessor
+    /// macro cannot add observers where accessors exist — a computed passthrough is the wrapped
+    /// side's write, not this type's), `lazy`/wrapped/attributed and multi-binding declarations (the
+    /// accessor grammar forbids them), and `static` (no instance `self`).
+    private static func propertyAttributes(
+        for variable: VariableDeclSyntax,
+        node: AttributeSyntax,
+        declaration: some DeclGroupSyntax
+    ) -> [AttributeSyntax] {
+        guard variable.bindingSpecifier.tokenKind == .keyword(.var),
+              !isStaticOrClass(variable.modifiers),
+              !variable.modifiers.contains(where: { $0.name.tokenKind == .keyword(.lazy) }),
+              variable.attributes.isEmpty,
+              variable.bindings.count == 1,
+              let binding = variable.bindings.first,
+              binding.accessorBlock == nil,
+              binding.pattern.is(IdentifierPatternSyntax.self)
+        else { return [] }
+        let typeLabel = stringArgument(of: node) ?? typeName(of: declaration) ?? "Unknown"
+        let declaredBy = typeName(of: declaration) ?? typeLabel
+        return ["@TracedProperty(\(literal: typeLabel), declaredBy: \(literal: declaredBy))"]
+    }
 }
 
 extension TracedMacro: ExtensionMacro {
@@ -53,9 +81,12 @@ extension TracedMacro: ExtensionMacro {
         in _: some MacroExpansionContext
     ) throws -> [ExtensionDeclSyntax] {
         let typeLabel = stringArgument(of: node) ?? typeName(of: declaration) ?? "Unknown"
+        // `FullMutationCapture` rides along: every stored `var` carries `@TracedProperty`, so the
+        // write timeline is recorded in full — the fact the mutation-order diff needs both sides to
+        // state. A marker protocol with a default, so nothing here names an enum case.
         return try [ExtensionDeclSyntax(
             """
-            extension \(type.trimmed): TraceLabeled {
+            extension \(type.trimmed): TraceLabeled, FullMutationCapture {
                 nonisolated public var traceLabel: String { \(literal: typeLabel) }
             }
             """
@@ -117,6 +148,46 @@ public struct TracedMethodMacro: BodyMacro {
         // the method's own statements verbatim — no shim, no recorder lookup, nothing to strip.
         let guarded = "#if DEBUG\n\(body)\n#else\n\(original)\n#endif"
         return Array(CodeBlockItemListSyntax("\(raw: guarded)"))
+    }
+}
+
+// MARK: - @TracedProperty (accessor: record committed writes)
+
+/// Adds a `didSet` observer to a **stored** property so every committed write records a `stateChange`
+/// — the property-write half of `@Traced`'s instrumentation, which stamps this automatically. The
+/// observer runs after the write, so the recorded value is the one an observer of the property would
+/// read at that moment; assignments during `init` never fire an observer, so construction stays
+/// untraced (matching methods). Instrumentation is inside `#if DEBUG`, like `@TracedMethod`.
+public struct TracedPropertyMacro: AccessorMacro {
+    public static func expansion(
+        of node: AttributeSyntax,
+        providingAccessorsOf declaration: some DeclSyntaxProtocol,
+        in context: some MacroExpansionContext
+    ) throws -> [AccessorDeclSyntax] {
+        guard let variable = declaration.as(VariableDeclSyntax.self),
+              let binding = variable.bindings.first,
+              let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text
+        else {
+            throw MacroError("@TracedProperty can only be attached to a stored `var` with a simple name")
+        }
+        let typeLabel = stringArgument(of: node) ?? "Unknown"
+        let file = context.location(of: declaration, at: .afterLeadingTrivia, filePathMode: .fileID)?
+            .file.trimmedDescription
+        let origin = originArguments(
+            label: typeLabel,
+            symbol: stringArgument(of: node, name: "declaredBy"),
+            sourceExpression: file
+        )
+        return ["""
+        didSet {
+            #if DEBUG
+            let __oracle = TraceContext.active
+            __oracle?.noteOrigin(\(raw: origin))
+            __oracle?.stateChange(\(literal: "\(typeLabel).\(name)"), subject: self, \
+        value: RuntimeValue.canonical(\(raw: name) as Any))
+            #endif
+        }
+        """]
     }
 }
 
@@ -235,8 +306,10 @@ func tracedBody(
 ///
 /// Because the protocol keeps the imported IUOs verbatim (`checkout() -> Receipt!`), each forward is a
 /// bare `__wrapped.checkout()` — no hand-written shim, no force-unwrap. Method requirements are traced;
-/// read-only `var x: T { get }` requirements forward as plain computed properties (property state is
-/// captured via KVO at runtime, not here). `static`/`class` requirements are skipped — no instance `self`.
+/// a read-only `var x: T { get }` forwards as a plain computed property (reads are not effects), and a
+/// `{ get set }` requirement's setter records the write as a `stateChange` before forwarding — the
+/// boundary half of property capture, hence `BoundaryMutationCapture` on the generated class.
+/// `static`/`class` requirements are skipped — no instance `self`.
 public struct TracedForwarderMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
@@ -272,7 +345,7 @@ public struct TracedForwarderMacro: PeerMacro {
                 if isStaticOrClass(variable.modifiers) {
                     continue
                 }
-                if let property = forwardingProperty(variable) {
+                if let property = forwardingProperty(variable, label: label, wrapping: wrapping) {
                     members.append(property)
                 }
             } else if let initializer = decl.as(InitializerDeclSyntax.self) {
@@ -300,8 +373,11 @@ public struct TracedForwarderMacro: PeerMacro {
         // Obj-C-injected one. `super.init()` runs after the stored wrapper is set (Swift two-phase init).
         // `TraceLabeled` for the same reason `@Traced` emits it: the instance can state its label to an
         // injection point.
+        // `BoundaryMutationCapture`: the generated setter records writes that cross this wrapper, and
+        // nothing records the wrapped object's internal writes — so the trace says "boundary", and
+        // the mutation-order diff knows not to read the wrapped side's silence as behavior.
         let source = """
-        final class \(generatedName): NSObject, \(protoName), TraceLabeled {
+        final class \(generatedName): NSObject, \(protoName), TraceLabeled, BoundaryMutationCapture {
             private let __wrapped: \(wrapping)
             init(_ wrapped: \(wrapping)\(wrappedDefault)) { __wrapped = wrapped; super.init() }
 
@@ -387,14 +463,43 @@ public struct TracedForwarderMacro: PeerMacro {
             + "    }"
     }
 
-    /// A read-only `var x: T { get }` requirement forwards as a plain computed property (untraced).
-    private static func forwardingProperty(_ variable: VariableDeclSyntax) -> String? {
+    /// One forwarding property. A read-only `var x: T { get }` forwards as a plain computed property
+    /// — reads are not effects, so nothing records. A `{ get set }` requirement forwards both
+    /// accessors, and the setter records the write as a `stateChange` before it forwards — the
+    /// boundary half of property capture (the wrapped object's *internal* writes never cross this
+    /// wrapper, which is why the generated class declares `BoundaryMutationCapture`).
+    private static func forwardingProperty(
+        _ variable: VariableDeclSyntax,
+        label: String,
+        wrapping: String
+    ) -> String? {
         guard variable.bindingSpecifier.tokenKind == .keyword(.var),
               let binding = variable.bindings.first,
               let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
               let type = binding.typeAnnotation?.type.trimmedDescription
         else { return nil }
-        return "    var \(name): \(type) { __wrapped.\(name) }"
+        guard hasSetterRequirement(binding) else {
+            return "    var \(name): \(type) { __wrapped.\(name) }"
+        }
+        let origin = originArguments(label: label, symbol: wrapping, sourceExpression: nil)
+        return """
+            var \(name): \(type) {
+                get { __wrapped.\(name) }
+                set {
+                    let __oracle = TraceContext.active
+                    __oracle?.noteOrigin(\(origin))
+                    __oracle?.stateChange(\(quotedLiteral("\(label).\(name)")), subject: self, \
+        value: RuntimeValue.canonical(newValue as Any))
+                    __wrapped.\(name) = newValue
+                }
+            }
+        """
+    }
+
+    /// Whether a protocol var requirement's accessor block declares `set`.
+    private static func hasSetterRequirement(_ binding: PatternBindingSyntax) -> Bool {
+        guard case let .accessors(accessors) = binding.accessorBlock?.accessors else { return false }
+        return accessors.contains { $0.accessorSpecifier.tokenKind == .keyword(.set) }
     }
 }
 
@@ -604,6 +709,7 @@ struct Plugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
         TracedMacro.self,
         TracedMethodMacro.self,
+        TracedPropertyMacro.self,
         TimedMarkerMacro.self,
         TracedForwarderMacro.self,
         TracedDoubleMacro.self,

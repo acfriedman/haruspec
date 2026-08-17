@@ -181,6 +181,22 @@ public struct Op<S> {
     }
 }
 
+/// One observed property of the boundary: the fully qualified label its writes carry
+/// (`"Cart.itemCount"` — matching what `@Traced` / `@TracedForwarder` record), and how the harness
+/// reads its value back for the end-state snapshot. Declared via `.observes(_:)`, or derived from
+/// the boundary protocol's `var` requirements by `@DerivedOps`.
+public struct Observed<S> {
+    let label: String
+    /// Async so an actor port's isolated property can witness a `{ get async }` requirement and
+    /// still be read back. A synchronous closure converts implicitly, like `Op.action`.
+    let read: (S) async -> Any
+
+    public init(_ label: String, _ read: @escaping (S) async -> Any) {
+        self.label = label
+        self.read = read
+    }
+}
+
 /// A declared variation of the input surface: seam values, call ordering, and/or how much of it to buy.
 public enum Variation {
     case seam(String, SeamDomain)
@@ -273,6 +289,11 @@ public struct Spec<S> {
     /// `.operations(derivedFrom:)`, rendered on every verdict so a green from a defaulted surface
     /// says so.
     var derivedDefaultSeams: Set<String> = []
+    /// The boundary properties this spec observes (see `Observed`): each one is snapshot at the end
+    /// of every capture (the state contract, gates always), and its `.stateChange` writes join the
+    /// diff under `Tolerance.mutationOrder`. Writes to anything *not* listed here are dropped at
+    /// diff time — a port's private state is not surface.
+    var observedProperties: [Observed<S>] = []
 
     public init(_ name: String) {
         self.name = name
@@ -346,6 +367,25 @@ public struct Spec<S> {
     /// Declared acceptable deltas.
     public func tolerate(_ spec: Tolerance) -> Spec<S> {
         var copy = self; copy.tolerances = spec; return copy
+    }
+
+    /// Observe boundary properties: snapshot each at the end of every capture (end-state values gate
+    /// unconditionally), and compare their write timelines under `Tolerance.mutationOrder`. The label
+    /// is the fully qualified one writes carry (`"Cart.itemCount"`). Derived specs get this from the
+    /// protocol's `var` requirements; this is the authored spelling.
+    public func observes(_ properties: Observed<S>...) -> Spec<S> {
+        var copy = self
+        copy.observedProperties += properties
+        return copy
+    }
+
+    /// The tolerance the diff actually runs under: the authored tolerance, scoped to the observed
+    /// properties — computed at use rather than stored, so `.tolerate` and `.observes` compose in
+    /// either order.
+    var effectiveTolerances: Tolerance {
+        var spec = tolerances
+        spec.observedStateLabels = observedProperties.map(\.label)
+        return spec
     }
 
     /// Accept that the *subject* reaches an effect channel the capture cannot see — the spec-level

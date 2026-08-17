@@ -83,10 +83,12 @@ extension BehavioralDiff {
         reconcileAcrossDomains(leftovers, spec: spec, into: &scratch)
     }
 
-    /// The structural-tier advisory rule, derived from the spec — the projection's spelling of the
-    /// closure `compare` builds for the total-order path.
-    private static func isAdvisory(_ tier: EventTier, under spec: Tolerance) -> Bool {
-        spec.structuralComparison == .advisory && tier == .structural
+    /// The per-event advisory rule, shared by every matcher: a structural-tier event under
+    /// `StructuralComparison.advisory`, or an observed-property write under the (default)
+    /// `MutationOrderPolicy.advisory` — either way the divergence is reported without gating.
+    static func isAdvisory(_ event: TraceEvent, under spec: Tolerance) -> Bool {
+        (spec.structuralComparison == .advisory && event.tier == .structural)
+            || (event.kind == .stateChange && spec.mutationOrder == .advisory)
     }
 
     // MARK: - Within one domain
@@ -111,7 +113,7 @@ extension BehavioralDiff {
                 baseline[baselineIndex],
                 candidate[candidateIndex],
                 spec: spec,
-                isAdvisory: isAdvisory(baseline[baselineIndex].tier, under: spec),
+                isAdvisory: isAdvisory(baseline[baselineIndex], under: spec),
                 into: &scratch
             )
         }
@@ -130,7 +132,7 @@ extension BehavioralDiff {
                             detail: "event order changed within \(baseline[baselineIndex].domain) "
                                 + "(baseline #\(baseline[baselineIndex].seq) "
                                 + "→ candidate #\(candidate[candidateIndex].seq))",
-                            isAdvisory: isAdvisory(baseline[baselineIndex].tier, under: spec)
+                            isAdvisory: isAdvisory(baseline[baselineIndex], under: spec)
                         )
                     )
                 }
@@ -138,7 +140,7 @@ extension BehavioralDiff {
                     baseline[baselineIndex],
                     candidate[candidateIndex],
                     spec: spec,
-                    isAdvisory: isAdvisory(baseline[baselineIndex].tier, under: spec),
+                    isAdvisory: isAdvisory(baseline[baselineIndex], under: spec),
                     into: &scratch
                 )
             } else {
@@ -195,7 +197,7 @@ extension BehavioralDiff {
                     baselineEvent,
                     candidateEvent,
                     spec: spec,
-                    isAdvisory: isAdvisory(baselineEvent.tier, under: spec),
+                    isAdvisory: isAdvisory(baselineEvent, under: spec),
                     into: &scratch
                 )
             }
@@ -239,7 +241,7 @@ extension BehavioralDiff {
                         baselineSeq: event.seq,
                         candidateSeq: nil,
                         detail: "\(event.kind.rawValue) present in baseline, absent in candidate",
-                        isAdvisory: isAdvisory(event.tier, under: spec)
+                        isAdvisory: isAdvisory(event, under: spec)
                     )
                 )
             }
@@ -252,7 +254,7 @@ extension BehavioralDiff {
                     baselineSeq: nil,
                     candidateSeq: event.seq,
                     detail: "\(event.kind.rawValue) present in candidate, absent in baseline",
-                    isAdvisory: isAdvisory(event.tier, under: spec)
+                    isAdvisory: isAdvisory(event, under: spec)
                 )
             )
         }
@@ -294,14 +296,14 @@ extension BehavioralDiff {
                 detail: "ran on a different domain (\(event.domain) → \(counterpart.domain))",
                 fromDomain: event.domain.description,
                 toDomain: counterpart.domain.description,
-                isAdvisory: isAdvisory(event.tier, under: spec) || spec.domainMigration == .advisory
+                isAdvisory: isAdvisory(event, under: spec) || spec.domainMigration == .advisory
             )
         )
         compareAligned(
             event,
             counterpart,
             spec: spec,
-            isAdvisory: isAdvisory(event.tier, under: spec),
+            isAdvisory: isAdvisory(event, under: spec),
             into: &scratch
         )
         guard event.domain.isOrdered, !counterpart.domain.isOrdered else { return }

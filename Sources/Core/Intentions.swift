@@ -201,6 +201,23 @@ public struct Awaits: Intention {
     }
 }
 
+/// The port deliberately reorders an event whose order is compared — `reordered`, by label. The
+/// canonical case is an observed property's write under `MutationOrderPolicy.gating`: a port that
+/// computes its state in a different order names the writes it moves, and only those.
+public struct Reorders: Intention {
+    let labels: [String]
+
+    /// At least one label, by construction — a blanket reorder excuse would pre-excuse every future
+    /// ordering change on the subject.
+    public init(_ first: String, _ rest: String...) {
+        labels = [first] + rest
+    }
+
+    public func apply(to intent: inout Intent) {
+        intent.expectedReorders.append(contentsOf: labels)
+    }
+}
+
 /// The change emits an event the baseline never had — a declared feature, not an accident.
 public struct Emits: Intention {
     let label: String

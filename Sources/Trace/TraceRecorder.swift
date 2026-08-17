@@ -115,6 +115,27 @@ public final class TraceRecorder: @unchecked Sendable {
         )
     }
 
+    /// Record a property value the harness itself read back at the capture boundary — the state
+    /// contract's gate, compared under every `MutationCapture` capability (the harness did the
+    /// reading, so no side's instrumentation is being trusted). Semantic tier, like every observable
+    /// product behavior.
+    public func snapshot(
+        _ label: String,
+        subject: AnyObject? = nil,
+        value: CanonicalValue? = nil,
+        isolation: (any Actor)? = #isolation
+    ) {
+        lock.lock(); defer { lock.unlock() }
+        appendLocked(
+            isolation: isolation,
+            kind: .snapshot,
+            label: label,
+            subject: subject,
+            payload: value,
+            tier: .semantic
+        )
+    }
+
     /// Record an outbound call to a **spied collaborator** — a real side effect leaving the SUT across a
     /// declared boundary, so it lands in the durable **semantic** tier. The label is `Class.selector`
     /// (the collaborator's stable public API, not an internal code symbol), and `args` is the
@@ -188,10 +209,20 @@ public final class TraceRecorder: @unchecked Sendable {
         return result
     }
 
+    /// What the capture could see of the subject's property writes, stamped onto the trace (see
+    /// `MutationCapture`). Declared once by the capture after it constructs the system; `.none`
+    /// when nothing declares.
+    public func declareMutationCapture(_ capability: MutationCapture) {
+        lock.lock(); defer { lock.unlock() }
+        mutationCapture = capability
+    }
+
+    private var mutationCapture: MutationCapture = .none
+
     /// A snapshot of the trace captured so far.
     public func trace() -> Trace {
         lock.lock(); defer { lock.unlock() }
-        return Trace(name: name, events: events)
+        return Trace(name: name, mutationCapture: mutationCapture, events: events)
     }
 
     /// Advance the underlying clock when it is a `ManualClock` (used to model deterministic work cost

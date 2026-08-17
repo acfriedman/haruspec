@@ -9,6 +9,7 @@ import XCTest
 final class CartManager {
     private(set) var itemCount = 0
     private(set) var lastPromo: String?
+    var note = ""
 
     func add(_: Product!, quantity: Int) {
         itemCount += quantity
@@ -40,6 +41,7 @@ protocol Cart {
     func applyPromo(_ code: String!) -> Bool
     func checkout() -> Receipt! // IUO return — forwarded bare, no force-unwrap
     var summary: String { get } // read-only property — plain computed forward, untraced
+    var note: String { get set } // settable — the setter records the write, then forwards
 }
 
 /// The equivalent hand-written `@Traced` "port": same stable label, forwarding to the same manager.
@@ -149,6 +151,32 @@ final class TracedForwarderMacroTests: XCTestCase {
         let summary = TraceContext.$current.withValue(recorder) { cart.summary }
         XCTAssertEqual(summary, "items:5")
         XCTAssertTrue(recorder.trace().events.isEmpty) // property state is captured via KVO, not here
+    }
+
+    /// A `{ get set }` requirement forwards both accessors; the setter records the boundary write as
+    /// a `.stateChange` (then forwards), and the getter stays untraced — reads are not effects.
+    func testGetSetPropertyForwardsAndRecordsTheWrite() {
+        let recorder = TraceRecorder(name: "t")
+        let mgr = CartManager()
+        let cart = TracedCart(mgr)
+
+        TraceContext.$current.withValue(recorder) {
+            cart.note = "gift wrap"
+            _ = cart.note
+        }
+
+        XCTAssertEqual(mgr.note, "gift wrap") // forwarded through
+        let events = recorder.trace().events
+        XCTAssertEqual(events.map(\.kind), [.stateChange]) // one write, no read events
+        XCTAssertEqual(events.first?.label, "Cart.note")
+        XCTAssertEqual(events.first?.payload, .string("gift wrap"))
+        XCTAssertEqual(events.first?.tier, .semantic)
+    }
+
+    /// The forwarder sees only writes that cross it — the wrapped object's internal writes are
+    /// invisible — and its trace says so.
+    func testForwarderDeclaresBoundaryMutationCapture() {
+        XCTAssertEqual((TracedCart(CartManager()) as MutationCapturing).mutationCapture, .boundary)
     }
 
     /// The generated forwarder's trace aligns byte-for-byte with the hand-written `@Traced` port.

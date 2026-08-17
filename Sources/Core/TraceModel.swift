@@ -11,6 +11,26 @@ public enum EventKind: String, Codable, Sendable, CaseIterable {
     case marker // a payload-free temporal signpost at a product milestone (semantic tier)
     case effect // an outbound call to a spied collaborator — an observable side effect (semantic tier)
     case custom // app-defined telemetry an application wants to pin (droppable via ignoredKinds)
+    case snapshot // a property value the harness read back at the capture boundary (semantic tier)
+}
+
+/// How much of the subject's property-mutation timeline this trace's capture could see — a fact about
+/// the *instrumentation*, carried on the trace so the diff never compares one side's writes against a
+/// side that structurally could not record its own.
+///
+///  - `.full`: every committed write to a stored property is recorded (`@Traced`'s observer
+///    instrumentation).
+///  - `.boundary`: only writes that crossed the wrapper are recorded (`@TracedForwarder`'s generated
+///    setter — the wrapped object's *internal* writes are invisible to it).
+///  - `.none`: the capture declared nothing about property writes (hand-built traces, older captures).
+///
+/// The mutation-*order* comparison requires `.full` on both sides; anything less drops `.stateChange`
+/// events from the diff and the verdict's qualification says so. Snapshots (`.snapshot`) are read by
+/// the harness itself, so they compare under every capability.
+public enum MutationCapture: String, Codable, Sendable {
+    case none
+    case boundary
+    case full
 }
 
 /// Which durability tier an event belongs to.
@@ -228,15 +248,49 @@ extension TraceEvent: Codable {
 }
 
 /// A captured golden behavior trace: the ordered sequence of events from one spec run.
-public struct Trace: Codable, Sendable, Equatable {
+public struct Trace: Sendable, Equatable {
     public var name: String
     public var schemaVersion: Int
+    /// What the capture could see of property writes (see `MutationCapture`). `.none` for hand-built
+    /// traces and captures that declared nothing — absence is a statement here, not a gap.
+    public var mutationCapture: MutationCapture
     public var events: [TraceEvent]
 
-    public init(name: String, schemaVersion: Int = 1, events: [TraceEvent]) {
+    public init(
+        name: String,
+        schemaVersion: Int = 1,
+        mutationCapture: MutationCapture = .none,
+        events: [TraceEvent]
+    ) {
         self.name = name
         self.schemaVersion = schemaVersion
+        self.mutationCapture = mutationCapture
         self.events = events
+    }
+}
+
+extension Trace: Codable {
+    enum CodingKeys: String, CodingKey {
+        case name, schemaVersion, mutationCapture, events
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        schemaVersion = try container.decode(Int.self, forKey: .schemaVersion)
+        // Absent means the capture declared nothing — a genuine `.none`, not a migration shim.
+        mutationCapture = try container.decodeIfPresent(MutationCapture.self, forKey: .mutationCapture) ?? .none
+        events = try container.decode([TraceEvent].self, forKey: .events)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(name, forKey: .name)
+        try container.encode(schemaVersion, forKey: .schemaVersion)
+        if mutationCapture != .none {
+            try container.encode(mutationCapture, forKey: .mutationCapture)
+        } // omit the default for clean JSON
+        try container.encode(events, forKey: .events)
     }
 }
 

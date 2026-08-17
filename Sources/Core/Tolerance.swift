@@ -133,6 +133,21 @@ public enum SpawnEdgePolicy: String, Codable, Sendable {
     case ignored // spawn edges are not compared at all
 }
 
+/// How the *order* of observed property writes (`.stateChange` events) participates in the verdict.
+///
+/// Default `.advisory` — deliberately weaker than the safe-by-default gates, and deliberately
+/// temporary: intermediate write order is contract **iff something observes the property between
+/// writes** (KVO / Combine / SwiftUI), and until subscriptions are traced the engine cannot know.
+/// Gating every port on internal write order would fail refactors no observer can distinguish.
+/// The end-state *values* still gate unconditionally through `.snapshot` events, so advisory here
+/// never waives the state contract — only the timeline. A spec whose subject is known-observed opts
+/// up to `.gating`, where an intended reorder declares itself via `Intent` (`Reorders(_:)`).
+public enum MutationOrderPolicy: String, Codable, Sendable {
+    case advisory // write-order divergences are reported, but do not fail the verdict
+    case gating // an undeclared write-order change fails the verdict
+    case ignored // `.stateChange` events are dropped before diffing
+}
+
 public struct Tolerance: Sendable, Equatable {
     /// Payload fields whose values are non-deterministic and must be ignored — e.g.
     /// `.key("orderID")`. Redacted to a placeholder before comparison. See `VolatileField` for the
@@ -175,6 +190,17 @@ public struct Tolerance: Sendable, Equatable {
     /// (red until declared via `Intent.expectedOrderingLosses` / `expectedOrderingAdditions`).
     public var spawnEdges: SpawnEdgePolicy
 
+    /// How observed-property write order participates in the verdict. Defaults to `.advisory`
+    /// (see `MutationOrderPolicy` — snapshots gate the values regardless).
+    public var mutationOrder: MutationOrderPolicy
+
+    /// The `.stateChange` labels this comparison is *about* — the boundary protocol's properties,
+    /// fully qualified (`"Cart.itemCount"`). Writes to anything else (a port's private state) are
+    /// dropped at diff time so internals never manufacture divergences; the raw trace stays faithful.
+    /// `nil` means unscoped — every recorded write compares — which is the raw-diff default; a spec
+    /// always scopes (possibly to nothing).
+    public var observedStateLabels: [String]?
+
     public init(
         volatileFields: [VolatileField] = [],
         numericEpsilon: Double = 0,
@@ -185,7 +211,9 @@ public struct Tolerance: Sendable, Equatable {
         structuralComparison: StructuralComparison = .strict,
         domainMigration: DomainMigrationPolicy = .gating,
         concurrency: ConcurrencyComparison = .totalOrder,
-        spawnEdges: SpawnEdgePolicy = .gating
+        spawnEdges: SpawnEdgePolicy = .gating,
+        mutationOrder: MutationOrderPolicy = .advisory,
+        observedStateLabels: [String]? = nil
     ) {
         self.volatileFields = volatileFields
         self.numericEpsilon = numericEpsilon
@@ -197,6 +225,8 @@ public struct Tolerance: Sendable, Equatable {
         self.domainMigration = domainMigration
         self.concurrency = concurrency
         self.spawnEdges = spawnEdges
+        self.mutationOrder = mutationOrder
+        self.observedStateLabels = observedStateLabels
     }
 
     /// The default: exact match on everything (nondeterminism already removed by canonicalization of
@@ -264,6 +294,7 @@ extension Tolerance: Codable {
     enum CodingKeys: String, CodingKey {
         case volatileFields, numericEpsilon, timingBudgets, unorderedGroups, ignoredKinds
         case ignoredNotificationNames, structuralComparison, domainMigration, concurrency, spawnEdges
+        case mutationOrder, observedStateLabels
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -283,6 +314,10 @@ extension Tolerance: Codable {
             .decodeIfPresent(ConcurrencyComparison.self, forKey: .concurrency) ?? .totalOrder
         spawnEdges = try container
             .decodeIfPresent(SpawnEdgePolicy.self, forKey: .spawnEdges) ?? .gating
+        mutationOrder = try container
+            .decodeIfPresent(MutationOrderPolicy.self, forKey: .mutationOrder) ?? .advisory
+        observedStateLabels = try container
+            .decodeIfPresent([String].self, forKey: .observedStateLabels)
     }
 }
 
