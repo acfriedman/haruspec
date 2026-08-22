@@ -31,9 +31,9 @@ public struct Exploration: Codable, Sendable, Equatable {
     /// edges-before-middles pass (`DomainSeamGenerator`). Zero when no declared domain matched a
     /// recorded seam: there was no boundary schedule to spend on.
     public let boundaryEdgesScheduled: Int
-    /// How many scheduled edges the variant budget actually ran. The remainder was dropped when
-    /// `variantsPerOrdering` ran out — which used to happen silently; a sweep that skipped 11 of its
-    /// 38 edges should say so rather than read as edge-complete.
+    /// How many scheduled edges the variant budget actually ran. The remainder is dropped when
+    /// `variantsPerOrdering` runs out — and reported: a sweep that skipped 11 of its 38 edges should
+    /// say so rather than read as edge-complete.
     public let boundaryEdgesCovered: Int
 
     public init(
@@ -323,9 +323,9 @@ enum ExplorationBudget {
 /// (there is no expected value to contradict, only "did both branches agree"). Filtering those
 /// orderings out is how a spec quietly stops interrogating its own error paths.
 ///
-/// Sampling is the point of the rest. Depth-first truncation returned the first `max` extensions in
-/// enumeration order, which all share a long common prefix — the example spec's 50-of-2,520 slice
-/// varied only in its tail. A random walk spreads the same budget across the whole space, and weighting
+/// Sampling is the point of the rest. Depth-first truncation would return the first `max` extensions in
+/// enumeration order, which all share a long common prefix — the example spec's 50-of-2,520 slice would
+/// vary only in its tail. A random walk spreads the same budget across the whole space, and weighting
 /// each step by `ExtensionCounter` makes that walk *uniform over orderings* (see there for why an
 /// unweighted walk isn't). When the state space is too large to count, the walk falls back to unweighted.
 ///

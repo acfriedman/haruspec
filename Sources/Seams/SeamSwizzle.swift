@@ -3,7 +3,7 @@ import ObjectiveC
 
 /// Method swizzling, retained for **exactly two jobs** — not as a runtime observation mechanism.
 ///
-/// The canonical path is now the *injectability precondition*: ask for the smallest behavior-preserving
+/// The canonical path is the *injectability precondition*: ask for the smallest behavior-preserving
 /// refactor that makes a boundary injectable (a settable-`.shared` behind a protocol — one file, all call
 /// sites untouched), then observe it through clean DI with no interception. See `SEAMS.md`. Swizzling
 /// survives only where that leaves a residue:

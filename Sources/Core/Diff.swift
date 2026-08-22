@@ -181,7 +181,7 @@ public enum BehavioralDiff {
     }
 
     /// The `.totalOrder` comparison: one LCS over the whole interleaving, then reconciliation of
-    /// whatever failed to align. This is the original pipeline (steps 2–4), unchanged.
+    /// whatever failed to align — steps 2–4 of the pipeline documented on `BehavioralDiff`.
     private static func compareTotalOrder(
         baseline: [TraceEvent],
         candidate: [TraceEvent],

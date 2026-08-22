@@ -39,7 +39,7 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// The one plan schema this engine writes and replays. `init(jsonData:)` rejects anything else —
     /// a stale shape whose field names happen to still decode would replay garbage with confidence.
     ///
-    /// Bumped to 2 when `Scenario` became `Spec`: the plan's `scenarioName` key is now `specName`,
+    /// Bumped to 2 when `Scenario` became `Spec`: the plan's `scenarioName` key became `specName`,
     /// so a version-1 artifact must be re-recorded rather than coerced. Bumped to 3 when a trace
     /// event's `thread` (a first-seen `worker-N`) became a nominal `domain` — a version-2 artifact
     /// names threads that no longer exist as a concept. Bumped to 4 when `pool` became `ambient`: a
@@ -150,7 +150,7 @@ public extension SpecPlan {
 // MARK: - Scope selection
 
 public extension SpecPlan {
-    /// The `--scope` predicate: does this plan's golden surface touch any of the changed classes?
+    /// The scope predicate: does this plan's golden surface touch any of the changed classes?
     /// CI selects the plans worth re-running on a PR by filtering a plan catalog with this — rebuilding
     /// and replaying only specs whose recorded reach intersects the diff.
     func covers(anyOf changedClasses: some Sequence<String>) -> Bool {
@@ -163,7 +163,7 @@ public extension SpecPlan {
 
 public extension Spec {
     /// Runs this spec's system across the whole explored surface (call orderings × seam cassettes)
-    /// and pin every (input, golden trace) pair into a `SpecPlan`. Run on the **base** build; the
+    /// and pins every (input, golden trace) pair into a `SpecPlan`. Run on the **base** build; the
     /// first probe is the declared order under the golden cassette — the representative run.
     func record() async -> SpecPlan {
         let recording = Cassette()
@@ -192,7 +192,7 @@ public extension Spec {
         )
     }
 
-    /// `record()` and write the plan artifact.
+    /// `record()` and writes the plan artifact.
     @discardableResult
     func record(to url: URL) async throws -> SpecPlan {
         let plan = await record()
@@ -200,18 +200,17 @@ public extension Spec {
         return plan
     }
 
-    /// Cross-build verify: replay every probe's recorded inputs into the **current** build's system and
-    /// diff against the stored golden traces. Divergence semantics match `verify(against:)` — first
+    /// Cross-build verify: replays every probe's recorded inputs into the **current** build's system and
+    /// diffs against the stored golden traces. Divergence semantics match `verify(against:)` — first
     /// divergence returns (no shrink: shrunk orderings have no recorded golden to compare against);
     /// intent-declared deltas are absorbed and the residual collateral gates. Inputs the current build
     /// can't reproduce (a renamed/removed op, a seam read past the recording) downgrade an otherwise
     /// EQUIVALENT verdict to CANNOT-VERIFY via `.unrecorded` coverage gaps.
     ///
     /// The whole replay runs `replays` times (see `Stability.defaultReplays`), and every pass must
-    /// reach the same verdict with the same divergence inventory. Identical recorded inputs leave a
-    /// disagreement only one explanation — an unmodeled nondeterministic axis — so it flips the verdict
-    /// to UNSTABLE and carries the run-to-run delta rather than presenting either pass as the answer.
-    /// The passes are sequential and share nothing but the immutable plan; run 1's verdict is the
+    /// reach the same verdict with the same divergence inventory — disagreement flips the verdict to
+    /// UNSTABLE and carries the run-to-run delta rather than either pass (see `Stability`). The
+    /// passes are sequential and share nothing but the immutable plan; run 1's verdict is the
     /// representative the artifact keeps.
     func verify(
         replaying plan: SpecPlan,
@@ -277,7 +276,7 @@ public extension Spec {
         )
     }
 
-    /// The first-divergence exit: stop, and pin the probe that exposed it.
+    /// The first-divergence exit: stops, and pins the probe that exposed it.
     private func divergedReplayVerdict(
         diff: TraceDiff,
         probe: SpecProbe,
@@ -314,7 +313,7 @@ public extension Spec {
 
     // MARK: - Machinery
 
-    /// One golden probe: replay `cassette` into the base system on `order` and pin the trace.
+    /// One golden probe: replays `cassette` into the base system on `order` and pins the trace.
     private func probe(order: [Op<S>], cassette: CassetteData) async -> SpecProbe {
         let trace = await capture(make: makeSystem, order: order, cassette: Cassette(replaying: cassette))
         return SpecProbe(ordering: order.map(\.label), cassette: cassette, golden: trace)

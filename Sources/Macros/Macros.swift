@@ -67,6 +67,10 @@ public macro Traced(_ typeLabel: String? = nil, timing: Bool = false) =
 /// Every field read through `seams` under the synthesized key is recorded, domain-sweepable
 /// (`Seam("API.fetch.totalCents", .int(0 ... 99_999))`), and identical on replay. An undeclared
 /// required custom type traps fail-fast at the first call, naming the declaration to write.
+///
+/// `as:` optionally spells the generated class name, which `names: prefixed(Traced)` fixes to
+/// `Traced<ProtocolName>` at every scope — the compiler rejects any other spelling as not covered
+/// by the macro (same rule as `@TracedForwarder`).
 @attached(peer, names: prefixed(Traced))
 public macro TracedDouble(label: String, as generatedName: String? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedDoubleMacro")
@@ -129,8 +133,9 @@ public macro Timed() =
 /// `checkout() -> Receipt!` forwards as a bare `__wrapped.checkout()` — no force-unwrap.
 /// The generated type name is declared as `prefixed(Traced)` rather than `arbitrary`: Swift forbids a
 /// peer macro from introducing *arbitrary* names at file scope (where a pasted-interface protocol
-/// naturally lives), but a known prefix is allowed there. The default name is always `Traced<Protocol>`;
-/// a custom `as:` name must therefore also begin with `Traced` when the protocol is declared at file scope.
+/// naturally lives), but a known prefix is allowed there. The name is therefore always
+/// `Traced<Protocol>` — the compiler rejects a custom `as:` spelling anything else, at every scope,
+/// as not covered by the macro.
 ///
 /// `shared:` lets a **singleton** wrapped type declare its accessor so the forwarder self-wires to the
 /// real instance: `@TracedForwarder(wrapping: InventoryLedger.self, label: "Inventory", shared: "shared()")`
@@ -143,8 +148,6 @@ public macro Timed() =
 /// The generated type is an `NSObject` subclass, so it can back an Obj-C `id<Protocol>` injection point
 /// when the pasted protocol refines an `@objc` seam (Swift forbids conforming to an `<NSObject>`-refining
 /// protocol without inheriting `NSObject`). This is inert for a Swift-only forwarder like `TracedCart`.
-/// The generated name is `Traced<ProtocolName>` (or `as:`, which must equal that when the protocol is at
-/// file scope — `names: prefixed(Traced)` covers only the prefixed protocol name, not an arbitrary one).
 @attached(peer, names: prefixed(Traced))
 public macro TracedForwarder(
     wrapping: Any.Type,

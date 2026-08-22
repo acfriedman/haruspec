@@ -78,12 +78,12 @@ public enum ConcurrencyDomain: Sendable, Equatable, Hashable, CustomStringConver
     /// unstructured task. It ran wherever its caller happened to be.
     ///
     /// This is deliberately *not* "the cooperative pool" or "the main thread". Answering with where the
-    /// work landed would make the harness part of the measurement: the same plain class reads `main`
-    /// when a synchronous test calls it and `pool` when an async one does, having changed in no way.
-    /// That is the `worker-N` failure one level up. Ambient says the only true thing available — the
-    /// code names no domain — and says it identically from every caller.
+    /// work landed would make the harness part of the measurement: the same plain class would read
+    /// `main` when a synchronous test calls it and a pool queue when an async one does, having changed
+    /// in no way. Ambient says the only true thing available — the code names no domain — and says it
+    /// identically from every caller.
     ///
-    /// Unordered, for the same reason `pool` was: there is no single serial context to order within.
+    /// Unordered: there is no single serial context to order within.
     case ambient
 
     public var description: String {

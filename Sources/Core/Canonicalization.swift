@@ -11,7 +11,7 @@ public enum Canonicalizer {
     /// Placeholder substituted for any volatile field's value. Chosen to be visually obvious in dumps.
     public static let volatilePlaceholder = CanonicalValue.string("⟨volatile⟩")
 
-    /// Recursively redact volatile fields anywhere in a payload tree. `label` is the owning event's
+    /// Recursively redacts volatile fields anywhere in a payload tree. `label` is the owning event's
     /// label and `path` the dotted route from the payload root to `value` (arrays contribute no
     /// component) — the coordinates scoped `VolatileField` rules match against.
     public static func redact(

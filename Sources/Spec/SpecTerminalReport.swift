@@ -16,7 +16,7 @@ extension SpecVerdict {
             var line = "  coverage: \(Int((fraction * 100).rounded()))% "
                 + "of \(coverage.declared.count) declared boundaries"
             // Printed at 0 too: a spec that declared domains and swept none of them is exactly the
-            // case worth saying out loud, and gating the clause on `> 0` hid it.
+            // case worth saying out loud, and gating the clause on `> 0` would hide it.
             if let domain = coverage.domainFraction, !coverage.domainExercised.isEmpty || domain == 0 {
                 line += " · domain-swept \(Int((domain * 100).rounded()))%"
             }
@@ -65,8 +65,8 @@ extension SpecVerdict {
     /// `report()` and `htmlReport()` so the extraction lives in one place.
     ///
     /// Every value type renders, not only integers: a categorical argument (`.oneOf(Catalog.all)`) is
-    /// the input a counterexample most needs to name, and dropping it left the reader with a quantity
-    /// and no SKU.
+    /// the input a counterexample most needs to name, and dropping it would leave the reader with a
+    /// quantity and no SKU.
     var counterexampleSeamPairs: [(key: String, value: String)] {
         guard let tracks = counterexample?.tracks else { return [] }
         let rendered = tracks.compactMapValues { values -> String? in

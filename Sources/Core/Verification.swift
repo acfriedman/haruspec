@@ -1,7 +1,7 @@
 import Foundation
 
 /// A behavioral diff **plus the coverage it was measured over** — the object the harness, CLI and MCP
-/// callers actually consume. It carries the *resolved* three-tier verdict.
+/// callers actually consume. It carries the *resolved* four-tier verdict.
 ///
 /// `BehavioralDiff.compare` stays a pure, binary comparison of two traces; this wrapper is the only
 /// place `CANNOT-VERIFY` is reached, and only via `resolve`. The split keeps the crown-jewel diff free
@@ -11,7 +11,7 @@ public struct VerificationResult: Codable, Sendable, Equatable {
     public var diff: TraceDiff
     /// How much of the declared behavioral surface the replay exercised.
     public var coverage: Coverage
-    /// The sound, three-tier verdict derived from `diff` + `coverage`.
+    /// The sound, resolved verdict derived from `diff` + `coverage`.
     public var verdict: TraceDiff.Verdict
 
     public init(diff: TraceDiff, coverage: Coverage) {

@@ -4,12 +4,12 @@ import HaruspecCore
 /// A `NotificationCenter` that records what is posted through it — the notification boundary observed
 /// by **injection**, the same way a collaborator is observed through a `@TracedForwarder` decorator.
 ///
-/// This replaces observing a center from the outside. Registering an observer worked, but it made
-/// notifications a *second capture path* with different rules from every other kind of event: it held
-/// the recorder directly instead of looking it up, and it saw no call site, so it had nothing to
-/// resolve a domain from. Both of the concurrency bugs that cost the most to find were that asymmetry
-/// — a notification landing while a traced call from the same block vanished, and one actor method
-/// reporting two domains. One capture path cannot produce either.
+/// Not an observer registered from the outside: that shape makes notifications a *second capture
+/// path* with different rules from every other kind of event — it holds the recorder directly instead
+/// of looking it up, and it sees no call site, so it has nothing to resolve a domain from. That
+/// asymmetry breeds exactly the concurrency bugs that cost the most to find — a notification landing
+/// while a traced call from the same block vanishes, one actor method reporting two domains. One
+/// capture path cannot produce either.
 ///
 /// Injection is the right shape *here* specifically, and the distinction is worth keeping: a
 /// notification center is a collaborator, and handing one in is ordinary practice. A dispatch queue

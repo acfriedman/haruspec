@@ -6,6 +6,16 @@ excluded:
 # Doc-comment shape gates (guidelines: .claude/skills/doc-comments/SKILL.md).
 # missing_docs deliberately NOT enabled yet — backfill is a separate decision.
 custom_rules:
+  doc_prose_before_markup:
+    name: "Doc Prose Before Markup"
+    regex: '\n[ \t]*///[ \t]*\n[ \t]*/// (?!- )\S[^\n]*\n(?:[ \t]*///[^\n]*\n)*?[ \t]*/// - (Parameters?|Returns|Throws|Precondition|Important)\b'
+    message: "Deterministic doc order: summary, then the markup block, then notes. Move `- Parameters:`/`- Returns:` up."
+    severity: warning
+  doc_summary_length:
+    name: "Doc Summary Length"
+    regex: '\n(?![ \t]*///)[^\n]*\n([ \t]*)/// (?!- )[^\n]+\n(?:\1/// (?!- )[^\n]+\n){2,}'
+    message: "Doc summary is one paragraph of at most two lines; push the rest below the markup block as notes."
+    severity: warning
   no_block_doc_comment:
     name: "Block Doc Comment"
     regex: '/\*\*'

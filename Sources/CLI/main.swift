@@ -20,7 +20,7 @@ import HaruspecTrace
 
 enum ExitCode: Int32 { case success = 0, runtime = 1, usage = 2, diverged = 3, cannotVerify = 4, unstable = 5 }
 
-/// Map a four-tier verdict to the process exit code. The bare two-file `diff` path never produces
+/// Maps a four-tier `TraceDiff.Verdict` to the process `ExitCode`. The bare two-file `diff` path never produces
 /// `.cannotVerify` or `.unstable` (it makes no coverage or repetition claim); this is shared so the
 /// replay/MCP paths stay honest.
 func exitCode(for verdict: TraceDiff.Verdict) -> ExitCode {
@@ -37,7 +37,7 @@ func fail(_ message: String, code: ExitCode) -> Never {
     exit(code.rawValue)
 }
 
-/// Pull `--flag value` pairs out of an argument list, returning the flags and the positional rest.
+/// Pulls `--flag value` pairs out of an argument list, returning the flags and the positional rest.
 func parse(_ args: [String]) -> (flags: [String: String], positionals: [String]) {
     var flags: [String: String] = [:]
     var positionals: [String] = []

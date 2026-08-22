@@ -18,8 +18,8 @@ import HaruspecCore
 /// Order matters — an actor scheduled onto the cooperative pool reports the pool's label, so asking
 /// the label first would erase it.
 ///
-/// Anything that names neither is `.pool`: interchangeable workers whose identity is a scheduling
-/// accident rather than a fact about the behavior.
+/// Anything that names neither is `.ambient` — the code declares no isolation of its own; see
+/// `ConcurrencyDomain.ambient`.
 enum DomainResolver {
     private static let mainQueueLabel = "com.apple.main-thread"
     /// Queues Apple owns: the cooperative pool, the main queue, and the rest of the `com.apple.*`

@@ -193,6 +193,13 @@ public struct TracedPropertyMacro: AccessorMacro {
 
 // MARK: - Shared instrumentation emitter
 
+/// The `noteOrigin` argument list an instrumented body registers itself with. `sourceExpression` is
+/// already a Swift expression — a `#fileID` string literal from the expansion context, or nil where the
+/// behavior has no Swift source to point at.
+func originArguments(label: String, symbol: String?, sourceExpression: String?) -> String {
+    "\(literalString(label)), symbol: \(symbol.map(literalString) ?? "nil"), source: \(sourceExpression ?? "nil")"
+}
+
 /// Builds the `call`/`ret` instrumented body shared by `@TracedMethod` and `@TracedForwarder`.
 ///
 /// The result records `call` (with arguments keyed by internal parameter name) on entry, runs
@@ -204,13 +211,6 @@ public struct TracedPropertyMacro: AccessorMacro {
 /// Both the baseline (`@Traced`, `innerBody` = the method's own statements) and the port
 /// (`@TracedForwarder`, `innerBody` = a `__wrapped.<method>(…)` forwarding call) run this one emitter,
 /// so their instrumentation stays byte-for-byte aligned and their traces diff cleanly.
-/// The `noteOrigin` argument list an instrumented body registers itself with. `sourceExpression` is
-/// already a Swift expression — a `#fileID` string literal from the expansion context, or nil where the
-/// behavior has no Swift source to point at.
-func originArguments(label: String, symbol: String?, sourceExpression: String?) -> String {
-    "\(literalString(label)), symbol: \(symbol.map(literalString) ?? "nil"), source: \(sourceExpression ?? "nil")"
-}
-
 func tracedBody(
     function: FunctionDeclSyntax,
     label rawLabel: String,
@@ -300,7 +300,7 @@ func tracedBody(
 
 // MARK: - @TracedForwarder (peer: generate a traced 1:1 forwarding shim)
 
-/// Attached to a `protocol` of pasted Clang-imported signatures, generate a peer `final class` that
+/// Attached to a `protocol` of pasted Clang-imported signatures, generates a peer `final class` that
 /// wraps an Obj-C object and forwards every requirement 1:1 — instrumented with the *same* `call`/`ret`
 /// events `@Traced` emits (see `tracedBody`), so the forwarder's trace aligns with a `@Traced` port.
 ///
@@ -609,13 +609,13 @@ public struct SeamedMethodMacro: BodyMacro {
 
 // MARK: - Shared helpers
 
-/// Extracts the first positional string-literal argument of a macro attribute, if present.
-/// `label` as Swift source for a string literal — labels are plain identifiers, but escape anyway so
-/// a pathological one cannot break out of the generated expression.
+/// Renders `value` as Swift source for a string literal — labels are plain identifiers, but escape
+/// anyway so a pathological one cannot break out of the generated expression.
 func quotedLiteral(_ value: String) -> String {
     StringLiteralExprSyntax(content: value).description
 }
 
+/// Extracts the first positional string-literal argument of a macro attribute, if present.
 func stringArgument(of node: AttributeSyntax) -> String? {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self),
           let first = arguments.first, first.label == nil,

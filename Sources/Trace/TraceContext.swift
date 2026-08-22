@@ -11,7 +11,8 @@ import HaruspecCore
 /// A task-local does not cross a manual thread hop on its own. Swift concurrency inherits it — `Task { }`,
 /// `async let`, task groups, and `DispatchQueue.sync`, which never leaves the thread — but a
 /// `dispatch_async` block runs with no task at all. The GCD preprocessing seam
-/// (`Sources/DispatchSeam/haruspec_dispatch.h`) closes that, and `active` is where the two bindings meet.
+/// (`Sources/DispatchSeam/include/haruspec_dispatch.h`) closes that, and `active` is where the two
+/// bindings meet.
 public enum TraceContext {
     @TaskLocal public static var current: TraceRecorder?
 

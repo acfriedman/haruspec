@@ -177,8 +177,7 @@ public final class TraceRecorder: @unchecked Sendable {
 
     /// Records a payload-free **temporal marker** (the semantic tier): a domain-milestone signpost used
     /// to pin ordering / temporal coupling across refactors that reshuffle the structural tier.
-    /// Deliberately carries no payload — value verification rides production-observable seams
-    /// (notification userInfo, return values, KVO), never hand-authored marker state.
+    /// Deliberately carries no payload — see `Haruspec.marker` for why.
     public func marker(_ label: String, subject: AnyObject? = nil, isolation: (any Actor)? = #isolation) {
         lock.lock(); defer { lock.unlock() }
         appendLocked(
@@ -191,7 +190,7 @@ public final class TraceRecorder: @unchecked Sendable {
         )
     }
 
-    /// Time a unit of work as a signpost interval; the measured duration is a *tolerant* trace field.
+    /// Times a unit of work as a signpost interval; the measured duration is a *tolerant* trace field.
     @discardableResult
     public func interval<T>(
         _ label: String,

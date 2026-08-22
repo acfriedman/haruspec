@@ -12,7 +12,7 @@ private let divergenceRowCap = 20
 
 public extension SpecVerdict {
     /// GitHub-flavored markdown rendering of the verdict, for PR comments and CI job summaries.
-    /// Same three-tier vocabulary as `report()`; coverage is rendered only on verdicts whose replay
+    /// Same verdict vocabulary as `report()`; coverage is rendered only on verdicts whose replay
     /// swept the whole surface (a DIVERGED run stopped at the first non-equivalent probe, so its
     /// coverage numbers describe one replay and would mislead next to an EQUIVALENT's).
     func markdownReport() -> String {

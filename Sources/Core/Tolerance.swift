@@ -1,10 +1,5 @@
 import Foundation
 
-/// The declared "acceptable behavioral delta" between two traces.
-///
-/// The *tolerance model*: the contract that separates a real behavioral change from
-/// inherent run-to-run noise (fresh UUIDs, clock jitter, order-insensitive side effects). Anything
-/// not explicitly tolerated is a divergence. Loadable from JSON so applications ship their own specs.
 /// How the structural (auto-captured) tier participates in the verdict.
 ///
 /// Mechanical migrations don't rename, so structural is the contract (`strict`, the default). A
@@ -85,11 +80,9 @@ public struct VolatileField: Sendable, Equatable, Hashable {
 ///
 /// Default `.gating`, **red until declared**: a domain move is a real behavioral change — different
 /// re-entrancy, different observers' threads, different subtle bugs — so an undeclared one fails the
-/// verdict, and the intended one is a one-line `Intent.expectedDomainMigrations` declaration. (An
-/// earlier default of `.advisory` reasoned that a migration moves every event, so gating is red by
-/// construction — but that was really "red with no exit," and the declaration is the exit.)
-/// `.advisory` reports without failing; `.ignored` restores the pre-migration reading, where a moved
-/// event is a missing + unexpected pair.
+/// verdict, and the intended one is a one-line `Intent.expectedDomainMigrations` declaration.
+/// `.advisory` reports without failing; `.ignored` turns detection off, where a moved
+/// event reads as a missing + unexpected pair.
 public enum DomainMigrationPolicy: String, Codable, Sendable {
     case advisory // reported, does not fail the verdict
     case gating // an undeclared domain change fails the verdict
@@ -135,9 +128,9 @@ public enum SpawnEdgePolicy: String, Codable, Sendable {
 
 /// How the *order* of observed property writes (`.stateChange` events) participates in the verdict.
 ///
-/// Default `.advisory` — deliberately weaker than the safe-by-default gates, and deliberately
-/// temporary: intermediate write order is contract **iff something observes the property between
-/// writes** (KVO / Combine / SwiftUI), and until subscriptions are traced the engine cannot know.
+/// Default `.advisory` — deliberately weaker than the safe-by-default gates: intermediate write
+/// order is contract **iff something observes the property between writes** (KVO / Combine /
+/// SwiftUI), and the capture records no subscriptions, so the engine cannot know.
 /// Gating every port on internal write order would fail refactors no observer can distinguish.
 /// The end-state *values* still gate unconditionally through `.snapshot` events, so advisory here
 /// never waives the state contract — only the timeline. A spec whose subject is known-observed opts
@@ -148,6 +141,11 @@ public enum MutationOrderPolicy: String, Codable, Sendable {
     case ignored // `.stateChange` events are dropped before diffing
 }
 
+/// The declared "acceptable behavioral delta" between two traces.
+///
+/// The *tolerance model*: the contract that separates a real behavioral change from
+/// inherent run-to-run noise (fresh UUIDs, clock jitter, order-insensitive side effects). Anything
+/// not explicitly tolerated is a divergence. Loadable from JSON so applications ship their own specs.
 public struct Tolerance: Sendable, Equatable {
     /// Payload fields whose values are non-deterministic and must be ignored — e.g.
     /// `.key("orderID")`. Redacted to a placeholder before comparison. See `VolatileField` for the

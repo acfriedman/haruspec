@@ -10,8 +10,8 @@ public extension Cassette {
     ///
     /// The **registry is the coverage map** (SEAMS.md): the boundaries the harness knows about. When it
     /// isn't declared explicitly it defaults to the seams the golden run recorded — an honest but
-    /// *partial* denominator (it can't see boundaries no one recorded; that's future static
-    /// seam-crossing analysis). Only meaningful after a `.replay` run.
+    /// *partial* denominator (it can't see boundaries no one recorded — see `Coverage` for the
+    /// sources the model absorbs beyond replay). Only meaningful after a `.replay` run.
     ///
     /// Mapping, per declared seam:
     ///  - had a `SeamMiss` → an `.unrecorded` gap (replay fell back to live; isolation broke).
@@ -46,7 +46,7 @@ public extension Cassette {
         return Coverage(declared: Array(declared), exercised: exercised, gaps: gaps)
     }
 
-    /// Convenience: pair a trace diff with this replay's coverage into the sound three-tier verdict.
+    /// Convenience: pairs a trace diff with this replay's coverage into the resolved `VerificationResult`.
     func verify(_ diff: TraceDiff, declaring registry: [String]? = nil) -> VerificationResult {
         VerificationResult(diff: diff, coverage: coverage(declaring: registry))
     }

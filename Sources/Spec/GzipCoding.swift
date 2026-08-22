@@ -45,7 +45,7 @@ enum Gzip {
         return archive
     }
 
-    /// Unwrap one gzip member, verifying the CRC32 trailer against the decompressed payload.
+    /// Unwraps one gzip member, verifying the CRC32 trailer against the decompressed payload.
     static func decompress(_ archive: Data) throws -> Data {
         let bytes = Data(archive) // rebase indices to zero regardless of the caller's slice
         guard bytes.count >= 18, isGzip(bytes) else {

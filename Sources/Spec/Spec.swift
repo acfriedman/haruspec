@@ -100,7 +100,7 @@ public struct Op<S> {
     var multiplicity: ClosedRange<Int>?
     /// Domains declared on this op by `Op(_:varying:)`, against the seam keys they synthesized.
     /// `Spec.operations(_:)` merges them into the declared surface, so a typed argument is
-    /// property-varied without anyone naming it in `.vary` — which is the join that used to be a string.
+    /// property-varied without anyone naming it in `.vary` — the string join the typed form removes.
     var argumentDomains: [(seam: String, domain: SeamDomain)] = []
     /// Field domains a `.generated(_:)` argument contributes, under the model's type-scoped keys.
     /// Merged fill-if-vacant: the fields are shared surface, and an explicit `Seam` narrows them.
@@ -226,8 +226,8 @@ public func Ordering(max: Int = 100, repeating: Int = 2) -> Variation {
 ///
 /// Orderings are bought first (up to `Ordering(max:)`) and the remainder becomes seam breadth: a second
 /// call ordering reaches code that a second value for the same seam cannot. Undeclared, the axes take
-/// their own sizes — `Ordering(max:)` orderings × 64 seam variants — which is the historical default and
-/// is why a defaulted spec is 6,400 runs.
+/// their own sizes — `Ordering(max:)` orderings × 64 seam variants — which is why a defaulted spec is
+/// 6,400 runs.
 public func Budget(runs: Int) -> Variation {
     precondition(runs >= 1, "a budget has to buy at least one run")
     return .budget(runs: runs)
@@ -370,7 +370,7 @@ public struct Spec<S> {
     }
 
     /// Observes boundary properties: snapshots each at the end of every capture (end-state values gate
-    /// unconditionally), and compare their write timelines under `Tolerance.mutationOrder`. The label
+    /// unconditionally), and compares their write timelines under `Tolerance.mutationOrder`. The label
     /// is the fully qualified one writes carry (`"Cart.itemCount"`). Derived specs get this from the
     /// protocol's `var` requirements; this is the authored spelling.
     public func observes(_ properties: Observed<S>...) -> Spec<S> {
@@ -393,7 +393,7 @@ public struct Spec<S> {
     /// the baseline's own sources (a legacy singleton fanning out through the global center).
     ///
     /// Spec-level deliberately, where port intent deliberately is not: an intent declared on the spec
-    /// leaked one port's excuses to every candidate, but an uncaptured channel in covered baseline
+    /// would leak one port's excuses to every candidate, but an uncaptured channel in covered baseline
     /// code IS every candidate's shared context — the same reasoning that puts `Tolerance` here. A
     /// channel only one port introduces still belongs at its check site, via `Intent`.
     public func accepts(uncaptured channels: String...) -> Spec<S> {

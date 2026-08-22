@@ -11,6 +11,9 @@ import HaruspecTrace
 extension Spec {
     /// Runs one verification with an origin collector bound, and carries what it reached onto its verdict.
     ///
+    /// - Parameter intent: The check site's declaration — only its acceptances are read here, merged
+    ///   with the spec's own (`mergingAcceptances`) and carried on the verdict.
+    ///
     /// Bound around the *whole* verification rather than per capture: the origins of interest span the
     /// baseline and the candidate (a PR audit cares most about the sources the candidate introduced),
     /// and every replay pass of a stability run is the same build. Scoped rather than process-wide, so

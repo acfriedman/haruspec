@@ -3,7 +3,7 @@ import HaruspecCore
 import HaruspecSeams
 import HaruspecTrace
 
-/// The outcome of a spec run: the three-tier verdict *with the coverage it was measured over*, how
+/// The outcome of a spec run: the resolved verdict *with the coverage it was measured over*, how
 /// much was explored, and — for an order-dependent divergence — the failing call sequence: shrunk to
 /// minimal by `verify(against:)`, but the *raw recorded ordering* on `verify(replaying:)`, which never
 /// shrinks (a shrunk variant has no recorded golden to diff against).
@@ -90,8 +90,8 @@ private struct GoldenSurface<S> {
 }
 
 public extension Spec {
-    /// Differentially verify a candidate implementation against this spec's baseline: run both
-    /// against the *same* generated inputs (call orderings × seam values) and diff. The baseline branch
+    /// Differentially verifies a candidate implementation against this spec's baseline: runs both
+    /// against the *same* generated inputs (call orderings × seam values) and diffs. The baseline branch
     /// is the oracle, so no expected output is needed. Stops at (and shrinks) the first divergence.
     ///
     /// `declaring` is the *candidate's* intent — the deltas this particular port is meant to produce.
@@ -194,7 +194,7 @@ public extension Spec {
         }
     }
 
-    /// Drive one (system, ordering, cassette) and return its behavior trace — the recorder, interceptor,
+    /// Drives one (system, ordering, cassette) and returns its behavior trace — the recorder, interceptor,
     /// and ambient context the developer never touches. (Internal: `record`/`verify(replaying:)` drive
     /// the same primitive across a build boundary.)
     func capture(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) async -> Trace {
@@ -274,7 +274,7 @@ public extension Spec {
         return diff.isEquivalent ? nil : diff
     }
 
-    /// Assemble the spec's coverage: the declared surface is the *interrogation* surface — every op
+    /// Assembles the spec's coverage: the declared surface is the *interrogation* surface — every op
     /// (as an `op:<label>` boundary) plus every seam the replays declared. Ops all ran by construction
     /// here (the replay path is where an op can go unrecorded); seams merge across the given replays,
     /// and a seam missed anywhere is never counted exercised. `domainHeld` awards the swept seams
@@ -329,7 +329,7 @@ public extension Spec {
         )
     }
 
-    /// Delta-debug the failing call sequence: drop ops that aren't needed to reproduce → the minimal
+    /// Delta-debugs the failing call sequence: drops ops that aren't needed to reproduce → the minimal
     /// order that still diverges (the "localize" the north star asks for, applied to sequencing).
     private func shrink(
         candidate: @escaping (SeamContext) -> S,

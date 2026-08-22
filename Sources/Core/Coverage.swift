@@ -3,10 +3,10 @@ import Foundation
 /// How much of a change's *declared behavioral surface* a replay actually exercised under
 /// held-identical inputs — the number reported alongside every verdict.
 ///
-/// Deliberately **seam-agnostic**: `SeamMiss` (an unrecorded interaction during replay) is only its
-/// *first* source. The same model later absorbs static seam-crossing analysis and property-based
-/// breadth, so nothing here mentions cassettes — `HaruspecSeams` builds a `Coverage` from a `Cassette`
-/// and hands it in.
+/// Deliberately **seam-agnostic**: `SeamMiss` (an unrecorded interaction during replay) is only one
+/// source — static seam-crossing analysis (`blindSpots`) and property-based breadth (`domainExercised`)
+/// land in the same model, so nothing here mentions cassettes — `HaruspecSeams` builds a `Coverage`
+/// from a `Cassette` and hands it in.
 ///
 /// The point of the model is soundness: a false `EQUIVALENT` is the one catastrophic outcome, so a
 /// coverage gap **downgrades** an otherwise-equivalent verdict to `CANNOT-VERIFY` (see
@@ -125,8 +125,7 @@ public struct Coverage: Codable, Sendable, Equatable {
     /// Can an `EQUIVALENT` diff be *trusted* over this coverage? Only when the surface is known, no
     /// boundary fell back to live, and nothing the audit ran over left the captured surface. v1 hard
     /// rule: unrecorded reach downgrades to `CANNOT-VERIFY`; a low but gap-free fraction is reported,
-    /// not gated (a declared `CoveragePolicy` threshold is future work). An unknown surface (no
-    /// registry) is never trusted.
+    /// not gated. An unknown surface (no registry) is never trusted.
     public var trustsEquivalent: Bool {
         !declared.isEmpty && unrecordedReach.isEmpty && unmatchedDomains.isEmpty && blindSpots.isEmpty
     }

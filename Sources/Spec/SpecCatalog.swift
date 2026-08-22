@@ -74,8 +74,7 @@ public extension SpecProviding {
 public struct SpecEntry {
     public let name: String
     public let candidateNames: [String]
-    // Stored as closures, so the async colour lands in the *type* rather than a signature — the one
-    // spot in this change that is easy to miss.
+    // Stored as closures, so the async colour lands in the *type* rather than a signature.
     let verifyCandidate: (String, URL?) async -> CandidateVerdict?
     let runContinuous: (ContinuousRun) async -> ContinuousOutcome
 }
@@ -127,6 +126,9 @@ public struct SpecCatalog {
 
     /// Runs one `spec/candidate` case. `nil` when either half is no longer declared — a rename
     /// fails the lookup rather than silently verifying nothing.
+    ///
+    /// - Parameter directory: Where the HTML report lands; `nil` means Haruspec's temp
+    ///   `HaruspecReports` folder.
     public func verify(migrationCase: String, reportsIn directory: URL? = nil) async -> CandidateVerdict? {
         guard let separator = migrationCase.firstIndex(of: "/") else {
             return nil
@@ -163,6 +165,9 @@ public struct SpecCatalog {
     /// Runs one `spec/candidate` case, prints its report, and throws if it didn't earn the verdict
     /// its candidate declared. The whole body of a migration test case — a test target calls this
     /// and asserts nothing itself, because there is nothing left to decide.
+    ///
+    /// - Parameter directory: Where the HTML report lands; `nil` means Haruspec's temp
+    ///   `HaruspecReports` folder.
     public func check(migrationCase: String, reportsIn directory: URL? = nil) async throws {
         guard let verdict = await verify(migrationCase: migrationCase, reportsIn: directory) else {
             throw CheckFailure(description: "\(migrationCase) is no longer declared")

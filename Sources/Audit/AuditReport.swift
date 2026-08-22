@@ -37,8 +37,8 @@ public struct AuditReport: Sendable, Equatable {
     }
 
     /// Channels supplied as a default at an injection point. Reported, never gating: the harness
-    /// overrides the default, so the escape is only real if the spec fails to inject there — which is
-    /// a fact about the *run*, not the source, and belongs to the runtime tripwire.
+    /// overrides the default, so the escape is only real if the spec fails to inject there — a fact
+    /// about the *run*, not the source, so it is checked at run time, never gated here.
     public var injectableDefaults: [ChannelFinding] {
         findings.filter { $0.use == .injectableDefault }
     }

@@ -14,7 +14,7 @@ import XCTest
 final class PropertyShowcaseTests: XCTestCase {
     /// Drive a real `CartService`: unit price 999¢, quantity from the `coffeeQty` seam, promo applied.
     /// (No `removeItem`, so the isolated signal is the rounding off-by-one — not the dropped notification
-    /// the existing fixed-spec demo already catches.)
+    /// the fixed-spec demo already catches.)
     private func capture(
         name: String,
         cassette: Cassette,

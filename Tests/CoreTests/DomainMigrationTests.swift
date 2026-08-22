@@ -5,8 +5,8 @@ import XCTest
 /// concurrency migration produces, because moving a dispatch queue to an actor migrates every event
 /// it touches.
 ///
-/// Before this, such an event failed to align (domain is part of the signature) and surfaced as a
-/// missing/unexpected **pair** per event. A cart port measured 12 divergences that way, all pairs,
+/// Without migration matching, such an event fails to align (domain is part of the signature) and
+/// surfaces as a missing/unexpected **pair** per event. A cart port measured 12 divergences that way, all pairs,
 /// none of them a value change. The pairs said nothing about whether behavior survived the move, and
 /// buried the values that would have.
 final class DomainMigrationTests: XCTestCase {
@@ -76,7 +76,7 @@ final class DomainMigrationTests: XCTestCase {
     }
 
     /// Declaring the move excuses the move — never the values carried across it. This is the
-    /// distinction the old missing/unexpected pairs destroyed.
+    /// distinction the missing/unexpected pairs destroy.
     func testValuesStillGateAcrossADeclaredMove() {
         let baseline = trace("b", [note(0, "CheckoutDidComplete", on: .main, ["totalCents": 1169])])
         let candidate = trace("c", [note(0, "CheckoutDidComplete", on: .ambient, ["totalCents": 1170])])
@@ -114,8 +114,8 @@ final class DomainMigrationTests: XCTestCase {
         )
     }
 
-    /// `.ignored` restores the pre-migration reading, so the old behaviour stays reachable — and the
-    /// test documents what it cost: two divergences saying less than one did.
+    /// `.ignored` disables migration matching, so the pair reading stays reachable — and the test
+    /// documents what it costs: two divergences saying less than one does.
     func testIgnoredPolicyRestoresTheMissingUnexpectedPair() {
         let baseline = trace("b", [note(0, "CartDidChange", on: .main)])
         let candidate = trace("c", [note(0, "CartDidChange", on: .ambient)])

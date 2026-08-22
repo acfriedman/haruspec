@@ -3,7 +3,7 @@ import XCTest
 
 /// The mutation-order tier. Write-order divergences on `.stateChange` events are **advisory by
 /// default** — order is contract iff something observes the property between writes, which the
-/// engine cannot yet know — while the end-state values still gate unconditionally through
+/// engine cannot know — while the end-state values still gate unconditionally through
 /// `.snapshot` events. A spec opts up to `.gating`, where an intended reorder declares itself via
 /// `Reorders(_:)`. And no write timeline compares at all unless BOTH captures could record it
 /// (`MutationCapture.full` on both sides) — one side's structural silence must never read as the

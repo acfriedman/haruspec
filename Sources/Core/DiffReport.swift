@@ -34,7 +34,7 @@ public extension TraceDiff {
         let advisory = divergences.filter(\.isAdvisory).count
 
         // Enrich the summary with the intended/collateral split only when intent is in play, so
-        // parity-mode output stays identical to before.
+        // parity-mode output stays free of intent vocabulary.
         if intended > 0 {
             var parts: [String] = []
             if collateralCount > 0 {
@@ -65,9 +65,9 @@ public extension TraceDiff {
         return lines
     }
 
-    /// A prompt-injected relay guide for a consuming agent (printed behind `--agent`). Until an MCP
-    /// wrapper exists the CLI *is* the interface, so the output itself teaches the agent how to
-    /// communicate this ground-truth verdict to a human. Not meant for human eyes.
+    /// A prompt-injected relay guide for a consuming agent (printed behind `--agent`). When the CLI
+    /// is the agent's interface, the output itself teaches the agent how to communicate this
+    /// ground-truth verdict to a human. Not meant for human eyes.
     func agentBrief() -> String {
         let gate = verdict == .equivalent ? "PASS" : "FAIL"
         let mergeGuard = collateralCount > 0

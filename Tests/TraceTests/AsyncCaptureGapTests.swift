@@ -56,8 +56,8 @@ final class AsyncCaptureGapTests: XCTestCase {
         XCTAssertEqual(byLabel["before-fetch"], .ambient)
     }
 
-    /// A traced call and a notification posted from the *same* block now agree. Before the seam the
-    /// notification landed and the traced call did not, because they were captured by two different
+    /// A traced call and a notification posted from the *same* block agree. Without the seam the
+    /// notification lands and the traced call does not, because they are captured by two different
     /// mechanisms — so a trace could show an effect with none of the work behind it.
     func testTracedCallAndNotificationFromOneBlockAgree() {
         let recorder = TraceRecorder(name: "agree")

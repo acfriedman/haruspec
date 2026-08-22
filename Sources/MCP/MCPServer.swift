@@ -1,23 +1,25 @@
 import Foundation
 import HaruspecCore
 
-// A minimal MCP (Model Context Protocol) server over stdio — the distribution rail that sells
-// verification to the *agents*: "verify behavioral parity of this change" is a deterministic
-// capability an LLM lacks, exposed where LLMs already look for tools. Transport is MCP's stdio
-// framing: newline-delimited JSON-RPC 2.0, one message per line, responses on stdout, logs on
-// stderr. Dependency-free by design (JSONSerialization, no SDK), mirroring the CLI's discipline —
-// the protocol layer is ~200 lines and the engine stays the only interesting part.
-//
-// v1 exposes verification of *artifacts* (trace files), wrapping the same path as
-// `haruspec diff --tolerance --intent --agent`. Recording golden traces is deliberately NOT a tool:
-// capture runs inside the consumer's test target (`Spec.record(to:)`) — an external process
-// can verify what a run produced, but it can't faithfully run someone else's app.
+// Dependency-free by design (JSONSerialization, no SDK), mirroring the CLI's discipline — the
+// protocol layer is ~200 lines and the engine stays the only interesting part.
 
+/// A minimal MCP (Model Context Protocol) server over stdio — the distribution rail that sells
+/// verification to the *agents*: "verify behavioral parity of this change" is a deterministic
+/// capability an LLM lacks, exposed where LLMs already look for tools.
+///
+/// Transport is MCP's stdio framing: newline-delimited JSON-RPC 2.0, one message per line,
+/// responses on stdout, logs on stderr.
+///
+/// v1 exposes verification of *artifacts* (trace files), wrapping the same path as
+/// `haruspec diff --tolerance --intent --agent`. Recording golden traces is deliberately NOT a tool:
+/// capture runs inside the consumer's test target (`Spec.record(to:)`) — an external process
+/// can verify what a run produced, but it can't faithfully run someone else's app.
 public struct MCPServer {
     let serverName = "haruspec"
     let serverVersion = "0.1.0"
-    /// The newest MCP protocol revision this server knows; echoed back if the client asks for an
-    /// unknown one (per spec, the server answers with a version it supports).
+    /// The newest MCP protocol revision this server knows — answered when the client's `initialize`
+    /// names none. A requested version is echoed back verbatim.
     let defaultProtocolVersion = "2025-06-18"
 
     public init() {}
@@ -34,7 +36,7 @@ public struct MCPServer {
         exit(0)
     }
 
-    /// Handle one raw JSON-RPC message; `nil` means no response (a notification, per JSON-RPC).
+    /// Handles one raw JSON-RPC message; `nil` means no response (a notification, per JSON-RPC).
     /// Factored this way so tests can drive the whole protocol without a process boundary.
     public func handle(_ line: String) -> String? {
         guard let data = line.data(using: .utf8),

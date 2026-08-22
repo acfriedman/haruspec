@@ -4,8 +4,8 @@ import Foundation
 import XCTest
 
 /// A domain is supposed to describe *the code*: "this is MainActor-isolated", "this runs on the cart
-/// queue". For code that declares no isolation at all, there is no such fact — and today the resolver
-/// answers with wherever the caller happened to be, which makes the harness part of the measurement.
+/// queue". For code that declares no isolation at all, there is no such fact — and a resolver that
+/// answers with wherever the caller happened to be makes the harness part of the measurement.
 ///
 /// That is the same failure `worker-N` had, one level up: a field meant to remove scheduling
 /// nondeterminism, reintroducing it.
@@ -37,9 +37,9 @@ final class AmbientDomainTests: XCTestCase {
 /// An effect belongs to the work that caused it, not to the machinery that carried it there.
 ///
 /// A notification travels through Foundation and a collaborator call through a decorator; both arrive
-/// one frame from the subject, isolated to nothing. Resolving them literally reported `ambient` while
-/// the traced call that emitted them reported the actor — one method, two answers, which is incoherent
-/// however it is captured.
+/// one frame from the subject, isolated to nothing. Resolving them literally would report `ambient`
+/// while the traced call that emitted them reports the actor — one method, two answers, which is
+/// incoherent however it is captured.
 final class CausalDomainAttributionTests: XCTestCase {
     private actor Checkout {
         let recorder: TraceRecorder

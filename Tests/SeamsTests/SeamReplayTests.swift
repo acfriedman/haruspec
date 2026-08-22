@@ -4,7 +4,7 @@ import XCTest
 
 /// The record → replay → diff loop on real nondeterminism seams (time + randomness + a config read).
 ///
-/// This is the seam-harness analogue of the engine's original validation gate: record the boundary
+/// This is the seam-harness analogue of the engine's validation gate: record the boundary
 /// once, replay the *same* transcript into both branches, and any divergence is the code's, not the
 /// environment's.
 final class SeamReplayTests: XCTestCase {

@@ -10,7 +10,7 @@ import XCTest
 /// `TraceRecorder`. Record the seams once from the golden run; replay the *same* cassette into both
 /// branches; diff the traces through the oracle.
 ///
-/// The new thing over the original validation gate: the nondeterminism here (a timestamp, a random
+/// What this proves beyond the validation gate: the nondeterminism here (a timestamp, a random
 /// bucket) *flows into the output*, so tolerances can't absorb it — only seam replay can. Record once,
 /// replay into both branches, and a code change is isolated against a held-identical environment.
 final class SeamHarnessEndToEndTests: XCTestCase {

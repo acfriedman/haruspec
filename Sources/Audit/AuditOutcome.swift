@@ -1,21 +1,21 @@
 import Foundation
 
-// What an audit *means for a verdict*, once the author's accepted blind spots are applied. The split
-// lives here rather than in the Spec layer because it is the audit's own vocabulary — but it takes
-// the acceptances as plain channel names, so this module stays free of `Intent` (and of Core).
-//
-// Four outcomes, because "declared" is not one fact:
-//   bypassed   — found, undeclared → gates
-//   unreadable — could not be read at all → gates
-//   accepted   — found and declared → named on the verdict, does not gate
-//   unmatched  — declared, found nowhere → named, does not gate, and is the one to watch
-//
-// The fourth is the notification-allowlist lesson written into the model: an entry that matches
-// nothing looks exactly like one that matches, so a declaration nothing satisfies must be visible
-// rather than quietly effective. Deleting it is how a subject that *stopped* reaching a channel gets
-// its clean bill of health back.
-
+/// What an audit *means for a verdict*, once the author's accepted blind spots are applied. The split
+/// lives here rather than in the Spec layer because it is the audit's own vocabulary — but it takes
+/// the acceptances as plain channel names, so this module stays free of `Intent` (and of Core).
+///
 /// One audit's findings, resolved against what the author declared.
+///
+/// Four outcomes, because "declared" is not one fact:
+/// - `bypassed` — found, undeclared → gates
+/// - `unreadable` — could not be read at all → gates
+/// - `accepted` — found and declared → named on the verdict, does not gate
+/// - `unmatched` — declared, found nowhere → named, does not gate, and is the one to watch
+///
+/// The fourth is the notification-allowlist lesson written into the model: an entry that matches
+/// nothing looks exactly like one that matches, so a declaration nothing satisfies must be visible
+/// rather than quietly effective. Deleting it is how a subject that *stopped* reaching a channel gets
+/// its clean bill of health back.
 public struct AuditOutcome: Sendable, Equatable {
     /// Channels reached around the recorder and not declared. These gate.
     public let bypassed: [String]
@@ -49,13 +49,12 @@ public struct AuditOutcome: Sendable, Equatable {
 }
 
 public extension AuditReport {
-    /// Folds the report into what a verdict has to read: gating findings, declared ones, and
-    /// declarations that matched nothing.
+    /// Resolves the report against the author's declared blind spots into the four-way
+    /// partition a verdict reads — see `AuditOutcome`.
     ///
-    /// `injectableDefaults` are deliberately absent — a default supplied at an injection point is a
-    /// fact about the source that only becomes an escape if the spec failed to inject there, which is
-    /// a fact about the *run*. The runtime tripwire owns that; gating on it here would make every
-    /// legacy initializer abstain.
+    /// - Parameter accepted: Channel names the spec declared as accepted blind spots
+    ///   (`Spec.accepts(uncaptured:)`). A found bypass under a declared name resolves
+    ///   `accepted`; a declared name found nowhere resolves `unmatched`.
     func outcome(accepting accepted: [String]) -> AuditOutcome {
         let found = orderedUnique(bypasses.map(\.channel))
         let declared = orderedUnique(accepted)

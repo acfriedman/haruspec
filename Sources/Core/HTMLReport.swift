@@ -13,7 +13,7 @@ import Foundation
 
 /// The shared HTML chrome: page skeleton, CSS, and the reusable section builders every `htmlReport()`
 /// composes. Public so the HaruspecSpec entry point can reuse the same building blocks rather than
-/// re-declaring the banner/glyph vocabulary and CSS (the mistake the downstream prototype was forced into).
+/// re-declaring the banner/glyph vocabulary and CSS.
 public enum HTML {
     // MARK: - Page skeleton
 
@@ -46,7 +46,7 @@ public enum HTML {
 
     // MARK: - Hero
 
-    /// The verdict banner hero: three-tier banner, colored left border, and `baseline → candidate` chips.
+    /// The verdict banner hero: four-tier banner, colored left border, and `baseline → candidate` chips.
     public static func hero(
         _ verdict: TraceDiff.Verdict,
         title: String,
@@ -532,8 +532,8 @@ public extension VerificationResult {
 /// A verdict carrier that can render itself to a self-contained HTML report page. Conformed by every
 /// carrier that has an `htmlReport()` — `TraceDiff`, `VerificationResult`, and (in HaruspecSpec)
 /// `SpecVerdict` — so the persistence step below is written once instead of hand-rolled at each call
-/// site. Rendering is the package's job (`htmlReport()`); *writing the string to a file* used to be the
-/// one bit every consumer (the CLI, the dogfood app) re-implemented with `FileManager` — this folds it in.
+/// site. Rendering is the package's job (`htmlReport()`); *writing the string to a file* lives here
+/// too, so no consumer (the CLI, the dogfood app) re-implements it with `FileManager`.
 public protocol HTMLReporting {
     /// A self-contained, themeable HTML rendering of this verdict — the visual companion to `report()`.
     func htmlReport() -> String
@@ -568,7 +568,7 @@ extension TraceDiff: HTMLReporting {}
 extension VerificationResult: HTMLReporting {}
 
 /// Per-kind presentation, kept on the kind rather than inside the report builder — three parallel
-/// switches over one enum belong next to it, and the builder was over its size budget carrying them.
+/// switches over one enum belong next to it.
 private extension Divergence.Kind {
     var glyph: String {
         switch self {

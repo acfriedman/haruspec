@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
 
-/// The Swift half of the GCD **preprocessing seam** (`Sources/DispatchSeam/haruspec_dispatch.h`).
+/// The Swift half of the GCD **preprocessing seam** (`Sources/DispatchSeam/include/haruspec_dispatch.h`).
 ///
 /// Three things happen at an enqueue, and only at an enqueue:
 ///  - the ambient recorder is still reachable (the enqueueing thread is inside the capture window),
@@ -83,8 +83,8 @@ public enum DispatchSeam {
         queueDisciplines[label] = serial
     }
 
-    /// The discipline registered for `label`, or `nil` when its creation was never seen — a queue
-    /// made before the seam, or inside a binary framework.
+    /// The discipline registered for `label` (`true` when serial), or `nil` when its creation was
+    /// never seen — a queue made before the seam, or inside a binary framework.
     static func registeredDiscipline(label: String) -> Bool? {
         lock.lock(); defer { lock.unlock() }
         return queueDisciplines[label]

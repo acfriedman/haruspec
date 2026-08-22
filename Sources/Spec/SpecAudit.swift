@@ -36,6 +36,9 @@ public extension SpecVerdict {
     /// qualification block, undeclared ones onto the coverage as gaps, and the verdict re-resolved
     /// over that coverage.
     ///
+    /// - Parameter intent: The check site's declaration — only its `acceptedBlindSpots` are read,
+    ///   joined onto the ones the verdict already carries.
+    ///
     /// Applied after the whole verification rather than inside it because the origin set is only
     /// complete once every capture has run — and because the finding is a property of the *sources*,
     /// identical across the replays a stability run folds together.

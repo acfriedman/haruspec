@@ -128,7 +128,7 @@ public struct Intent: Sendable, Equatable {
         case .reordered:
             return expectedReorders.contains(divergence.label)
         case .timingRegression:
-            return false // not yet expressible as declared intent — always collateral for now
+            return false // not expressible as declared intent — always collateral
         }
     }
 

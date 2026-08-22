@@ -160,7 +160,7 @@ final class SpawnEdgeDiffTests: XCTestCase {
         XCTAssertTrue(diff.divergences.contains { $0.kind == .missingEvent && $0.label == "Cart.checkout" })
     }
 
-    /// `.ignored` restores today's behavior exactly: edges recorded, nothing read.
+    /// `.ignored` turns the pass off entirely: edges recorded, nothing read.
     func testIgnoredPolicyReadsNoEdges() {
         let baseline = trace("b", [
             event(0, "Cart.checkout", on: .main),

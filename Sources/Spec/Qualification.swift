@@ -28,8 +28,8 @@ public struct Qualification: Codable, Sendable, Equatable {
     /// here as well so the block never implies a swept axis that never moved.
     public let seamPositions: [String: Int]
     /// Effect channels the capture demonstrably could not see. `nil` means the capture-completeness
-    /// audit has not run — rendered as "not audited", never as an empty (clean) list. The audit card
-    /// fills this in when it lands; until then the placeholder keeps the block from overstating.
+    /// audit has not run — rendered as "not audited", never as an empty (clean) list, so an unaudited
+    /// verdict cannot overstate. Filled via `noting(blindSpots:)` by the audit that ran.
     public let blindSpots: [String]?
     /// Where the covered labels are declared, collected from the instrumentation as it ran (see
     /// `TraceOrigin`). This is the audit's denominator made explicit: the files a completeness check
@@ -252,8 +252,8 @@ extension Spec {
 
     /// The replay qualification: the plan already pins the surface — classes, varied seams, and the
     /// golden template all come from it, so the block describes what was recorded, not a re-derivation.
-    /// The replay qualification: the plan already pins the surface, and derived-ness comes from the
-    /// spec value itself — specs are code, present at replay, so nothing is stored to drift.
+    /// Derived-ness comes from the spec value itself — specs are code, present at replay, so nothing
+    /// is stored to drift.
     func replayQualification(of plan: SpecPlan, operations: Int, probes: Int) -> Qualification {
         Qualification(
             coveredClasses: plan.coveredClasses,

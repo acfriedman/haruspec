@@ -90,7 +90,7 @@ public struct DifferentialProperty {
         check(count: count, using: DomainSeamGenerator(domains: domains, seed: seed))
     }
 
-    /// The three-tier verdict for a property run, in the engine's own `VerificationResult` vocabulary:
+    /// The resolved verdict for a property run, in the engine's own `VerificationResult` vocabulary:
     ///  - held over the surface → the golden's `EQUIVALENT` diff, with the swept seams credited as
     ///    domain-exercised (breadth beyond the single point).
     ///  - a counterexample → its `DIVERGED` diff, which stands (a caught path-dependent regression).
@@ -110,7 +110,7 @@ public struct DifferentialProperty {
         verify(count: count, using: DomainSeamGenerator(domains: domains, seed: seed))
     }
 
-    /// Runs both branches against one variant and diff them.
+    /// Runs both branches against one variant and diffs them.
     private func diff(on variant: CassetteData) -> TraceDiff {
         let baseline = run(Cassette(replaying: variant), .baseline)
         let candidate = run(Cassette(replaying: variant), .candidate)

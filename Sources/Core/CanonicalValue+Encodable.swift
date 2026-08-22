@@ -7,7 +7,7 @@ import Foundation
 /// can encode its arguments automatically. Types that aren't `Encodable` degrade gracefully at the
 /// call site (record a type name or omit), rather than forcing conformance everywhere.
 public extension CanonicalValue {
-    /// Encodes through JSON and re-read as a `CanonicalValue`.
+    /// Encodes through JSON and re-reads as a `CanonicalValue`.
     ///
     /// The value is wrapped in a single-element array before encoding so top-level scalars (e.g. a
     /// bare `Int`) are always valid JSON, then unwrapped — `CanonicalValue`'s own `Decodable` does

@@ -18,7 +18,7 @@ public struct TraceOrigin: Codable, Hashable, Sendable, Comparable {
     /// The type that declares the behavior: the `@Traced` type, or a forwarder's wrapped class.
     public let symbol: String?
     /// The declaring file as a `#fileID` path (`"LegacyApp/SwiftCartActor.swift"`), or `nil` where
-    /// there is no Swift source to read — an Obj-C class behind a `@TracedForwarder`, today.
+    /// there is no Swift source to read — an Obj-C class behind a `@TracedForwarder`.
     ///
     /// `#fileID` rather than `#filePath` on purpose: an absolute path is machine-specific, and verdicts
     /// are compared char-for-char across machines (the CI freshness guard *is* that comparison).

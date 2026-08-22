@@ -16,7 +16,7 @@ import HaruspecSeams
 // opens is cheaper per run than the one it extends.
 
 /// How many times each op appears, aligned with the op list it was derived from. One shape is the
-/// historical case — every op exact — and stays the fast path everywhere below.
+/// exact-multiplicity case — every op a fixed count — and stays the fast path everywhere below.
 typealias OrderingShape = [Int]
 
 extension Op {

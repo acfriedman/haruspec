@@ -10,7 +10,7 @@ import Foundation
 ///    bucket's internal order is whichever branch finished first, so only content and counts carry
 ///    signal;
 ///  - events left unmatched by their own bucket reconcile **across** domains by
-///    signature-minus-domain (the existing `domainMigration`), with relative order never compared —
+///    signature-minus-domain (`domainMigration`), with relative order never compared —
 ///    which is also where "ordered baseline bucket, unordered candidate bucket" lands, compared as a
 ///    multiset because either side being unordered means a sequence assertion would be invented, not
 ///    checked;

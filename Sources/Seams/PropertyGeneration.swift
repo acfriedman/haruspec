@@ -222,11 +222,11 @@ public extension SeamDomain {
 /// seams (every seam's first edge before any seam's second), which is what makes a truncated budget
 /// still cover every seam.
 ///
-/// "One factor" used to mean one *column*. A seam read once per op occurrence has a whole track of
-/// readings, and pinning it flattened all of them — three `add`s in one sequence took the same sku, so
-/// mixed baskets survived only in the random tail, and `quantity = 20` meant to say "one line at max"
-/// said "every line at max" instead, which can trip a cart-wide cap and report a divergence that has
-/// nothing to do with the edge it aimed at. So each edge is now scheduled twice: once across the whole
+/// A "factor" is finer than a column: a seam read once per op occurrence has a whole track of
+/// readings, and pinning the whole track flattens it — three `add`s in one sequence take the same sku,
+/// so mixed baskets survive only in the random tail, and `quantity = 20` meant to say "one line at max"
+/// says "every line at max" instead, which can trip a cart-wide cap and report a divergence that has
+/// nothing to do with the edge it aimed at. So each edge is scheduled twice: once across the whole
 /// track (the *aggregate* edge — still the case that finds a total overflow) and once at a single
 /// reading, with the position rotating so repeated edges sweep different slots. The two spans are
 /// interleaved rather than tiered, so a budget too small for the whole schedule still gets both
@@ -281,11 +281,15 @@ public struct DomainSeamGenerator: SeamValueGenerator {
     /// One seam's entries: its edges across the whole track, interleaved with its edges at a single
     /// reading.
     ///
-    /// Two entries are never scheduled. An edge the golden *already holds* everywhere it would be pinned
-    /// regenerates the golden cassette, and a variant identical to one already run is budget spent on
-    /// nothing — which was easy to miss because a domain's first edge is very often the recorded value.
-    /// And a track read once has no distinct single-reading case; `.at(0)` there is the whole-track pin
-    /// again.
+    /// - Parameters:
+    ///   - seam: The seam key every produced `Pin` targets.
+    ///   - edges: The domain's edge values for this seam, in schedule order.
+    ///   - track: The golden cassette's readings for this seam, in reading order; empty when the
+    ///     golden never read it.
+    /// - Returns: Whole-track pins and single-reading pins interleaved, so a truncated budget still
+    ///   gets both flavors. Duplicates of the golden are dropped: an edge the track already holds at
+    ///   every pinned position replays as the golden itself, and a track read once has no distinct
+    ///   single-reading case (a position-0 pin is the whole-track pin again).
     private static func pins(seam: String, edges: [CanonicalValue], track: [CanonicalValue]) -> [Pin] {
         guard !edges.isEmpty else {
             return []
