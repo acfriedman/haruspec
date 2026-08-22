@@ -3,7 +3,7 @@ import SwiftSyntaxMacros
 
 // MARK: - @TracedDouble (peer)
 
-/// Generate a recording test double from a pasted protocol — the collaborator counterpart of
+/// Generates a recording test double from a pasted protocol — the collaborator counterpart of
 /// `@TracedForwarder`, with **nothing behind the boundary**.
 ///
 /// A hand-written double is a second implementation of the collaborator, and a second implementation

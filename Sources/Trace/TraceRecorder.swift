@@ -31,7 +31,7 @@ public final class TraceRecorder: @unchecked Sendable {
     private var identityMap: [ObjectIdentifier: Int] = [:]
     private var nextIdentity = 1
 
-    /// Mirror intervals to Instruments too, so the same run is inspectable with Apple tooling.
+    /// Mirrors intervals to Instruments too, so the same run is inspectable with Apple tooling.
     private let signposter = OSSignposter(subsystem: "com.haruspec.trace", category: "interval")
 
     /// The audit's source map for this capture, picked up from the ambient binding (see `TraceOrigins`).
@@ -47,14 +47,14 @@ public final class TraceRecorder: @unchecked Sendable {
 
     // MARK: - Public recording API
 
-    /// Register where a traced label is declared. Emitted by `@Traced`/`@TracedForwarder` into every
+    /// Registers where a traced label is declared. Emitted by `@Traced`/`@TracedForwarder` into every
     /// instrumented body, so a label registers exactly when it is reached under capture. Cheap when
     /// nothing is collecting (a nil check), and idempotent — the collector is a set.
     public func noteOrigin(_ label: String, symbol: String? = nil, source: String? = nil) {
         origins?.note(TraceOrigin(label: label, symbol: symbol, source: source))
     }
 
-    /// Record a function/method entry. Increments call-nesting depth.
+    /// Records a function/method entry. Increments call-nesting depth.
     public func call(
         _ label: String,
         subject: AnyObject? = nil,
@@ -66,7 +66,7 @@ public final class TraceRecorder: @unchecked Sendable {
         depth += 1
     }
 
-    /// Record a function/method return. Decrements call-nesting depth first.
+    /// Records a function/method return. Decrements call-nesting depth first.
     public func ret(
         _ label: String,
         subject: AnyObject? = nil,
@@ -78,7 +78,7 @@ public final class TraceRecorder: @unchecked Sendable {
         appendLocked(isolation: isolation, kind: .ret, label: label, subject: subject, payload: value)
     }
 
-    /// Record a posted notification / broadcast side effect — an observable product behavior, so it
+    /// Records a posted notification / broadcast side effect — an observable product behavior, so it
     /// lands in the durable **semantic** tier (its value contract survives code-symbol renames).
     public func notification(
         _ name: String,
@@ -97,7 +97,7 @@ public final class TraceRecorder: @unchecked Sendable {
         )
     }
 
-    /// Record an observable state / property mutation (KVO) — a durable **semantic**-tier side effect.
+    /// Records an observable state / property mutation (KVO) — a durable **semantic**-tier side effect.
     public func stateChange(
         _ label: String,
         subject: AnyObject? = nil,
@@ -115,7 +115,7 @@ public final class TraceRecorder: @unchecked Sendable {
         )
     }
 
-    /// Record a property value the harness itself read back at the capture boundary — the state
+    /// Records a property value the harness itself read back at the capture boundary — the state
     /// contract's gate, compared under every `MutationCapture` capability (the harness did the
     /// reading, so no side's instrumentation is being trusted). Semantic tier, like every observable
     /// product behavior.
@@ -136,7 +136,7 @@ public final class TraceRecorder: @unchecked Sendable {
         )
     }
 
-    /// Record an outbound call to a **spied collaborator** — a real side effect leaving the SUT across a
+    /// Records an outbound call to a **spied collaborator** — a real side effect leaving the SUT across a
     /// declared boundary, so it lands in the durable **semantic** tier. The label is `Class.selector`
     /// (the collaborator's stable public API, not an internal code symbol), and `args` is the
     /// canonicalized argument list. Unlike `call`, it does *not* nest depth: a spied effect is a leaf
@@ -158,7 +158,7 @@ public final class TraceRecorder: @unchecked Sendable {
         )
     }
 
-    /// Record an application-defined custom telemetry event (structural tier; droppable via `ignoredKinds`).
+    /// Records an application-defined custom telemetry event (structural tier; droppable via `ignoredKinds`).
     public func custom(
         _ label: String,
         subject: AnyObject? = nil,
@@ -175,7 +175,7 @@ public final class TraceRecorder: @unchecked Sendable {
         )
     }
 
-    /// Record a payload-free **temporal marker** (the semantic tier): a domain-milestone signpost used
+    /// Records a payload-free **temporal marker** (the semantic tier): a domain-milestone signpost used
     /// to pin ordering / temporal coupling across refactors that reshuffle the structural tier.
     /// Deliberately carries no payload — value verification rides production-observable seams
     /// (notification userInfo, return values, KVO), never hand-authored marker state.
@@ -225,7 +225,7 @@ public final class TraceRecorder: @unchecked Sendable {
         return Trace(name: name, mutationCapture: mutationCapture, events: events)
     }
 
-    /// Advance the underlying clock when it is a `ManualClock` (used to model deterministic work cost
+    /// Advances the underlying clock when it is a `ManualClock` (used to model deterministic work cost
     /// in tests); a no-op under a `WallClock`.
     public func advanceClock(_ ticks: Int64) {
         (clock as? ManualClock)?.advance(ticks)
@@ -244,7 +244,7 @@ public final class TraceRecorder: @unchecked Sendable {
         clock.now()
     }
 
-    /// Record a pre-measured signpost interval (the duration was computed by the caller). Used by the
+    /// Records a pre-measured signpost interval (the duration was computed by the caller). Used by the
     /// `@Timed` method instrumentation, which brackets the whole method itself.
     public func signpost(
         _ label: String,
@@ -319,7 +319,7 @@ public final class TraceRecorder: @unchecked Sendable {
         return assigned
     }
 
-    /// Resolve the domain for an event, reusing `symbolicIDLocked` so an actor that is also a traced
+    /// Resolves the domain for an event, reusing `symbolicIDLocked` so an actor that is also a traced
     /// subject carries one identity in both places.
     private func domainLocked(_ isolation: (any Actor)?) -> ConcurrencyDomain {
         DomainResolver.resolve(isolation: isolation, instanceID: symbolicIDLocked)

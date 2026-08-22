@@ -36,7 +36,7 @@ public enum Canonicalizer {
         }
     }
 
-    /// Produce the canonical form of a whole trace under a tolerance spec.
+    /// Produces the canonical form of a whole trace under a tolerance spec.
     public static func canonicalize(_ trace: Trace, spec: Tolerance) -> Trace {
         let ignoredNotifications = Set(spec.ignoredNotificationNames)
         let observedState = spec.observedStateLabels.map(Set.init)

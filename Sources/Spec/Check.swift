@@ -14,7 +14,7 @@ import HaruspecSeams
 // per-build traits, none of which survive a parameterized run over candidate name strings.
 
 public extension Spec {
-    /// Verify one build against this spec's baseline, returning the verdict paired with the expectation
+    /// Verifies one build against this spec's baseline, returning the verdict paired with the expectation
     /// it was held to. `name` titles the console banner and the HTML report written to `reportsIn`
     /// (Haruspec's temp `HaruspecReports` folder by default). `declaring` is this build's intent —
     /// the deltas *this port* is meant to produce — which lives here, next to the build it describes,
@@ -54,7 +54,7 @@ public extension Spec {
 }
 
 public extension SpecProviding {
-    /// Verify one build against this declaration's baseline and throw unless it earned `expected` —
+    /// Verifies one build against this declaration's baseline and throws unless it earned `expected` —
     /// the whole body of a migration test case, called on the spec type itself.
     @discardableResult
     func check(
@@ -94,7 +94,7 @@ public struct CandidateVerdict: Sendable {
         return "expected \(expected.rawValue), got \(actual.rawValue)\n\(verdict.report())"
     }
 
-    /// Print the report under `spec/build` and throw unless the expectation was met. Shared by every
+    /// Prints the report under `spec/build` and throws unless the expectation was met. Shared by every
     /// check spelling, so an inline build and a declared candidate fail identically.
     func check(in specName: String) throws {
         SpecCatalog.report("\(specName)/\(name)", report(), htmlReportPath: htmlReportPath)

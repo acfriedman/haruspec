@@ -6,7 +6,7 @@ import HaruspecTrace
 /// returns the captured trace. This is the "replay" half of capture→replay→diff: identical inputs,
 /// so any difference in the output trace is attributable to the code, not the driver.
 public enum CheckoutSpec {
-    /// Run the canonical spec, capturing a trace under a deterministic clock.
+    /// Runs the canonical spec, capturing a trace under a deterministic clock.
     ///
     /// Capture is fully ambient and zero-code on the service side: `@Traced` records call/args/return
     /// against `TraceContext.current` (bound here), and an injected `RecordingNotificationCenter` records a

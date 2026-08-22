@@ -64,7 +64,7 @@ public extension Spec {
         candidates.map(\.name)
     }
 
-    /// Verify every declared candidate against the baseline, in declaration order. Each candidate's
+    /// Verifies every declared candidate against the baseline, in declaration order. Each candidate's
     /// HTML report is written to `reportsIn`, defaulting to Haruspec's temp `HaruspecReports` folder.
     func verifyAll(reportsIn directory: URL? = nil) async -> [CandidateVerdict] {
         var verdicts: [CandidateVerdict] = []
@@ -74,7 +74,7 @@ public extension Spec {
         return verdicts
     }
 
-    /// Verify a single declared candidate by name. `nil` when no candidate was declared under that
+    /// Verifies a single declared candidate by name. `nil` when no candidate was declared under that
     /// name — a renamed candidate fails the lookup rather than silently verifying nothing.
     func verify(candidateNamed name: String, reportsIn directory: URL? = nil) async -> CandidateVerdict? {
         guard let candidate = candidates.first(where: { $0.name == name }) else { return nil }
@@ -98,7 +98,7 @@ public extension SpecProviding {
         spec.candidateNames
     }
 
-    /// Run one declared port, print its report, and throw unless it earned the verdict its
+    /// Runs one declared port, prints its report, and throws unless it earned the verdict its
     /// `Candidate` declared. The declared-list twin of `check(_:expecting:_:)`.
     func check(candidate: String, reportsIn directory: URL? = nil) async throws {
         guard let verdict = await spec.verify(candidateNamed: candidate, reportsIn: directory) else {

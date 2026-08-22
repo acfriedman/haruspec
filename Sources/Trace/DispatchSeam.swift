@@ -16,7 +16,7 @@ public enum DispatchSeam {
     private nonisolated(unsafe) static var inFlight = 0
     private nonisolated(unsafe) static var waiters: [DispatchSemaphore] = []
 
-    /// Wait until every block enqueued through the seam has finished, or `timeout` elapses.
+    /// Waits until every block enqueued through the seam has finished, or `timeout` elapses.
     ///
     /// This is the exact form of the question a trace snapshot needs to ask. "Has this queue gone
     /// idle?" has no general answer; "has the work I know about finished?" does, because the seam
@@ -75,7 +75,7 @@ public enum DispatchSeam {
     /// Consulted by resolution for work that arrives with no discipline mark of its own.
     private nonisolated(unsafe) static var queueDisciplines: [String: Bool] = [:]
 
-    /// Record that the queue labeled `label` is serial or concurrent. Reached by the creation seams
+    /// Records that the queue labeled `label` is serial or concurrent. Reached by the creation seams
     /// (`dispatch_queue_create` via the preprocessor, `DispatchQueue.init` via overload preference);
     /// process-global because queues outlive any capture window.
     public static func registerQueue(label: String, serial: Bool) {
@@ -104,7 +104,7 @@ public enum DispatchSeam {
         Thread.current.threadDictionary[enteredSerialKey] as? Bool
     }
 
-    /// Mark the thread as executing dispatched work for the duration of `body`. Nested, because a
+    /// Marks the thread as executing dispatched work for the duration of `body`. Nested, because a
     /// dispatched block may dispatch again before the outer one returns.
     ///
     /// `serial` carries the queue's ordering discipline when the enqueue site knows it — an injected

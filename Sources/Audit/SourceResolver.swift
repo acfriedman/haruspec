@@ -33,7 +33,7 @@ public struct SourceResolver: Sendable {
         self.root = root
     }
 
-    /// Resolve each origin against one walk of the tree. Order is preserved, so a caller can zip the
+    /// Resolves each origin against one walk of the tree. Order is preserved, so a caller can zip the
     /// results back onto the verdict's origin list.
     public func resolve(_ origins: some Sequence<TraceOrigin>) -> [SourceResolution] {
         let origins = Array(origins)

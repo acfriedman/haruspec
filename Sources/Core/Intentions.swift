@@ -107,7 +107,7 @@ public enum IntentionsBuilder {
 }
 
 public extension Intent {
-    /// Build an intent from declarations that read as sentences about the port:
+    /// Builds an intent from declarations that read as sentences about the port:
     ///
     ///     Intent {
     ///         Moves("Inventory.reserve", from: .queue("com.emporium.cart"), to: .actor(SwiftCartActor.self))
@@ -136,7 +136,7 @@ public struct Moves: Intention {
     let origin: DomainName
     let destination: DomainName
 
-    /// Move these events — `Moves("Inventory.reserve", "CartDidChange", from: …, to: …)`. At least
+    /// Moves these events — `Moves("Inventory.reserve", "CartDidChange", from: …, to: …)`. At least
     /// one label, by construction: breadth is never the default.
     public init(_ first: String, _ rest: String..., from origin: DomainName, to destination: DomainName) {
         labels = [first] + rest

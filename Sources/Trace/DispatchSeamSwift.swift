@@ -102,7 +102,7 @@ import Foundation
 #endif
 
 public extension DispatchSeam {
-    /// Wrap a Swift closure so it carries the enqueueing context and counts as outstanding work — the
+    /// Wraps a Swift closure so it carries the enqueueing context and counts as outstanding work — the
     /// same contract as the C shim's `haruspec_seam_wrap`, reached from Swift instead of from a block.
     /// Wrap an unawaited task's body so it counts as outstanding work, and so a *detached* task —
     /// which inherits nothing — still finds the recorder its spawn site had.

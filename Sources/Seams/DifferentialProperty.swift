@@ -54,7 +54,7 @@ public struct DifferentialProperty {
         }
     }
 
-    /// Diff baseline vs candidate over `count` generated variants, stopping at (and shrinking) the first
+    /// Diffs baseline vs candidate over `count` generated variants, stopping at (and shrinking) the first
     /// divergence. `generator` supplies the values — the commodity seam.
     public func check(count: Int, using generator: some SeamValueGenerator) -> Result {
         var gen = generator
@@ -110,7 +110,7 @@ public struct DifferentialProperty {
         verify(count: count, using: DomainSeamGenerator(domains: domains, seed: seed))
     }
 
-    /// Run both branches against one variant and diff them.
+    /// Runs both branches against one variant and diff them.
     private func diff(on variant: CassetteData) -> TraceDiff {
         let baseline = run(Cassette(replaying: variant), .baseline)
         let candidate = run(Cassette(replaying: variant), .candidate)

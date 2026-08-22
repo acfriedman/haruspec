@@ -65,7 +65,7 @@ struct ExtensionCounter {
         isWeighted = stride <= stateLimit
     }
 
-    /// Pick one of `labels` (the frontier, by label) with probability proportional to the orderings
+    /// Picks one of `labels` (the frontier, by label) with probability proportional to the orderings
     /// beneath it. Falls back to an even pick when the space is too large to count.
     mutating func choose(from labels: [String], using rng: inout SplitMix64) -> Int {
         guard isWeighted, labels.count > 1 else {
@@ -103,14 +103,14 @@ struct ExtensionCounter {
         return extensions()
     }
 
-    /// Record that the walk placed `label`, so subsequent weights are conditioned on it.
+    /// Records that the walk placed `label`, so subsequent weights are conditioned on it.
     mutating func take(_ label: String) {
         guard isWeighted, let slot = slot(of: label) else { return }
         counts[slot] -= 1
         remaining -= 1
     }
 
-    /// Back to the full multiset for the next walk. The memo is deliberately kept — it is a property of
+    /// Restores the full multiset for the next walk. The memo is deliberately kept — it is a property of
     /// the partial order, not of one walk, which is what makes weighting cheap across a whole sample.
     mutating func reset() {
         counts = declared

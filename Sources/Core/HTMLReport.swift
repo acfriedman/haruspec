@@ -17,7 +17,7 @@ import Foundation
 public enum HTML {
     // MARK: - Page skeleton
 
-    /// Wrap pre-built section strings in the full self-contained document (doctype, head, inline CSS,
+    /// Wraps pre-built section strings in the full self-contained document (doctype, head, inline CSS,
     /// `<main>`, footer). This is the only place the skeleton and stylesheet live.
     public static func page(title: String, sections: [String]) -> String {
         """
@@ -540,13 +540,13 @@ public protocol HTMLReporting {
 }
 
 public extension HTMLReporting {
-    /// Render and write the report to an exact URL, throwing on failure. For callers that own the
+    /// Renders and writes the report to an exact URL, throwing on failure. For callers that own the
     /// destination (e.g. the CLI's `--html <path>`).
     func writeHTMLReport(to url: URL) throws {
         try htmlReport().write(to: url, atomically: true, encoding: .utf8)
     }
 
-    /// Render and write the report to `directory/<name>.html`, creating the directory if needed. Defaults
+    /// Renders and writes the report to `directory/<name>.html`, creating the directory if needed. Defaults
     /// to a `HaruspecReports` folder under the system temp dir. Returns the written file's URL, or `nil` on
     /// failure — the "just give me a path I can open" convenience for tests and dev tooling.
     @discardableResult

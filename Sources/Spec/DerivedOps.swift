@@ -65,7 +65,7 @@ public struct DerivedArgument {
         let contributions: (String, Int) -> [(seam: String, domain: SeamDomain)]
         /// The factory a `.generated` argument registers, `nil` for a scalar.
         let maker: (type: ObjectIdentifier, make: (SeamContext, String) -> Any)?
-        /// Read one generated value back, erased. `(seams, opLabel, position) -> value`.
+        /// Reads one generated value back, erased. `(seams, opLabel, position) -> value`.
         let read: (SeamContext, String, Int) -> Any
         /// Whether contributions are a generated model's type-scoped fields (merged fill-if-vacant)
         /// rather than an op-scoped scalar key (merged trap-on-collision).
@@ -166,7 +166,7 @@ extension ArgumentDomain {
         "\(T.self)"
     }
 
-    /// Erase for the derived-op pipeline. The domain must already carry the argument's final name —
+    /// Erases for the derived-op pipeline. The domain must already carry the argument's final name —
     /// the synthesized key reads it.
     func erased() -> DerivedArgument.Resolution {
         DerivedArgument.Resolution(
@@ -298,7 +298,7 @@ public struct Amend {
         self.label = label
     }
 
-    /// Vary `parameter` over `domain` — the parameter-first form of a domain declaration: the name
+    /// Varies `parameter` over `domain` — the parameter-first form of a domain declaration: the name
     /// is the join to the signature, so it anchors the call rather than trailing the domain.
     public func varying(_ parameter: String, over domain: ArgumentDomain<some Any>) -> Amend {
         precondition(
@@ -315,22 +315,22 @@ public struct Amend {
         return copy
     }
 
-    /// This op must run last. Implies once — mirrors `Op.last()`.
+    /// Requires this op to run last. Implies once — mirrors `Op.last()`.
     public func last() -> Amend {
         var copy = self; copy.structure.mustBeLast = true; return copy
     }
 
-    /// This op runs exactly once per sequence — mirrors `Op.once()`.
+    /// Exempts this op from ordering repetition, so it runs exactly once per sequence — mirrors `Op.once()`.
     public func once() -> Amend {
         repeating(1)
     }
 
-    /// Apply exactly `count` times — mirrors `Op.repeating(_:)`.
+    /// Applies exactly `count` times — mirrors `Op.repeating(_:)`.
     public func repeating(_ count: Int) -> Amend {
         repeating(count ... count)
     }
 
-    /// Apply between `range` times, varying per sequence — mirrors `Op.repeating(_:)`.
+    /// Applies between `range` times, varying per sequence — mirrors `Op.repeating(_:)`.
     public func repeating(_ range: ClosedRange<Int>) -> Amend {
         var copy = self; copy.structure.multiplicity = range; return copy
     }
@@ -347,8 +347,8 @@ public struct Amend {
 }
 
 extension DerivedOp {
-    /// Apply one amendment: match each supplied domain to its argument by name, check the types
-    /// agree, and fold the structure in.
+    /// Applies one amendment: matches each supplied domain to its argument by name, checks the types
+    /// agree, and folds the structure in.
     func amended(by amendment: Amend) -> DerivedOp<S> {
         var copy = self
         for supplied in amendment.supplied {
@@ -404,7 +404,7 @@ public enum OperationOverride<S> {
 // MARK: - Adoption
 
 public extension Spec {
-    /// Adopt a protocol's derived op catalog, with the authored residue as overrides.
+    /// Adopts a protocol's derived op catalog, with the authored residue as overrides.
     ///
     /// Everything mechanical comes from the derivation: one op per requirement, bindings, and
     /// type-heuristic domains (marked "derived default" on the verdict). The block holds only what a

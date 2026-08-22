@@ -107,7 +107,7 @@ public struct ContinuousOutcome: Sendable {
 // MARK: - Driving a spec
 
 public extension Spec {
-    /// Run whichever side the environment selects. A run that was never selected is a failure here,
+    /// Runs whichever side the environment selects. A run that was never selected is a failure here,
     /// not a silent pass — gate the test on `ContinuousMode.fromEnvironment()` so it never gets called.
     func runContinuous(
         environment: [String: String] = ProcessInfo.processInfo.environment

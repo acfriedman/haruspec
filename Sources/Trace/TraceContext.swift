@@ -34,7 +34,7 @@ public enum TraceContext {
 
     private static let spawnKey = "com.haruspec.trace.spawnedBy"
 
-    /// Bind `recorder` for the duration of `body` on *this thread only*, restoring whatever was there.
+    /// Binds `recorder` for the duration of `body` on *this thread only*, restoring whatever was there.
     /// Used by the GCD seam around each wrapped block.
     ///
     /// `spawnedBy` is the call that enqueued this work, carried from the enqueue site so the first
@@ -74,7 +74,7 @@ public enum TraceContext {
     /// `Thread.current` is unavailable in an async context, and would be the wrong unit anyway.
     @TaskLocal static var pendingSpawnCause: SpawnCause?
 
-    /// Take the pending spawn cause, if this is the first event since the block began. Consumed rather
+    /// Takes the pending spawn cause, if this is the first event since the block began. Consumed rather
     /// than read: the edge belongs to the block's first event, and program order does the rest.
     static func consumePendingSpawnCause() -> Int? {
         let dictionary = Thread.current.threadDictionary
@@ -89,7 +89,7 @@ public enum TraceContext {
 /// Explicit, ambient-aware hooks for the few things a body macro can't infer from a signature:
 /// timing regions and temporal markers. Each is a no-op when no capture is active.
 public enum Haruspec {
-    /// Measure a region as a signpost interval, recording to the ambient recorder if present.
+    /// Measures a region as a signpost interval, recording to the ambient recorder if present.
     /// `isolation` is forwarded rather than defaulted again inside, so the domain resolves to the
     /// *app's* call site — defaulting it here would resolve every interval to this file's context.
     @discardableResult
@@ -105,13 +105,13 @@ public enum Haruspec {
         return try body()
     }
 
-    /// Advance the capture's deterministic clock to model representative work cost (no-op under a
+    /// Advances the capture's deterministic clock to model representative work cost (no-op under a
     /// wall clock or with no active capture). Used to make interval durations reproducible in tests.
     public static func simulateCost(_ ticks: Int64) {
         TraceContext.active?.advanceClock(ticks)
     }
 
-    /// Record a payload-free **temporal marker** (the semantic tier) against the ambient recorder — a
+    /// Records a payload-free **temporal marker** (the semantic tier) against the ambient recorder — a
     /// signpost at a domain milestone (`Haruspec.marker("checkout_completed")`) for pinning ordering and
     /// temporal coupling across refactors that reshuffle the structural tier (e.g. imperative →
     /// reactive). It carries no payload by design: verify *values* through production seams

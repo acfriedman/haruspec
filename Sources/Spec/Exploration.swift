@@ -199,7 +199,7 @@ struct ExplorationPlan<S> {
 }
 
 extension Spec {
-    /// Resolve what this spec declared into the work a run will actually do.
+    /// Resolves what this spec declared into the work a run will actually do.
     func explorationPlan(golden: CassetteData) -> ExplorationPlan<S> {
         // Against what the golden actually recorded, not what was declared: a domain whose key nothing
         // reads moves nothing, and buying it a seam axis spends the budget generating identical
@@ -283,7 +283,7 @@ extension Spec {
 
 /// Splitting a declared run budget across the two axes.
 enum ExplorationBudget {
-    /// Shrink both axes by the same factor rather than draining one to fill the other: the two find
+    /// Shrinks both axes by the same factor rather than draining one to fill the other: the two find
     /// different bugs (ordering reaches code a second seam value cannot; a seam value is what caught
     /// the dogfood's one-cent divergence), so a budget that zeroes either axis is not a smaller sweep,
     /// it is a different one. Scaling the declared shape by `√(budget / full)` keeps its aspect ratio.

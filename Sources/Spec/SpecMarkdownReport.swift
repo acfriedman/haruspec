@@ -208,7 +208,7 @@ public extension SpecVerdict {
         return lines.joined(separator: "\n")
     }
 
-    /// Keep engine-produced text from breaking the table grammar: pipes escape, newlines flatten.
+    /// Keeps engine-produced text from breaking the table grammar: pipes escape, newlines flatten.
     private func tableCell(_ text: String) -> String {
         text
             .replacingOccurrences(of: "|", with: "\\|")

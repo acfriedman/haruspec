@@ -42,7 +42,7 @@ public struct SeamContext {
     /// fresh each capture, like `notifications` (the built-in resource this generalizes).
     var resourceMakers: [ObjectIdentifier: (SeamContext) -> Any] = [:]
 
-    /// Hand a recording double to the subject as an injected collaborator. The act of injection is
+    /// Hands a recording double to the subject as an injected collaborator. The act of injection is
     /// the declaration: the double states its own trace label (`TraceLabeled`, emitted by `@Traced` /
     /// `@TracedForwarder`), and that label leaves the completeness audit's denominator — the
     /// interaction is captured at this boundary, so the double's sources are the fixture's, not the
@@ -53,7 +53,7 @@ public struct SeamContext {
         return double
     }
 
-    /// Construct a generated recording double (`@TracedDouble`) and hand it in, in one move — the
+    /// Constructs a generated recording double (`@TracedDouble`) and hands it in, in one move — the
     /// double reads its synthesized returns through this context, and constructing it here is what
     /// registers it as an injected collaborator.
     public func double<D: SeamDouble>(_ type: D.Type) -> D {
@@ -121,18 +121,18 @@ public struct Op<S> {
         self.action = action
     }
 
-    /// This op must run last (e.g. `checkout`). Implies `.once()`.
+    /// Requires this op to run last (e.g. `checkout`). Implies `.once()`.
     public func last() -> Op<S> {
         var copy = self; copy.mustBeLast = true; return copy.repeating(1)
     }
 
-    /// Exempt this op from ordering repetition — it runs exactly once per sequence. For an op whose
+    /// Exempts this op from ordering repetition — it runs exactly once per sequence. For an op whose
     /// second application is meaningless or destructive rather than interesting.
     public func once() -> Op<S> {
         repeating(1)
     }
 
-    /// Apply this op exactly `count` times in every sequence, overriding `Ordering(repeating:)`.
+    /// Applies this op exactly `count` times in every sequence, overriding `Ordering(repeating:)`.
     ///
     /// The spec-wide number is one dial for every op, which stops fitting as soon as ops are collapsed:
     /// one `add` wants applying six times where one `applyPromo` wants two, and raising the global
@@ -142,7 +142,7 @@ public struct Op<S> {
         repeating(count ... count)
     }
 
-    /// Apply this op *between* `range.lowerBound` and `range.upperBound` times — the count varies from
+    /// Applies this op *between* `range.lowerBound` and `range.upperBound` times — the count varies from
     /// sequence to sequence rather than being fixed.
     ///
     /// Exact multiplicity means every sequence runs every op the same number of times, so states that
@@ -158,7 +158,7 @@ public struct Op<S> {
         return copy
     }
 
-    /// This op is *expected* to run after `label` — a soft precondition, not a filter.
+    /// Declares this op *expected* to run after `label` — a soft precondition, not a filter.
     ///
     /// Exploration spends most of its ordering budget on sequences that respect the declaration and a
     /// deliberate slice on sequences that break it, tagging the latter in the verdict. A differential
@@ -171,7 +171,7 @@ public struct Op<S> {
         var copy = self; copy.afters.append(label); return copy
     }
 
-    /// This op may not run before `label` — a hard gate no sampled ordering will ever violate.
+    /// Forbids this op from running before `label` — a hard gate no sampled ordering will ever violate.
     ///
     /// For the op that would *trap* out of order (a force-unwrap on legacy state), where a violation
     /// aborts the process and costs the whole run its verdict rather than producing a finding. Prefer
@@ -204,7 +204,7 @@ public enum Variation {
     case budget(runs: Int)
 }
 
-/// Vary a seam over a domain (property-based breadth). Composes with `Ordering`.
+/// Varies a seam over a domain (property-based breadth). Composes with `Ordering`.
 public func Seam(_ name: String, _ domain: SeamDomain) -> Variation {
     .seam(name, domain)
 }
@@ -369,7 +369,7 @@ public struct Spec<S> {
         var copy = self; copy.tolerances = spec; return copy
     }
 
-    /// Observe boundary properties: snapshot each at the end of every capture (end-state values gate
+    /// Observes boundary properties: snapshots each at the end of every capture (end-state values gate
     /// unconditionally), and compare their write timelines under `Tolerance.mutationOrder`. The label
     /// is the fully qualified one writes carry (`"Cart.itemCount"`). Derived specs get this from the
     /// protocol's `var` requirements; this is the authored spelling.
@@ -388,7 +388,7 @@ public struct Spec<S> {
         return spec
     }
 
-    /// Accept that the *subject* reaches an effect channel the capture cannot see — the spec-level
+    /// Accepts that the *subject* reaches an effect channel the capture cannot see — the spec-level
     /// home of `Accepts(uncaptured:)`, for a blind spot every candidate shares because it lives in
     /// the baseline's own sources (a legacy singleton fanning out through the global center).
     ///
@@ -431,7 +431,7 @@ public struct Spec<S> {
         return copy
     }
 
-    /// Adopt a model's own generator (`SeamGenerated`) — the reusable form, one line per spec. The
+    /// Adopts a model's own generator (`SeamGenerated`) — the reusable form, one line per spec. The
     /// type's field domains are discovered here, at declaration time, by a dry run of the factory,
     /// so they join the declared surface exactly like `.vary` seams: swept by the variant budget,
     /// scheduled for boundary edges, reported in `seamPositions` — and known to a replay, whose

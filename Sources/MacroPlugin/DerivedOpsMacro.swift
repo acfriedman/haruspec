@@ -3,7 +3,7 @@ import SwiftSyntaxMacros
 
 // MARK: - @DerivedOps (peer)
 
-/// Derive a spec's op catalog from the boundary protocol: one `DerivedOp` per method requirement,
+/// Derives a spec's op catalog from the boundary protocol: one `DerivedOp` per method requirement,
 /// with the binding written mechanically and each parameter mapped by type heuristic — integers and
 /// floats to engine-default domains, `Bool` to both values, a custom type to its `SeamGenerated`
 /// factory, and `String` (or anything unmappable) left *pending*, to trap at spec construction with
@@ -78,7 +78,7 @@ public struct DerivedOpsMacro: PeerMacro {
         return [DeclSyntax("\(raw: source)")]
     }
 
-    /// Walk the requirements once: methods become op entries, `var`s become observed properties.
+    /// Walks the requirements once: methods become op entries, `var`s become observed properties.
     private static func derivedEntries(of proto: ProtocolDeclSyntax) -> (ops: [String], properties: [String]) {
         var entries: [String] = []
         var properties: [String] = []

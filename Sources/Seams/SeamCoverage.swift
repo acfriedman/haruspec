@@ -6,7 +6,7 @@ import HaruspecCore
 /// place the cassette (an `HaruspecSeams` concept) meets `Coverage` (an `HaruspecCore` concept); the diff
 /// engine never sees a cassette.
 public extension Cassette {
-    /// Build the coverage signal for this replay against a declared seam registry.
+    /// Builds the coverage signal for this replay against a declared seam registry.
     ///
     /// The **registry is the coverage map** (SEAMS.md): the boundaries the harness knows about. When it
     /// isn't declared explicitly it defaults to the seams the golden run recorded — an honest but

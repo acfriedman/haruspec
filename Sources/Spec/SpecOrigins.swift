@@ -9,7 +9,7 @@ import HaruspecTrace
 // verification's worth of them is scoped, collected, and stamped onto the verdict it produced.
 
 extension Spec {
-    /// Run one verification with an origin collector bound, and carry what it reached onto its verdict.
+    /// Runs one verification with an origin collector bound, and carries what it reached onto its verdict.
     ///
     /// Bound around the *whole* verification rather than per capture: the origins of interest span the
     /// baseline and the candidate (a PR audit cares most about the sources the candidate introduced),
@@ -54,7 +54,7 @@ extension Spec {
 }
 
 extension SpecVerdict {
-    /// Carry the origins one verification collected onto the verdict it produced. Applied last because
+    /// Carries the origins one verification collected onto the verdict it produced. Applied last because
     /// the qualification is resolved off the golden template, before a candidate has run.
     func noting(origins: [TraceOrigin]) -> SpecVerdict {
         SpecVerdict(

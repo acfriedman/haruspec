@@ -12,7 +12,7 @@ import HaruspecCore
 // rather drive everything from one place: it flattens differently-typed specs into plain
 // `spec/candidate` strings, at the cost of declaring `.candidates` and a line to remember per spec.
 
-/// Declare one spec by conforming to this — the same shape SwiftUI asks of a `View`: a type whose
+/// Declares one spec by conformance — the same shape SwiftUI asks of a `View`: a type whose
 /// whole job is to answer one property. `System` is inferred from the return type, so an author
 /// writes the spec and never the associated type.
 ///
@@ -28,7 +28,7 @@ public protocol SpecProviding {
 }
 
 public extension SpecProviding {
-    /// Erase this declaration for a `SpecCatalog`. Not on the protocol itself: the signature
+    /// Erases this declaration for a `SpecCatalog`. Not on the protocol itself: the signature
     /// mentions no associated type, so it stays callable on `any SpecProviding`.
     func entry() -> SpecEntry {
         spec.entry()
@@ -43,7 +43,7 @@ public extension SpecProviding {
         ContinuousMode.fromEnvironment(environment).map { [$0] } ?? []
     }
 
-    /// Run the continuous side CI selected, print the verdict, and throw unless it held.
+    /// Runs the continuous side CI selected, prints the verdict, and throws unless it held.
     func checkContinuous(
         _ mode: ContinuousMode,
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -81,7 +81,7 @@ public struct SpecEntry {
 }
 
 public extension Spec {
-    /// Erase this spec for a `SpecCatalog`.
+    /// Erases this spec for a `SpecCatalog`.
     func entry() -> SpecEntry {
         SpecEntry(
             name: name,
@@ -125,7 +125,7 @@ public struct SpecCatalog {
         entries.flatMap { entry in entry.candidateNames.map { "\(entry.name)/\($0)" } }
     }
 
-    /// Run one `spec/candidate` case. `nil` when either half is no longer declared — a rename
+    /// Runs one `spec/candidate` case. `nil` when either half is no longer declared — a rename
     /// fails the lookup rather than silently verifying nothing.
     public func verify(migrationCase: String, reportsIn directory: URL? = nil) async -> CandidateVerdict? {
         guard let separator = migrationCase.firstIndex(of: "/") else {
@@ -160,7 +160,7 @@ public struct SpecCatalog {
         public let description: String
     }
 
-    /// Run one `spec/candidate` case, print its report, and throw if it didn't earn the verdict
+    /// Runs one `spec/candidate` case, prints its report, and throws if it didn't earn the verdict
     /// its candidate declared. The whole body of a migration test case — a test target calls this
     /// and asserts nothing itself, because there is nothing left to decide.
     public func check(migrationCase: String, reportsIn directory: URL? = nil) async throws {
@@ -199,7 +199,7 @@ public struct SpecCatalog {
         return "  📄 visual report: file://\(path)"
     }
 
-    /// Run the continuous side the environment selects for one spec. `nil` when the name isn't
+    /// Runs the continuous side the environment selects for one spec. `nil` when the name isn't
     /// declared; a selected mode with a missing destination comes back as a failed outcome.
     public func runContinuous(
         spec: String,

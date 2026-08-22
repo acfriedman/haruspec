@@ -10,7 +10,7 @@
 
 import HaruspecTrace
 
-/// Instrument every instance method of a class (or actor) with entry/exit trace capture.
+/// Instruments every instance method of a class (or actor) with entry/exit trace capture.
 ///
 /// Pass a stable label to decouple the trace from the concrete type name — useful when the same
 /// logical type is captured before/after a rename, or across variants:
@@ -40,7 +40,7 @@ import HaruspecTrace
 public macro Traced(_ typeLabel: String? = nil, timing: Bool = false) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedMacro")
 
-/// Generate a recording test double from a pasted protocol — the collaborator counterpart of
+/// Generates a recording test double from a pasted protocol — the collaborator counterpart of
 /// `@TracedForwarder`, with nothing behind the boundary.
 ///
 ///     @TracedDouble(label: "Inventory")
@@ -71,7 +71,7 @@ public macro Traced(_ typeLabel: String? = nil, timing: Bool = false) =
 public macro TracedDouble(label: String, as generatedName: String? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedDoubleMacro")
 
-/// Instrument a single method with entry/exit trace capture. Normally applied automatically by
+/// Instruments a single method with entry/exit trace capture. Normally applied automatically by
 /// `@Traced`; usable directly for selective instrumentation. The argument is the stable type label
 /// used to build the event name `"<typeLabel>.<method>"`. Pass `timed: true` to also record the
 /// method's duration as a signpost interval.
@@ -84,7 +84,7 @@ public macro TracedDouble(label: String, as generatedName: String? = nil) =
 public macro TracedMethod(_ typeLabel: String, timed: Bool = false, declaredBy: String? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedMethodMacro")
 
-/// Record every committed write to a **stored** property as a `stateChange` trace event, via a
+/// Records every committed write to a **stored** property as a `stateChange` trace event, via a
 /// `didSet` observer. Normally applied automatically by `@Traced`; usable directly for selective
 /// instrumentation. The event label is `"<typeLabel>.<name>"`, the value is the property's committed
 /// value (what an observer of the property would read at that moment), and writes during `init`
@@ -94,7 +94,7 @@ public macro TracedMethod(_ typeLabel: String, timed: Bool = false, declaredBy: 
 public macro TracedProperty(_ typeLabel: String, declaredBy: String? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedPropertyMacro")
 
-/// Mark a method inside a `@Traced` type to also record its duration as a signpost interval — the
+/// Marks a method inside a `@Traced` type to also record its duration as a signpost interval — the
 /// method-level opt-in for timing. It is a no-op on its own; `@Traced` reads it when instrumenting.
 ///
 ///     @Traced final class CartService {
@@ -107,7 +107,7 @@ public macro TracedProperty(_ typeLabel: String, declaredBy: String? = nil) =
 public macro Timed() =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TimedMarkerMacro")
 
-/// Generate a traced 1:1 forwarding shim from a pasted Obj-C "Generated Interface".
+/// Generates a traced 1:1 forwarding shim from a pasted Obj-C "Generated Interface".
 ///
 /// `@Traced` can't annotate an Obj-C class, so bringing a legacy Obj-C type under structural capture
 /// otherwise means hand-writing a Swift shim that forwards every method and re-emits the trace events.
@@ -154,7 +154,7 @@ public macro TracedForwarder(
 ) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedForwarderMacro")
 
-/// Derive a spec's op catalog from the boundary protocol — the mechanical two-thirds of an
+/// Derives a spec's op catalog from the boundary protocol — the mechanical two-thirds of an
 /// `.operations` block (method bindings, type-heuristic domains) generated so only the semantic
 /// residue is authored.
 ///
@@ -196,7 +196,7 @@ public macro DerivedOps() =
 
 // MARK: - @Seamed (un-injected reach)
 
-/// Route a type's **un-injected** nondeterminism through the harness. Legacy code that calls a bare
+/// Routes a type's **un-injected** nondeterminism through the harness. Legacy code that calls a bare
 /// `Date()` / `Date.now` / `UUID()` — with no injected clock or generator — is rewritten (methods only,
 /// and only where such a call is present) to read the ambient `Seam` cassette instead:
 ///

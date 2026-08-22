@@ -49,8 +49,8 @@ public struct AuditOutcome: Sendable, Equatable {
 }
 
 public extension AuditReport {
-    /// This report as a verdict has to read it: gating findings, declared ones, and declarations that
-    /// matched nothing.
+    /// Folds the report into what a verdict has to read: gating findings, declared ones, and
+    /// declarations that matched nothing.
     ///
     /// `injectableDefaults` are deliberately absent — a default supplied at an injection point is a
     /// fact about the source that only becomes an escape if the spec failed to inject there, which is

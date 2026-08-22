@@ -162,7 +162,7 @@ public extension SpecPlan {
 // MARK: - Record / verify across builds
 
 public extension Spec {
-    /// Run this spec's system across the whole explored surface (call orderings × seam cassettes)
+    /// Runs this spec's system across the whole explored surface (call orderings × seam cassettes)
     /// and pin every (input, golden trace) pair into a `SpecPlan`. Run on the **base** build; the
     /// first probe is the declared order under the golden cassette — the representative run.
     func record() async -> SpecPlan {

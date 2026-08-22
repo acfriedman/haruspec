@@ -46,7 +46,7 @@ public struct ArgumentDomain<T> {
         self.decode = decode
     }
 
-    /// Name this argument, so its seam key — and any counterexample that prints it — reads `add.sku`
+    /// Names this argument, so its seam key — and any counterexample that prints it — reads `add.sku`
     /// rather than `add.0`. This is identity declared once at the use site, not the key the typed form
     /// exists to stop you typing twice; nothing has to agree with it elsewhere.
     ///
@@ -215,7 +215,7 @@ public extension Op {
         declare(third, key: keys[2])
     }
 
-    /// Fold one argument into the op's declared surface: a scalar owns its synthesized key; a
+    /// Folds one argument into the op's declared surface: a scalar owns its synthesized key; a
     /// generated model contributes its type-scoped field domains and the factory that builds it.
     private mutating func declare(_ argument: ArgumentDomain<some Any>, key: String) {
         switch argument.kind {

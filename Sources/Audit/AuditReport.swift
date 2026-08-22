@@ -18,7 +18,7 @@ public struct AuditReport: Sendable, Equatable {
         self.findings = findings
     }
 
-    /// Run the whole audit: resolve each declaration, then lint what resolved.
+    /// Runs the whole audit: resolves each declaration, then lints what resolved.
     public static func audit(
         origins: some Sequence<TraceOrigin>,
         root: URL,

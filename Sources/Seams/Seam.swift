@@ -11,7 +11,7 @@ import HaruspecCore
 public enum Seam {
     @TaskLocal public static var cassette: Cassette?
 
-    /// Run `body` with `cassette` bound as the ambient seam source (record or replay). Rewritten seam
+    /// Runs `body` with `cassette` bound as the ambient seam source (record or replay). Rewritten seam
     /// calls inside route through it; calls outside any binding stay live.
     @discardableResult
     public static func bind<T>(_ cassette: Cassette, _ body: () throws -> T) rethrows -> T {

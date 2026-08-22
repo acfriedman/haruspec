@@ -42,7 +42,7 @@ public struct TracedMacro: MemberAttributeMacro {
         """]
     }
 
-    /// Stamp `@TracedProperty` onto every **stored instance `var`**, so each committed write records a
+    /// Stamps `@TracedProperty` onto every **stored instance `var`**, so each committed write records a
     /// `stateChange` — the write timeline that makes the type's conformance to `FullMutationCapture`
     /// true. Skipped, deliberately: `let` (never written), computed/observed properties (an accessor
     /// macro cannot add observers where accessors exist — a computed passthrough is the wrapped
@@ -193,7 +193,7 @@ public struct TracedPropertyMacro: AccessorMacro {
 
 // MARK: - Shared instrumentation emitter
 
-/// Build the `call`/`ret` instrumented body shared by `@TracedMethod` and `@TracedForwarder`.
+/// Builds the `call`/`ret` instrumented body shared by `@TracedMethod` and `@TracedForwarder`.
 ///
 /// The result records `call` (with arguments keyed by internal parameter name) on entry, runs
 /// `innerBody` inside a nested `__oracleBody()` shim that mirrors the signature's effect specifiers
@@ -530,7 +530,7 @@ private enum SeamRewrite {
     }
 }
 
-/// Collect the trimmed source ranges of rewritable seam calls under `node`, with their replacements.
+/// Collects the trimmed source ranges of rewritable seam calls under `node`, with their replacements.
 /// A manual recursive walk over value-level syntax — deliberately *not* a `SyntaxRewriter` /
 /// `SyntaxVisitor` subclass, whose visitation symbols the prebuilt SwiftSyntax binary doesn't export.
 private func collectSeamEdits(_ node: Syntax, into edits: inout [SeamEdit]) {
@@ -609,7 +609,7 @@ public struct SeamedMethodMacro: BodyMacro {
 
 // MARK: - Shared helpers
 
-/// Extract the first positional string-literal argument of a macro attribute, if present.
+/// Extracts the first positional string-literal argument of a macro attribute, if present.
 /// `label` as Swift source for a string literal — labels are plain identifiers, but escape anyway so
 /// a pathological one cannot break out of the generated expression.
 func quotedLiteral(_ value: String) -> String {
@@ -623,7 +623,7 @@ func stringArgument(of node: AttributeSyntax) -> String? {
     return literal.segments.compactMap { $0.as(StringSegmentSyntax.self)?.content.text }.joined()
 }
 
-/// Extract a labeled string-literal argument of a macro attribute, if present.
+/// Extracts a labeled string-literal argument of a macro attribute, if present.
 func stringArgument(of node: AttributeSyntax, name: String) -> String? {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else { return nil }
     for argument in arguments where argument.label?.text == name {
@@ -634,7 +634,7 @@ func stringArgument(of node: AttributeSyntax, name: String) -> String? {
     return nil
 }
 
-/// Extract a labeled metatype argument (`Foo.self`) as its type name, e.g. `CartManager.self` → "CartManager".
+/// Extracts a labeled metatype argument (`Foo.self`) as its type name, e.g. `CartManager.self` → "CartManager".
 private func typeArgument(of node: AttributeSyntax, name: String) -> String? {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else { return nil }
     for argument in arguments where argument.label?.text == name {
@@ -665,7 +665,7 @@ struct MacroError: Error, CustomStringConvertible {
     }
 }
 
-/// Extract a labeled boolean-literal argument of a macro attribute, if present.
+/// Extracts a labeled boolean-literal argument of a macro attribute, if present.
 private func boolArgument(of node: AttributeSyntax, name: String) -> Bool? {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else { return nil }
     for argument in arguments where argument.label?.text == name {
@@ -697,7 +697,7 @@ private func typeName(of declaration: some DeclGroupSyntax) -> String? {
     return nil
 }
 
-/// Render a Swift double-quoted string literal for a known-safe label.
+/// Renders a Swift double-quoted string literal for a known-safe label.
 func literalString(_ value: String) -> String {
     "\"\(value)\""
 }

@@ -190,7 +190,7 @@ public extension SeamDomain {
         return values.filter { seen.insert($0.canonicalString).inserted }
     }
 
-    /// Vary over a named set. Empty traps at construction rather than silently varying nothing —
+    /// Varies over a named set. Empty traps at construction rather than silently varying nothing —
     /// a seam declared with no values would report domain coverage it never had.
     static func oneOf(_ values: [String]) -> SeamDomain {
         precondition(!values.isEmpty, "oneOf needs at least one value to vary over")
@@ -350,7 +350,7 @@ public struct DomainSeamGenerator: SeamValueGenerator {
 // MARK: - Variant generation from the golden template
 
 public extension CassetteData {
-    /// Produce `count` variants of this golden cassette, asking `generator` for each reading. The golden
+    /// Produces `count` variants of this golden cassette, asking `generator` for each reading. The golden
     /// cassette is the *template* — the seam skeleton (which seams, each arity, each type) is real, only
     /// the values vary — which keeps generation "derived from the real recording," not fabricated.
     func generatedVariants(count: Int, using generator: inout some SeamValueGenerator) -> [CassetteData] {

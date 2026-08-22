@@ -34,7 +34,7 @@ enum Gzip {
         data.prefix(2).elementsEqual([0x1F, 0x8B])
     }
 
-    /// Wrap `data` in a deterministic gzip member: fixed header (MTIME=0, no name, OS=unknown),
+    /// Wraps `data` in a deterministic gzip member: fixed header (MTIME=0, no name, OS=unknown),
     /// raw DEFLATE body, CRC32 + ISIZE trailer.
     static func compress(_ data: Data) throws -> Data {
         let deflated = try rawDeflate(data)

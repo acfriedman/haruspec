@@ -32,7 +32,7 @@ public enum AuditRoot {
 }
 
 public extension SpecVerdict {
-    /// Audit what this verdict covered and fold the result back into it: blind spots onto the
+    /// Audits what this verdict covered and folds the result back into it: blind spots onto the
     /// qualification block, undeclared ones onto the coverage as gaps, and the verdict re-resolved
     /// over that coverage.
     ///

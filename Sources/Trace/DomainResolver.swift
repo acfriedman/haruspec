@@ -27,7 +27,7 @@ enum DomainResolver {
     /// where the caller was, not what the code is.
     private static let systemQueuePrefix = "com.apple."
 
-    /// Resolve the current domain. `instanceID` assigns the symbolic id for an actor instance, and is
+    /// Resolves the current domain. `instanceID` assigns the symbolic id for an actor instance, and is
     /// the recorder's existing subject numbering — so an actor that is also a traced subject keeps one
     /// identity across both.
     static func resolve(isolation: (any Actor)?, instanceID: (AnyObject) -> Int) -> ConcurrencyDomain {

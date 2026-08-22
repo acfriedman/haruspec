@@ -119,7 +119,7 @@ extension SpecVerdict {
 }
 
 extension Stability {
-    /// Fold N single-pass verdicts into their distinct outcomes. Grouping is by resolved verdict +
+    /// Folds N single-pass verdicts into their distinct outcomes. Grouping is by resolved verdict +
     /// full inventory; first-seen order keeps run 1 first so the carried representative matches.
     static func measured(over passes: [SpecVerdict]) -> Stability {
         var outcomes: [Outcome] = []

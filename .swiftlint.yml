@@ -3,6 +3,20 @@
 excluded:
   - .build
 
+# Doc-comment shape gates (guidelines: .claude/skills/doc-comments/SKILL.md).
+# missing_docs deliberately NOT enabled yet — backfill is a separate decision.
+custom_rules:
+  no_block_doc_comment:
+    name: "Block Doc Comment"
+    regex: '/\*\*'
+    message: "Use /// doc comments, not /** */."
+    severity: error
+  doc_markup_capitalized:
+    name: "Doc Markup Capitalization"
+    regex: '///\s*-\s+(parameter|parameters|returns|throws|note|warning|precondition|postcondition|important|invariant|complexity|seealso)[ :]'
+    message: "Capitalize doc markup keywords: `- Returns:`, not `- returns:`."
+    severity: error
+
 identifier_name:
   excluded:
     # `id` is idiomatic Swift (Identifiable, JSON-RPC ids).
