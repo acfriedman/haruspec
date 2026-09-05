@@ -72,6 +72,34 @@ final class SpecProvidingTests: XCTestCase {
         )
     }
 
+    func testAConventionedPlanPathScopesTheModeToTheSpecItNames() {
+        let name = PromoCartSpec().entry().name
+        XCTAssertEqual(
+            PromoCartSpec().continuousModes(environment: [
+                "HARUSPEC_MODE": "record",
+                "HARUSPEC_PLAN_PATH": "/plans/\(name).plan.json.gz"
+            ]),
+            [.record],
+            "its own plan selects the suite"
+        )
+        XCTAssertEqual(
+            PromoCartSpec().continuousModes(environment: [
+                "HARUSPEC_MODE": "record",
+                "HARUSPEC_PLAN_PATH": "/plans/some.other-spec.plan.json.gz"
+            ]),
+            [],
+            "another spec's plan stands this suite down"
+        )
+        XCTAssertEqual(
+            PromoCartSpec().continuousModes(environment: [
+                "HARUSPEC_MODE": "replay",
+                "HARUSPEC_PLAN_PATH": "/plans/plan.json"
+            ]),
+            [.replay],
+            "a path outside the convention applies to every suite"
+        )
+    }
+
     func testContinuousRecordAndReplayRoundTripPerSpec() async throws {
         let planURL = scratch().appendingPathComponent("plan.json")
         let resultsDir = scratch()

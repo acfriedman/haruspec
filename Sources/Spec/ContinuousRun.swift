@@ -39,6 +39,21 @@ public enum ContinuousRun: Sendable {
     public static let planPathKey = "HARUSPEC_PLAN_PATH"
     public static let resultsDirectoryKey = "HARUSPEC_RESULTS_DIR"
 
+    /// The spec a conventioned plan path names — `<spec>.plan.json[.gz]` — or `nil` for a path
+    /// outside the convention, which applies to every suite.
+    ///
+    /// This is what lets one whole-target CI run carry several continuous suites: each suite
+    /// compares the stem against its own spec and stands down for another's plan, instead of
+    /// recording over it or replaying a plan that was never its baseline.
+    public static func specName(inPlanPath path: String) -> String? {
+        let file = URL(fileURLWithPath: path).lastPathComponent
+        for suffix in [".plan.json.gz", ".plan.json"] where file.hasSuffix(suffix) {
+            let stem = String(file.dropLast(suffix.count))
+            return stem.isEmpty ? nil : stem
+        }
+        return nil
+    }
+
     /// Which side this run is, for callers that selected on the mode before assembling the run.
     public var mode: ContinuousMode {
         switch self {

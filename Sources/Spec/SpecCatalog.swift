@@ -35,12 +35,24 @@ public extension SpecProviding {
     }
 
     /// The continuous side to run, or empty — which is what keeps an ordinary test run untouched.
-    /// Scoping to *which* spec is the test runner's job (`-only-testing:` the spec's own suite), so
-    /// this asks only whether CI selected a mode at all.
+    ///
+    /// A plan path following the `<spec>.plan.json[.gz]` convention also scopes the mode to the
+    /// spec it names: CI runs the whole target (the parameterized case ignores function-level
+    /// `-only-testing:`), so with several continuous suites in one target the filename is what
+    /// keeps a suite from recording over another's plan or replaying a foreign baseline. A path
+    /// outside the convention applies to every suite, and its mismatches fail loudly downstream.
     func continuousModes(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [ContinuousMode] {
-        ContinuousMode.fromEnvironment(environment).map { [$0] } ?? []
+        guard let mode = ContinuousMode.fromEnvironment(environment) else {
+            return []
+        }
+        if let path = environment[ContinuousRun.planPathKey],
+           let planSpec = ContinuousRun.specName(inPlanPath: path),
+           planSpec != spec.name {
+            return []
+        }
+        return [mode]
     }
 
     /// Runs the continuous side CI selected, prints the verdict, and throws unless it held.
