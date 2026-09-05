@@ -114,6 +114,14 @@ protocol NarrowKnobs: AnyObject {
     func spin(rate: UInt)
 }
 
+/// The all-`var` boundary (a ViewModel: settable input, published outputs). No ops derive, and
+/// that is legitimate — the properties still do, and the spec authors its input writes as ops.
+@DerivedOps
+protocol VarOnlyPanel: AnyObject {
+    var level: Int { get set }
+    var reading: Int { get }
+}
+
 final class Widget {
     var size = 0
 }
@@ -150,6 +158,14 @@ final class DerivedOpsTests: XCTestCase {
     }
 
     // MARK: - Derivation
+
+    func testAnAllVarBoundaryDerivesPropertiesAndNoOps() {
+        XCTAssertTrue(DerivedVarOnlyPanel.derivedOps.isEmpty)
+        XCTAssertEqual(
+            DerivedVarOnlyPanel.derivedProperties.map(\.label),
+            ["VarOnlyPanel.level", "VarOnlyPanel.reading"]
+        )
+    }
 
     func testTheMacroDerivesOneOpPerMethodRequirement() {
         XCTAssertEqual(DerivedMeteredCart.derivedOps.map(\.label), ["add", "setEager", "total"])

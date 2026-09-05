@@ -28,10 +28,13 @@ public struct DerivedOpsMacro: PeerMacro {
         let system = "any \(protoName)"
 
         let (entries, properties) = derivedEntries(of: proto)
-        guard !entries.isEmpty else {
+        // An all-`var` boundary (a ViewModel: settable input, published outputs) derives an empty
+        // catalog legitimately — properties and the pasted-init system still come from it, and the
+        // spec authors its input writes as ops. Only a protocol deriving *nothing* is refused.
+        guard !entries.isEmpty || !properties.isEmpty else {
             throw MacroError(
                 "@DerivedOps found no derivable requirement on '\(protoName)' — "
-                    + "it derives instance methods only"
+                    + "it derives instance methods and `var` requirements only"
             )
         }
 
