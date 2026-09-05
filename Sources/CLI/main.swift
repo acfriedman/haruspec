@@ -10,7 +10,7 @@ import HaruspecTrace
 //   haruspec diff <baseline.json> <candidate.json> [--tolerance <spec.json>] [--intent <spec.json>] [--agent] [--json]
 //   haruspec demo [--out <dir>]
 //   haruspec canonicalize <trace.json> [--tolerance <spec.json>] [--out <file.json>]
-//   haruspec report <result.json> [--markdown] [--html <path>] [--agent]
+//   haruspec report <result.json>... [--markdown] [--html <path>] [--agent] [--changed <file> --root <dir>]
 //   haruspec audit --root <dir> [--verdict <result.json>] [--covering <Sym,Sym>]
 //
 // Exit codes:  0 ok / equivalent · 1 runtime error · 2 usage error · 3 behavioral divergence ·
@@ -95,12 +95,19 @@ USAGE:
   haruspec canonicalize <trace.json> [--tolerance <spec.json>] [--out <file.json>]
       Emit the canonical, redacted form of a trace.
 
-  haruspec report <result.json> [--markdown] [--html <path>] [--agent]
-      Render a spec verdict artifact (the result.json a verify(replaying:) run writes) and exit
-      with its verdict code — the CI gate reads THIS exit code, not the test runner's.
+  haruspec report <result.json>... [--markdown] [--html <path>] [--agent] [--changed <file> --root <dir>]
+      Render spec verdict artifacts (the result.json a verify(replaying:) run writes) and exit
+      with the worst verdict code — the CI gate reads THIS exit code, not the test runner's.
+      With several artifacts, or --changed, the run renders as one continuous report: verdicts the
+      diff touches in full, a red verdict the diff does NOT touch leads the report, untouched
+      greens collapse to a line each. An unreadable artifact renders as an infrastructure failure
+      (exit 1) instead of hiding the rest.
       --markdown            GitHub-flavored markdown (PR comment / job summary) instead of text.
-      --html <path>         also write the self-contained visual report to <path>.
-      --agent               append the relay guide telling a consuming agent how to report the verdict.
+      --html <path>         also write the self-contained visual report to <path> (single artifact only).
+      --agent               append the relay guide telling a consuming agent how to report the verdict
+                            (single artifact only).
+      --changed <file>      newline-separated repo-relative paths (git diff --name-only) to scope by.
+      --root <dir>          the checkout the verdicts' declared origins resolve against.
 
   haruspec audit --root <dir> [--verdict <result.json>] [--covering <Sym,Sym>]
       Capture-completeness audit: resolve the covered declarations to source under <dir>, then read
@@ -258,7 +265,10 @@ func auditOrigins(_ flags: [String: String]) throws -> [TraceOrigin] {
 
 func runReport(_ rest: [String]) -> Never {
     let (flags, positionals) = parse(rest)
-    guard positionals.count == 1 else { fail("report needs <result.json>\n\n\(usage)", code: .usage) }
+    guard !positionals.isEmpty else { fail("report needs <result.json>...\n\n\(usage)", code: .usage) }
+    if positionals.count > 1 || flags["changed"] != nil {
+        runContinuousReport(flags, positionals)
+    }
     do {
         let verdict = try SpecVerdict(contentsOf: URL(fileURLWithPath: positionals[0]))
         if let htmlPath = flags["html"], !htmlPath.isEmpty {
@@ -287,6 +297,38 @@ func runReport(_ rest: [String]) -> Never {
     } catch {
         fail("report failed: \(error)", code: .runtime)
     }
+}
+
+/// The many-verdict form of `report`: every artifact of one continuous run in one rendering,
+/// optionally scoped to a diff (`--changed` + `--root`), exiting with the worst code rendered.
+///
+/// An unreadable artifact renders as an infrastructure failure instead of aborting the others,
+/// so one broken replay cannot hide a verdict.
+func runContinuousReport(_ flags: [String: String], _ positionals: [String]) -> Never {
+    let root = flags["root"].map { URL(fileURLWithPath: $0) }
+    let changed = flags["changed"].map { path -> Set<String> in
+        guard root != nil else {
+            fail("report --changed needs --root <dir> to resolve subjects to files\n\n\(usage)", code: .usage)
+        }
+        guard let list = try? String(contentsOf: URL(fileURLWithPath: path), encoding: .utf8) else {
+            fail("could not read changed-files list at \(path)", code: .runtime)
+        }
+        return Set(list.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty })
+    }
+    let entries = positionals.map { path -> ContinuousReport.Entry in
+        guard let verdict = try? SpecVerdict(contentsOf: URL(fileURLWithPath: path)) else {
+            return ContinuousReport.Entry(verdict: nil, source: path, subjectFiles: nil)
+        }
+        let files = root.flatMap { verdict.subjectFiles(root: $0) }
+        return ContinuousReport.Entry(verdict: verdict, source: path, subjectFiles: files)
+    }
+    let report = ContinuousReport(entries: entries, changed: changed)
+    print(flags["markdown"] != nil ? report.markdown() : report.text())
+    let worst = report.verdicts
+        .map { $0.map { exitCode(for: $0).rawValue } ?? ExitCode.runtime.rawValue }
+        .max() ?? ExitCode.success.rawValue
+    exit(worst)
 }
 
 let arguments = Array(CommandLine.arguments.dropFirst())
