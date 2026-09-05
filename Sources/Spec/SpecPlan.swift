@@ -186,7 +186,9 @@ public extension Spec {
         return SpecPlan(
             specName: name,
             seed: SpecDefaults.seed,
-            variedSeams: seamDomains.keys.sorted(),
+            // The plan's, not the declaration's: packaged resource sweeps the golden earned are part
+            // of the varied surface a replay reports.
+            variedSeams: plan.domains.keys.sorted(),
             probes: probes,
             coveredClasses: structuralClasses(in: probes.map(\.golden))
         )

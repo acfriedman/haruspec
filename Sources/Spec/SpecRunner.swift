@@ -129,13 +129,13 @@ public extension Spec {
                         cassette: cassette,
                         declaring: intent
                     )
-                    let coverage = coverage(replays: [run.candidateReplay], domainHeld: false)
+                    let coverage = plannedCoverage(replay: run.candidateReplay, domainHeld: false, plan: plan)
                     let failing = exploreOrdering ? shrunk.map(\.label) : nil
                     return SpecVerdict(
                         result: VerificationResult(diff: run.diff, coverage: coverage),
                         orderingsExplored: plan.orderings.count,
                         failingOrder: failing,
-                        counterexample: seamDomains.isEmpty ? nil : cassette,
+                        counterexample: plan.domains.isEmpty ? nil : cassette,
                         exploration: plan.exploration,
                         qualification: qualification,
                         violatedPreconditions: failing.map(preconditionViolations(in:))
@@ -151,7 +151,7 @@ public extension Spec {
             cassette: golden,
             declaring: intent
         )
-        let coverage = coverage(replays: [representative.candidateReplay], domainHeld: true)
+        let coverage = plannedCoverage(replay: representative.candidateReplay, domainHeld: true, plan: plan)
         return SpecVerdict(
             result: VerificationResult(diff: representative.diff, coverage: coverage),
             orderingsExplored: plan.orderings.count,
@@ -163,6 +163,12 @@ public extension Spec {
     }
 
     // MARK: - Hidden machinery
+
+    /// One replay's coverage against the plan's varied surface — the plan's domains, not the
+    /// declaration's, so packaged resource sweeps earn the same credit an authored `Seam` does.
+    private func plannedCoverage(replay: Cassette, domainHeld: Bool, plan: ExplorationPlan<S>) -> Coverage {
+        coverage(replays: [replay], domainHeld: domainHeld, sweptSeams: Array(plan.domains.keys))
+    }
 
     /// Records the golden template — the declared order under live seams, the template every variation
     /// is derived from — and resolves the explored surface plus the qualification measured off it.

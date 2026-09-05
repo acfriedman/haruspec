@@ -218,14 +218,16 @@ extension SpecVerdict {
 
 extension Spec {
     /// The live differential's qualification, measured off the golden template this run just recorded.
+    /// Packaged sweeps the golden earned count as varied — and as derived, since the engine supplied them.
     func liveQualification(goldenTrace: Trace, golden: CassetteData, exploration: Exploration) -> Qualification {
-        Qualification(
+        let sweeps = resourceSweeps(reaching: golden.tracks.keys)
+        return Qualification(
             coveredClasses: structuralClasses(in: [goldenTrace]),
             operations: operations.count,
             probes: exploration.runs,
-            seamPositions: seamPositions(in: golden.tracks, varied: seamDomains.keys),
+            seamPositions: seamPositions(in: golden.tracks, varied: Set(seamDomains.keys).union(sweeps.keys)),
             blindSpots: nil,
-            derivedDefaults: derivedDefaultSeams.sorted(),
+            derivedDefaults: derivedDefaultSeams.union(sweeps.keys).sorted(),
             propertyMutations: propertyMutationsEntry(capturedBy: goldenTrace.mutationCapture)
         )
     }
@@ -255,16 +257,17 @@ extension Spec {
     /// Derived-ness comes from the spec value itself — specs are code, present at replay, so nothing
     /// is stored to drift.
     func replayQualification(of plan: SpecPlan, operations: Int, probes: Int) -> Qualification {
-        Qualification(
+        let goldenTracks = plan.probes.first?.cassette.tracks ?? [:]
+        return Qualification(
             coveredClasses: plan.coveredClasses,
             operations: operations,
             probes: probes,
             seamPositions: seamPositions(
-                in: plan.probes.first?.cassette.tracks ?? [:],
+                in: goldenTracks,
                 varied: plan.variedSeams
             ),
             blindSpots: nil,
-            derivedDefaults: derivedDefaultSeams.sorted(),
+            derivedDefaults: derivedDefaultSeams.union(resourceSweeps(reaching: goldenTracks.keys).keys).sorted(),
             propertyMutations: propertyMutationsEntry(
                 capturedBy: plan.probes.first?.golden.mutationCapture ?? .none
             )

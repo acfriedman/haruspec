@@ -41,9 +41,12 @@ extension Spec {
         // the plan's first probe *is* the golden — so the count is recomputed here rather than stored,
         // the same way the ordering denominator is: read through the current build's declarations.
         let goldenTracks = plan.probes.first?.cassette.tracks ?? [:]
-        let scheduled = Set(seamDomains.keys).isDisjoint(with: goldenTracks.keys)
+        // The same merge the record's plan applied: packaged sweeps the golden reached are part of
+        // the recomputed schedule, or a replayed plan would report fewer edges than it recorded.
+        let domains = seamDomains.merging(resourceSweeps(reaching: goldenTracks.keys)) { declared, _ in declared }
+        let scheduled = Set(domains.keys).isDisjoint(with: goldenTracks.keys)
             ? 0
-            : DomainSeamGenerator(domains: seamDomains, seed: plan.seed, golden: goldenTracks)
+            : DomainSeamGenerator(domains: domains, seed: plan.seed, golden: goldenTracks)
             .scheduledBoundaryEdges
         return Exploration(
             orderingsExplored: orderings.count,

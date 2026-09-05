@@ -160,7 +160,9 @@ struct ExplorationPlan<S> {
     let variantsPerOrdering: Int
     let exploration: Exploration
     private let golden: CassetteData
-    private let domains: [String: SeamDomain]
+    /// Declared domains plus the resource sweeps the golden earned — the varied surface the plan
+    /// actually explores, which is why callers read it rather than `Spec.seamDomains`.
+    let domains: [String: SeamDomain]
     private let seed: UInt64
 
     init(
@@ -199,8 +201,10 @@ struct ExplorationPlan<S> {
 }
 
 extension Spec {
-    /// Resolves what this spec declared into the work a run will actually do.
+    /// Resolves what this spec declared into the work a run will actually do — plus the packaged
+    /// sweeps the golden's reach earned (`resourceSweeps`), which join the declared surface here.
     func explorationPlan(golden: CassetteData) -> ExplorationPlan<S> {
+        let seamDomains = seamDomains.merging(resourceSweeps(reaching: golden.tracks.keys)) { declared, _ in declared }
         // Against what the golden actually recorded, not what was declared: a domain whose key nothing
         // reads moves nothing, and buying it a seam axis spends the budget generating identical
         // cassettes while the verdict reports them as variants.
