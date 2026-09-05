@@ -15,6 +15,8 @@ import PackageDescription
 ///   HaruspecSeams       — the record-once/replay-into-both seam harness (Cassette + injected value seams).
 ///   HaruspecAudit       — capture-completeness auditing (resolve a verdict's origins to source).
 ///   HaruspecSpec    — the developer-facing `Spec { … }.verify(against:)` DSL.
+///   HaruspecCoreData    — Core Data capture resources (seamed context + in-memory stack); opt-in import,
+///                         carried by the umbrella (a second product would double-link the engine).
 ///   Haruspec            — the umbrella: one `import Haruspec` re-exports the whole consumer surface above.
 ///   HaruspecDemo        — a sample application (a checkout module) that exercises the engine end-to-end.
 ///   haruspec            — a thin CLI over the engine (diff / demo / canonicalize).
@@ -106,6 +108,15 @@ let package = Package(
             "HaruspecAudit"
         ], path: "Sources/Spec"),
 
+        // Capture resources for persistence-bearing subjects (the seamed managed-object context).
+        // Depends on the Spec layer for `SeamContext`/`Variation`. NOT its own product: a second
+        // product from this package links a second copy of the engine's static targets into the
+        // same test bundle, and the duplicated recorder state silently empties candidate traces.
+        .target(name: "HaruspecCoreData", dependencies: [
+            "HaruspecSeams",
+            "HaruspecSpec"
+        ], path: "Sources/CoreData"),
+
         // The consumer umbrella. Re-export only (`@_exported import` of the five consumer modules) —
         // no logic lives here, so the dependency-free-core / SwiftSyntax-confined-to-macros layering
         // holds. Depending on HaruspecSpec here is also what makes it reachable to consumers (it is
@@ -118,7 +129,10 @@ let package = Package(
             "HaruspecSpec",
             // Carried by the umbrella so an adopter enabling the GCD seam adds a build setting, not a
             // link step. The header is reachable to Obj-C sources; nothing imports it from Swift.
-            "HaruspecDispatchSeam"
+            "HaruspecDispatchSeam",
+            // Carried so a persistence-bearing spec adds `import HaruspecCoreData`, not a link step —
+            // not re-exported, so the CoreData surface appears only where a spec asks for it.
+            "HaruspecCoreData"
         ]),
 
         .testTarget(name: "HaruspecCoreTests", dependencies: ["HaruspecCore"], path: "Tests/CoreTests"),
@@ -170,6 +184,13 @@ let package = Package(
         ]),
 
         .testTarget(name: "HaruspecMCPTests", dependencies: ["HaruspecMCP", "HaruspecCore"], path: "Tests/MCPTests"),
+
+        .testTarget(name: "HaruspecCoreDataTests", dependencies: [
+            "HaruspecCore",
+            "HaruspecCoreData",
+            "HaruspecSeams",
+            "HaruspecSpec"
+        ], path: "Tests/CoreDataTests"),
 
         // Consumer's-eye view: depends on ONLY the umbrella, so it fails to compile if a single
         // `import Haruspec` doesn't surface the macros, capture, seams, and Spec DSL.
