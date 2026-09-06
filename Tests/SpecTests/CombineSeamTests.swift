@@ -41,6 +41,24 @@ private final class DeadDial: Dial {
     private(set) var echoed = -1
 }
 
+/// The retimed pipeline: identical values, debounce stretched 300ms → 2s. Under virtual time the
+/// requested delay is declared data, so this diverges on the `.timer` event's payload.
+private final class SluggishDial: Dial {
+    @Published var setting = 0
+    @Published private(set) var echoed = -1
+    private var cancellables = Set<AnyCancellable>()
+
+    init() {
+        $setting
+            .dropFirst()
+            .debounce(for: .seconds(2), scheduler: DispatchQueue.main)
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] value in self?.echoed = value }
+            .store(in: &cancellables)
+    }
+}
+
 final class CombineSeamTests: XCTestCase {
     private func dial(system: @escaping (SeamContext) -> Dial) -> Spec<Dial> {
         Spec<Dial>("dial.combineseam")
@@ -66,6 +84,15 @@ final class CombineSeamTests: XCTestCase {
         XCTAssertTrue(verdict.report().contains("Dial.echoed"), verdict.report())
     }
 
+    /// A retimed pipeline diverges on the timer event's delay — declared at the seam, so the catch
+    /// is deterministic where measuring wall-clock latency never could be.
+    func testAStretchedDebounceDivergesOnItsDeclaredDelay() async {
+        let verdict = await dial { _ in DebouncedDial() }.verify(against: { _ in SluggishDial() })
+        XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
+        XCTAssertTrue(verdict.report().contains("timer"), verdict.report())
+        XCTAssertTrue(verdict.report().contains("2000"), verdict.report())
+    }
+
     /// Outside a capture the wrapped scheduler forwards verbatim: the debounce fires on the wall
     /// clock and production behavior is untouched.
     func testOutsideACaptureTheTimerFiresForReal() {
@@ -85,7 +112,7 @@ final class CombineSeamTests: XCTestCase {
         let mine = TraceRecorder(name: "mine", clock: ManualClock())
         let theirs = TraceRecorder(name: "theirs", clock: ManualClock())
         var fired = false
-        DeferredTimers.hold(for: mine) { fired = true }
+        DeferredTimers.hold(for: mine, delayMilliseconds: 300) { fired = true }
         XCTAssertFalse(DeferredTimers.fire(for: theirs))
         XCTAssertFalse(fired)
         XCTAssertTrue(DeferredTimers.fire(for: mine))

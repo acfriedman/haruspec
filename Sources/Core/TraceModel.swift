@@ -12,6 +12,7 @@ public enum EventKind: String, Codable, Sendable, CaseIterable {
     case effect // an outbound call to a spied collaborator — an observable side effect (semantic tier)
     case custom // app-defined telemetry an application wants to pin (droppable via ignoredKinds)
     case snapshot // a property value the harness read back at the capture boundary (semantic tier)
+    case timer // a virtual timer's surviving fire; payload = the requested delay, ms (semantic tier)
 }
 
 /// How much of the subject's property-mutation timeline this trace's capture could see — a fact about

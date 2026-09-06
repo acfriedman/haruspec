@@ -158,6 +158,27 @@ public final class TraceRecorder: @unchecked Sendable {
         )
     }
 
+    /// Records a virtual timer's surviving fire — the temporal contract a deferred pipeline states
+    /// in code (a debounce's quiet period, a delay's interval), carried as data because under
+    /// virtual time the requested delay is *declared at the seam*, never measured. Semantic tier:
+    /// how long a pipeline waits before answering is behavior a user feels, so a changed delay
+    /// gates like any value.
+    public func timerFired(
+        delay: CanonicalValue,
+        subject: AnyObject? = nil,
+        isolation: (any Actor)? = #isolation
+    ) {
+        lock.lock(); defer { lock.unlock() }
+        appendLocked(
+            isolation: isolation,
+            kind: .timer,
+            label: "timer",
+            subject: subject,
+            payload: delay,
+            tier: .semantic
+        )
+    }
+
     /// Records an application-defined custom telemetry event (structural tier; droppable via `ignoredKinds`).
     public func custom(
         _ label: String,

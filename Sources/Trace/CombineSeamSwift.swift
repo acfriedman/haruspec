@@ -1,4 +1,5 @@
 import Foundation
+import HaruspecCore
 
 // The Combine half of the scheduling seam (property-mutation-tracing phase B, step one). A Combine
 // pipeline defers its work through `Scheduler`s the dispatch seam never sees — the delivery hop in
@@ -17,25 +18,41 @@ import Foundation
 /// The deferred-timer registry: work a wrapped scheduler virtualized, keyed by the capture it
 /// belongs to so parallel captures cannot fire each other's timers.
 public enum DeferredTimers {
+    private struct Held {
+        /// The requested delay, for fire ordering — `Int.max` when the scheduler's stride could
+        /// not be read, so unreadable timers fire last rather than nondeterministically.
+        let delayMilliseconds: Int
+        let fire: () -> Void
+    }
+
     private static let lock = NSLock()
-    private nonisolated(unsafe) static var pending: [ObjectIdentifier: [() -> Void]] = [:]
+    private nonisolated(unsafe) static var pending: [ObjectIdentifier: [Held]] = [:]
 
     /// Holds one timer's fire action for `recorder`'s quiescence. The action must carry its own
     /// counting and recorder rebinding — at fire time the capture window's task-local is gone.
-    static func hold(for recorder: TraceRecorder, _ fire: @escaping () -> Void) {
+    static func hold(for recorder: TraceRecorder, delayMilliseconds: Int?, _ fire: @escaping () -> Void) {
         lock.lock(); defer { lock.unlock() }
-        pending[ObjectIdentifier(recorder), default: []].append(fire)
+        pending[ObjectIdentifier(recorder), default: []]
+            .append(Held(delayMilliseconds: delayMilliseconds ?? .max, fire: fire))
     }
 
-    /// Fires every timer currently held for `recorder`, in the order scheduled; returns whether
-    /// anything fired. A stale debounce generation no-ops internally — firing all of them is how
-    /// "the quiet period arrived" resolves. Called by the capture's drain loop between quiesce
-    /// rounds; a fired timer may schedule more work and more timers, so the loop comes back.
+    /// Fires every timer currently held for `recorder`; returns whether anything fired. Firing
+    /// order is requested delay, then scheduling order — under virtual time there is no clock
+    /// axis, and the declared delay is the deterministic stand-in for "which fires first" when
+    /// independent pipelines wait different lengths. A stale debounce generation no-ops (its
+    /// token is cancelled) — firing the batch is how "the quiet period arrived" resolves. Called
+    /// by the capture's drain loop between quiesce rounds; a fired timer may schedule more work
+    /// and more timers, so the loop comes back.
     public static func fire(for recorder: TraceRecorder) -> Bool {
         lock.lock()
         let batch = pending.removeValue(forKey: ObjectIdentifier(recorder)) ?? []
         lock.unlock()
-        batch.forEach { $0() }
+        for held in batch.enumerated().sorted(by: { ($0.element.delayMilliseconds, $0.offset) < (
+            $1.element.delayMilliseconds,
+            $1.offset
+        ) }) {
+            held.element.fire()
+        }
         return !batch.isEmpty
     }
 }
@@ -79,8 +96,9 @@ public enum DeferredTimers {
             /// The virtual-time path: under capture the delay is not waited out — the action is held
             /// and fired at quiescence, on the wrapped scheduler. Counting starts at *fire*, never
             /// while held: a held timer outstanding would deadlock the very quiescence that fires it.
-            /// Relative timing between two pending timers is deliberately not modeled; a duration
-            /// change is scheduler configuration, not behavior, under virtual time.
+            /// The requested delay is declared data in hand at the seam (never measured), so each
+            /// surviving fire records it as a `.timer` event — a retimed pipeline diverges on the
+            /// delay value, deterministically.
             public func schedule(
                 after date: SchedulerTimeType,
                 tolerance: SchedulerTimeType.Stride,
@@ -90,8 +108,9 @@ public enum DeferredTimers {
                 guard let recorder = TraceContext.active else {
                     return wrapped.schedule(after: date, tolerance: tolerance, options: options, action)
                 }
-                let body = CombineSeam.rebinding(action, for: recorder)
-                DeferredTimers.hold(for: recorder) {
+                let delay = delayMilliseconds(until: date)
+                let body = CombineSeam.rebinding(recorded(delay, on: recorder, action), for: recorder)
+                DeferredTimers.hold(for: recorder, delayMilliseconds: delay) {
                     DispatchSeam.beginCountedForSwift()
                     wrapped.schedule(options: options, body)
                 }
@@ -121,14 +140,46 @@ public enum DeferredTimers {
                         action
                     )
                 }
-                let body = CombineSeam.rebinding(action, for: recorder)
+                let delay = delayMilliseconds(until: date)
+                let body = CombineSeam.rebinding(recorded(delay, on: recorder, action), for: recorder)
                 let token = VirtualTimerToken()
-                DeferredTimers.hold(for: recorder) {
+                DeferredTimers.hold(for: recorder, delayMilliseconds: delay) {
                     guard !token.isCancelled else { return }
                     DispatchSeam.beginCountedForSwift()
                     wrapped.schedule(options: options, body)
                 }
                 return token
+            }
+
+            /// The requested delay as milliseconds — read off the declared fire date, normalized
+            /// across the stock schedulers (nanosecond `Int` strides and second `Double` strides;
+            /// rounding absorbs the two `now` reads' jitter). `nil` for a scheduler whose stride
+            /// exposes neither, which fires last and records its absence honestly.
+            private func delayMilliseconds(until date: SchedulerTimeType) -> Int? {
+                let stride = wrapped.now.distance(to: date)
+                if let nanoseconds = stride.magnitude as? Int {
+                    return Int((Double(nanoseconds) / 1_000_000).rounded())
+                }
+                if let seconds = stride.magnitude as? Double {
+                    return Int((seconds * 1000).rounded())
+                }
+                return nil
+            }
+
+            /// Prefixes `action` with the `.timer` event carrying the requested delay — recorded at
+            /// fire, inside the marked queue entry, so the event lands in the delivery domain and
+            /// only the *surviving* generation records (a cancelled one never runs).
+            private func recorded(
+                _ delayMilliseconds: Int?,
+                on recorder: TraceRecorder,
+                _ action: @escaping () -> Void
+            ) -> () -> Void {
+                let delay: CanonicalValue = delayMilliseconds
+                    .map { .int(Int64($0)) } ?? .string("unreadable stride")
+                return {
+                    recorder.timerFired(delay: delay)
+                    action()
+                }
             }
         }
 
