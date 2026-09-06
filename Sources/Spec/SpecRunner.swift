@@ -228,9 +228,21 @@ public extension Spec {
         }
         // Drain *after* the window, not inside it. Work the ops dispatched carries the recorder the
         // seam captured at enqueue, so it records whether or not the window is still open — but it has
-        // to have finished, or the snapshot is a race rather than a reading.
-        if await DispatchSeam.quiesce() == false {
-            recorder.marker("⟨haruspec: work still outstanding at snapshot⟩")
+        // to have finished, or the snapshot is a race rather than a reading. Drained in rounds: a
+        // quiesced round may leave virtual timers holding a pipeline's deferred tail (a debounce),
+        // which fire only at quiescence — the settled point is a round that releases nothing further.
+        var rounds = 0
+        while true {
+            if await DispatchSeam.quiesce() == false {
+                recorder.marker("⟨haruspec: work still outstanding at snapshot⟩")
+                break
+            }
+            rounds += 1
+            if rounds > SpecDefaults.maxTimerRounds {
+                recorder.marker("⟨haruspec: deferred timers still re-arming at snapshot⟩")
+                break
+            }
+            guard DeferredTimers.fire(for: recorder) else { break }
         }
         // The end-state snapshots: after quiescence (a racing read is not a reading), the harness
         // itself reads each observed property back. Harness-read on both sides by construction, so

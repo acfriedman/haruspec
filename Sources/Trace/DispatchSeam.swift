@@ -155,6 +155,15 @@ public enum DispatchSeam {
         finish()
     }
 
+    /// Counts work outstanding without consulting the ambient context — for a seam that already
+    /// holds the capture's recorder (a fired virtual timer runs after the window's task-local is
+    /// gone, so `acquire` would answer nil exactly when the count matters most). Balance with
+    /// `finishForSwift`.
+    static func beginCountedForSwift() {
+        lock.lock(); defer { lock.unlock() }
+        inFlight += 1
+    }
+
     fileprivate static func acquire() -> TraceRecorder? {
         guard let recorder = TraceContext.active else { return nil }
         lock.lock(); defer { lock.unlock() }

@@ -109,6 +109,9 @@ public struct Exploration: Codable, Sendable, Equatable {
 /// (`record()` / `verify(replaying:)`) — one surface, whichever side of a build boundary it runs on.
 enum SpecDefaults {
     static let seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+    /// Drain rounds a capture spends firing virtual timers before giving up — a timer that re-arms
+    /// itself every round has no quiescence point, and the marker says so rather than spinning.
+    static let maxTimerRounds = 16
     /// Seam cassettes per ordering when no `Budget(runs:)` is declared.
     static let variantCount = 64
     /// Where counting valid orderings gives up and reports a lower bound. A denominator is worth a few
