@@ -85,6 +85,18 @@ public struct TraceDiff: Codable, Sendable, Equatable {
     public var candidateName: String
     public var divergences: [Divergence]
 
+    /// Declared intent that matched no divergence, by DSL spelling (`Changes("Search.query")`) —
+    /// set by `classified(against:)`, empty in parity mode.
+    ///
+    /// A dead declaration is a claim about the change that the oracle never saw: a dark feature, or
+    /// stale intent left over from an earlier revision — and either way a *standing excuse* that
+    /// would silently absorb a future divergence. So the continuous gate fails on it (exit 6);
+    /// reports render it on every surface.
+    ///
+    /// Only meaningful over a completed sweep: a replay that stopped at its first collateral
+    /// divergence cannot claim any declaration matched nothing, so the diverged paths clear this.
+    public var unobservedIntent: [String] = []
+
     public var isEquivalent: Bool {
         verdict == .equivalent
     }

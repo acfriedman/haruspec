@@ -34,10 +34,12 @@ public enum ContinuousRun: Sendable {
     /// Base-branch side: pin the explored surface to `planURL`.
     case record(planURL: URL)
     /// Changed-build side: replay the committed `planURL`, write the verdict into `resultsDirectory`.
-    case replay(planURL: URL, resultsDirectory: URL)
+    /// `intentURL` is the PR's declared intent for this spec (extension mode); `nil` is parity mode.
+    case replay(planURL: URL, resultsDirectory: URL, intentURL: URL?)
 
     public static let planPathKey = "HARUSPEC_PLAN_PATH"
     public static let resultsDirectoryKey = "HARUSPEC_RESULTS_DIR"
+    public static let intentPathKey = "HARUSPEC_INTENT_PATH"
 
     /// The spec a conventioned plan path names — `<spec>.plan.json[.gz]` — or `nil` for a path
     /// outside the convention, which applies to every suite.
@@ -52,6 +54,18 @@ public enum ContinuousRun: Sendable {
             return stem.isEmpty ? nil : stem
         }
         return nil
+    }
+
+    /// The spec a conventioned intent path names — `<spec>.intent.json` — or `nil` outside the
+    /// convention.
+    ///
+    /// Same stem discipline as `specName(inPlanPath:)`, so a plan and the intent declared against
+    /// it are pairable (and a mispaired pair is refusable) by filename alone.
+    public static func specName(inIntentPath path: String) -> String? {
+        let file = URL(fileURLWithPath: path).lastPathComponent
+        guard file.hasSuffix(".intent.json") else { return nil }
+        let stem = String(file.dropLast(".intent.json".count))
+        return stem.isEmpty ? nil : stem
     }
 
     /// Which side this run is, for callers that selected on the mode before assembling the run.
@@ -70,17 +84,31 @@ public enum ContinuousRun: Sendable {
         guard let mode = ContinuousMode.fromEnvironment(environment) else {
             return nil
         }
-        let planURL = try URL(
-            fileURLWithPath: environment.requiredPath(Self.planPathKey, mode: mode)
-        )
+        let planPath = try environment.requiredPath(Self.planPathKey, mode: mode)
+        let planURL = URL(fileURLWithPath: planPath)
+        let intentPath = environment[Self.intentPathKey].flatMap { $0.isEmpty ? nil : $0 }
         switch mode {
         case .record:
+            // Intent declares a change *against* a baseline; a record run IS the baseline, so an
+            // intent here can only be a mispointed pipeline — refuse rather than silently ignore.
+            if let intentPath {
+                throw ContinuousRunError.intentOnRecord(path: intentPath)
+            }
             return .record(planURL: planURL)
         case .replay:
             let resultsPath = try environment.requiredPath(Self.resultsDirectoryKey, mode: mode)
+            // A conventioned intent file must name the same spec as the plan it excuses: a mispaired
+            // stem means one spec's declarations were about to be applied to another's verdict.
+            if let intentPath,
+               let intentSpec = specName(inIntentPath: intentPath),
+               let planSpec = specName(inPlanPath: planPath),
+               intentSpec != planSpec {
+                throw ContinuousRunError.mispairedIntent(intentSpec: intentSpec, planSpec: planSpec)
+            }
             return .replay(
                 planURL: planURL,
-                resultsDirectory: URL(fileURLWithPath: resultsPath, isDirectory: true)
+                resultsDirectory: URL(fileURLWithPath: resultsPath, isDirectory: true),
+                intentURL: intentPath.map { URL(fileURLWithPath: $0) }
             )
         }
     }
@@ -89,11 +117,21 @@ public enum ContinuousRun: Sendable {
 /// Why a run could not be assembled from the environment.
 public enum ContinuousRunError: Error, CustomStringConvertible, Sendable {
     case missingPath(key: String, mode: ContinuousMode)
+    case intentOnRecord(path: String)
+    case mispairedIntent(intentSpec: String, planSpec: String)
 
     public var description: String {
         switch self {
         case let .missingPath(key, mode):
             "\(ContinuousMode.environmentKey)=\(mode.rawValue) needs \(key) (absolute path)"
+        case let .intentOnRecord(path):
+            "\(ContinuousRun.intentPathKey)=\(path) with \(ContinuousMode.environmentKey)=record — "
+                + "intent declares a change against a baseline, and a record run is the baseline; "
+                + "unset it (intent applies on replay only)"
+        case let .mispairedIntent(intentSpec, planSpec):
+            "\(ContinuousRun.intentPathKey) names spec \"\(intentSpec)\" but "
+                + "\(ContinuousRun.planPathKey) names spec \"\(planSpec)\" — "
+                + "an intent file excuses only the spec its stem names (<spec>.intent.json)"
         }
     }
 }
@@ -141,8 +179,8 @@ public extension Spec {
         switch run {
         case let .record(planURL):
             await recordContinuous(to: planURL)
-        case let .replay(planURL, resultsDirectory):
-            await replayContinuous(plan: planURL, into: resultsDirectory)
+        case let .replay(planURL, resultsDirectory, intentURL):
+            await replayContinuous(plan: planURL, into: resultsDirectory, intent: intentURL)
         }
     }
 
@@ -165,16 +203,25 @@ public extension Spec {
         }
     }
 
-    private func replayContinuous(plan planURL: URL, into resultsDirectory: URL) async -> ContinuousOutcome {
+    private func replayContinuous(
+        plan planURL: URL,
+        into resultsDirectory: URL,
+        intent intentURL: URL?
+    ) async -> ContinuousOutcome {
         do {
             try FileManager.default.createDirectory(at: resultsDirectory, withIntermediateDirectories: true)
-            let verdict = try await verify(replayingContentsOf: planURL)
+            // An intent that was pointed at but cannot load must fail the run, never quietly become
+            // parity: a red from missing declarations and a green from ignored ones are both wrong.
+            let intent = try intentURL.map(Intent.init(contentsOf:)) ?? .none
+            let verdict = try await verify(replayingContentsOf: planURL, declaring: intent)
             let resultURL = resultsDirectory.appendingPathComponent("result.json")
             try verdict.write(to: resultURL)
             // HTML is best-effort visual evidence; result.json is the load-bearing artifact.
             let htmlPath = verdict.writeHTMLReport(named: name, in: resultsDirectory)?.path
             return ContinuousOutcome(
-                succeeded: verdict.verdict == .equivalent,
+                // Unobserved intent fails the run even on EQUIVALENT behavior — the same gate the
+                // CLI report exits 6 on — so the local replay and the CI gate cannot disagree.
+                succeeded: verdict.verdict == .equivalent && verdict.diff.unobservedIntent.isEmpty,
                 summary: verdict.report(),
                 artifactPath: resultURL.path,
                 htmlReportPath: htmlPath

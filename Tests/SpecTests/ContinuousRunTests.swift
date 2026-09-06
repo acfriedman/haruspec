@@ -74,11 +74,53 @@ final class ContinuousRunTests: XCTestCase {
             "HARUSPEC_PLAN_PATH": "/tmp/plan.json",
             "HARUSPEC_RESULTS_DIR": "/tmp/results"
         ])
-        guard case let .replay(plan, results) = replaying else {
+        guard case let .replay(plan, results, intent) = replaying else {
             return XCTFail("expected a replay run, got \(String(describing: replaying))")
         }
         XCTAssertEqual(plan.path, "/tmp/plan.json")
         XCTAssertEqual(results.path, "/tmp/results")
+        XCTAssertNil(intent)
+    }
+
+    func testReplayEnvironmentCarriesAnIntentPath() throws {
+        let replaying = try ContinuousRun.fromEnvironment([
+            "HARUSPEC_MODE": "replay",
+            "HARUSPEC_PLAN_PATH": "/tmp/plans/search.combine.plan.json.gz",
+            "HARUSPEC_RESULTS_DIR": "/tmp/results",
+            "HARUSPEC_INTENT_PATH": "/tmp/intent/search.combine.intent.json"
+        ])
+        guard case let .replay(_, _, intent) = replaying else {
+            return XCTFail("expected a replay run, got \(String(describing: replaying))")
+        }
+        XCTAssertEqual(intent?.path, "/tmp/intent/search.combine.intent.json")
+    }
+
+    func testAnIntentOnTheRecordSideIsRefused() {
+        XCTAssertThrowsError(try ContinuousRun.fromEnvironment([
+            "HARUSPEC_MODE": "record",
+            "HARUSPEC_PLAN_PATH": "/tmp/plan.json",
+            "HARUSPEC_INTENT_PATH": "/tmp/intent.json"
+        ])) { error in
+            XCTAssertTrue("\(error)".contains("record run is the baseline"), "\(error)")
+        }
+    }
+
+    func testAMispairedIntentStemIsRefused() {
+        XCTAssertThrowsError(try ContinuousRun.fromEnvironment([
+            "HARUSPEC_MODE": "replay",
+            "HARUSPEC_PLAN_PATH": "/tmp/plans/cart.objc-to-swift.plan.json.gz",
+            "HARUSPEC_RESULTS_DIR": "/tmp/results",
+            "HARUSPEC_INTENT_PATH": "/tmp/intent/search.combine.intent.json"
+        ])) { error in
+            XCTAssertTrue("\(error)".contains("search.combine"), "\(error)")
+            XCTAssertTrue("\(error)".contains("cart.objc-to-swift"), "\(error)")
+        }
+    }
+
+    func testIntentStemMatchesViaSpecNameHelper() {
+        XCTAssertEqual(ContinuousRun.specName(inIntentPath: "/a/search.combine.intent.json"), "search.combine")
+        XCTAssertNil(ContinuousRun.specName(inIntentPath: "/a/free-form.json"))
+        XCTAssertNil(ContinuousRun.specName(inIntentPath: "/a/.intent.json"))
     }
 
     // MARK: Record
@@ -103,7 +145,7 @@ final class ContinuousRunTests: XCTestCase {
         XCTAssertTrue(recorded.succeeded)
 
         let outcome = await cart(system: makeGood)
-            .runContinuous(.replay(planURL: planURL, resultsDirectory: resultsDir))
+            .runContinuous(.replay(planURL: planURL, resultsDirectory: resultsDir, intentURL: nil))
 
         XCTAssertTrue(outcome.succeeded, outcome.summary)
         let resultURL = resultsDir.appendingPathComponent("result.json")
@@ -123,16 +165,88 @@ final class ContinuousRunTests: XCTestCase {
         XCTAssertTrue(recorded.succeeded)
 
         let outcome = await cart(system: makeRoundBug)
-            .runContinuous(.replay(planURL: planURL, resultsDirectory: resultsDir))
+            .runContinuous(.replay(planURL: planURL, resultsDirectory: resultsDir, intentURL: nil))
 
         XCTAssertFalse(outcome.succeeded)
         let verdict = try SpecVerdict(contentsOf: resultsDir.appendingPathComponent("result.json"))
         XCTAssertEqual(verdict.verdict, .diverged)
     }
 
+    // MARK: Intent (extension mode)
+
+    /// The whole signaling loop, engine-side: a red replay's own suggested declarations, parsed
+    /// back through the grammar, turn the re-run green with the divergences disclosed as intended.
+    ///
+    /// And with no dead declaration left over — the suggestions are exactly as wide as what was seen.
+    func testSuggestedDeclarationsTurnAChangedBuildGreenWithDisclosure() async throws {
+        let planURL = scratch().appendingPathComponent("promo-cart.continuous.plan.json")
+        _ = await cart(system: makeGood).runContinuous(.record(planURL: planURL))
+
+        // Iterative inventory: a red replay stops at its first divergent probe, so declaring what it
+        // showed can surface further divergences on the next run — accumulate until green.
+        var intentText = ""
+        for _ in 0 ..< 5 {
+            let intent = try IntentGrammar.intent(parsing: intentText)
+            let verdict = try await cart(system: makeRoundBug)
+                .verify(replayingContentsOf: planURL, declaring: intent)
+            if verdict.verdict == .equivalent {
+                XCTAssertGreaterThan(verdict.diff.intendedCount, 0, "green must come from absorption")
+                XCTAssertEqual(verdict.diff.unobservedIntent, [], "no declaration may be dead")
+                return
+            }
+            let suggested = verdict.diff.divergences.compactMap(\.suggestedDeclaration)
+            XCTAssertFalse(suggested.isEmpty, "a gating divergence must offer its declaration")
+            intentText += "\n" + suggested.joined(separator: "\n")
+        }
+        XCTFail("the suggested declarations never turned the replay green")
+    }
+
+    /// The exit-6 side: a declaration the whole sweep never observes fails the run even though
+    /// behavior matched — a dead declaration is a standing excuse, not a no-op.
+    func testAnUnobservedDeclarationFailsAnOtherwiseGreenReplay() async throws {
+        let planURL = scratch().appendingPathComponent("promo-cart.continuous.plan.json")
+        let resultsDir = scratch()
+        _ = await cart(system: makeGood).runContinuous(.record(planURL: planURL))
+
+        let intentURL = scratch().appendingPathComponent("promo-cart.continuous.intent.json")
+        try FileManager.default.createDirectory(
+            at: intentURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try JSONEncoder().encode(Intent(expectedNewEvents: ["NeverEmitted"])).write(to: intentURL)
+
+        let outcome = await cart(system: makeGood)
+            .runContinuous(.replay(planURL: planURL, resultsDirectory: resultsDir, intentURL: intentURL))
+
+        XCTAssertFalse(outcome.succeeded, "a dead declaration must fail the continuous run")
+        let verdict = try SpecVerdict(contentsOf: resultsDir.appendingPathComponent("result.json"))
+        XCTAssertEqual(verdict.verdict, .equivalent, "behavior itself matched — the gate is the declaration")
+        XCTAssertEqual(verdict.diff.unobservedIntent, [#"Emits("NeverEmitted")"#])
+        XCTAssertTrue(outcome.summary.contains("declared but not observed"), outcome.summary)
+    }
+
+    /// An intent that was pointed at but cannot load fails the run rather than silently running parity.
+    func testAnUnreadableIntentFailsTheReplay() async {
+        let planURL = scratch().appendingPathComponent("plan.json")
+        _ = await cart(system: makeGood).runContinuous(.record(planURL: planURL))
+
+        let outcome = await cart(system: makeGood).runContinuous(.replay(
+            planURL: planURL,
+            resultsDirectory: scratch(),
+            intentURL: scratch().appendingPathComponent("absent.intent.json")
+        ))
+
+        XCTAssertFalse(outcome.succeeded)
+        XCTAssertTrue(outcome.summary.hasPrefix("replay failed:"), outcome.summary)
+    }
+
     func testAMissingPlanIsReportedRatherThanThrown() async {
         let outcome = await cart(system: makeGood).runContinuous(
-            .replay(planURL: scratch().appendingPathComponent("absent.json"), resultsDirectory: scratch())
+            .replay(
+                planURL: scratch().appendingPathComponent("absent.json"),
+                resultsDirectory: scratch(),
+                intentURL: nil
+            )
         )
 
         XCTAssertFalse(outcome.succeeded)

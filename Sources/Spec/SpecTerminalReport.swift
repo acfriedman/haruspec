@@ -32,12 +32,15 @@ extension SpecVerdict {
         if diff.divergences.isEmpty {
             lines.append("  behavior matches across everything explored (0 divergences)")
         } else {
-            lines.append("  \(diff.divergences.count) divergence(s):")
+            let absorbed = verdict == .equivalent && diff.intendedCount > 0
+                ? " — all intended, absorbed by declared intent" : ""
+            lines.append("  \(diff.divergences.count) divergence(s)\(absorbed):")
             for divergence in diff.divergences {
                 let mark = divergence.classification == .intended ? "✓ intended " : "≠ "
                 lines.append("    \(mark)\(divergence.label): \(divergence.detail)")
             }
         }
+        lines += diff.unobservedIntentLines()
         lines += failingOrderLines
         let seams = counterexampleSeamPairs
         if !seams.isEmpty {

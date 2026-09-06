@@ -107,47 +107,173 @@ public struct Intent: Sendable, Equatable {
 
     /// Does this spec declare `divergence` as an intended change?
     public func declares(_ divergence: Divergence) -> Bool {
-        switch divergence.kind {
-        case .unexpectedEvent:
-            return expectedNewEvents.contains(divergence.label)
-        case .missingEvent:
-            return expectedRemovedEvents.contains(divergence.label)
-        case .valueMismatch:
-            guard let fields = expectedValueChanges[divergence.label] else { return false }
-            return fields.isEmpty || fields.contains { fieldMatches($0, divergence.detail) }
-        case .orderingRelaxed:
-            return expectedOrderingRelaxations.contains { $0.matches(divergence.fromDomain) }
-        case .orderingLost:
-            return expectedOrderingLosses.contains(divergence.label)
-        case .orderingAdded:
-            return expectedOrderingAdditions.contains(divergence.label)
-        case .domainMigration:
-            return expectedDomainMigrations.contains {
-                $0.matches(label: divergence.label, from: divergence.fromDomain, to: divergence.toDomain)
-            }
-        case .reordered:
-            return expectedReorders.contains(divergence.label)
-        case .timingRegression:
-            return false // not expressible as declared intent — always collateral
-        }
+        declarations.contains { $0.matches(divergence) }
     }
 
     /// A value-mismatch `detail` reads `"<path>: baseline=… candidate=…"`; match on that leading path.
-    private func fieldMatches(_ field: String, _ detail: String) -> Bool {
+    private static func fieldMatches(_ field: String, _ detail: String) -> Bool {
         let path = detail.range(of: ": ").map { String(detail[..<$0.lowerBound]) } ?? detail
         return path == field || path.hasPrefix("\(field).") || path.hasPrefix("\(field)[")
     }
+}
+
+/// One atomic declaration inside an `Intent` — the unit "declared but not observed" is measured in.
+///
+/// `text` is the declaration's DSL spelling (`Changes("Search.query")`), so a warning about a dead
+/// declaration names exactly the line to delete.
+struct IntentDeclaration: Sendable {
+    let text: String
+    let matches: @Sendable (Divergence) -> Bool
+}
+
+extension Intent {
+    /// The intent exploded into its atomic declarations, each pairing a matcher with its DSL spelling.
+    ///
+    /// `declares(_:)` is a fold over this list, and the unobserved-intent check is its
+    /// complement: a declaration no divergence matched describes a change nobody saw.
+    ///
+    /// `acceptedBlindSpots` is deliberately absent: it excuses a *channel* the diff could never
+    /// observe, and the capture-completeness audit already reports an acceptance that matched
+    /// nothing (`AuditOutcome`).
+    ///
+    /// Order is deterministic (kind-grouped, value changes label-sorted) so the warning renders
+    /// stably across runs.
+    var declarations: [IntentDeclaration] {
+        var atoms: [IntentDeclaration] = []
+        for label in expectedNewEvents {
+            atoms.append(IntentDeclaration(text: "Emits(\(quoted(label)))") {
+                $0.kind == .unexpectedEvent && $0.label == label
+            })
+        }
+        for label in expectedRemovedEvents {
+            atoms.append(IntentDeclaration(text: "Omits(\(quoted(label)))") {
+                $0.kind == .missingEvent && $0.label == label
+            })
+        }
+        // Per-field atoms: declaring one field never excuses — and is never excused by — another.
+        for (label, fields) in expectedValueChanges.sorted(by: { $0.key < $1.key }) {
+            if fields.isEmpty {
+                atoms.append(IntentDeclaration(text: "Changes(\(quoted(label)))") {
+                    $0.kind == .valueMismatch && $0.label == label
+                })
+            }
+            for field in fields {
+                atoms.append(IntentDeclaration(text: "Changes(\(quoted(label)), field: \(quoted(field)))") {
+                    $0.kind == .valueMismatch && $0.label == label && Self.fieldMatches(field, $0.detail)
+                })
+            }
+        }
+        for domain in expectedOrderingRelaxations {
+            atoms.append(IntentDeclaration(text: "Relaxes(orderingOf: \(domain.dslText))") {
+                $0.kind == .orderingRelaxed && domain.matches($0.fromDomain)
+            })
+        }
+        for label in expectedOrderingLosses {
+            atoms.append(IntentDeclaration(text: "Drops(synchronizationOf: \(quoted(label)))") {
+                $0.kind == .orderingLost && $0.label == label
+            })
+        }
+        for label in expectedOrderingAdditions {
+            atoms.append(IntentDeclaration(text: "Awaits(\(quoted(label)))") {
+                $0.kind == .orderingAdded && $0.label == label
+            })
+        }
+        for label in expectedReorders {
+            atoms.append(IntentDeclaration(text: "Reorders(\(quoted(label)))") {
+                $0.kind == .reordered && $0.label == label
+            })
+        }
+        for move in expectedDomainMigrations {
+            let scope = move.labels.isEmpty
+                ? "everythingFrom: "
+                : move.labels.map(quoted).joined(separator: ", ") + ", from: "
+            atoms.append(IntentDeclaration(
+                text: "Moves(\(scope)\(move.origin.dslText), to: \(move.destination.dslText))"
+            ) {
+                $0.kind == .domainMigration
+                    && move.matches(label: $0.label, from: $0.fromDomain, to: $0.toDomain)
+            })
+        }
+        return atoms
+    }
+}
+
+public extension Intent {
+    /// Every atomic declaration's DSL spelling, in `declarations` order — the list tooling prints
+    /// when it names what an intent claims.
+    var declarationTexts: [String] {
+        declarations.map(\.text)
+    }
+}
+
+public extension Divergence {
+    /// The declaration that would mark this divergence intended — the exact line the teaching loop
+    /// offers on a red verdict, and a line `IntentGrammar` parses back.
+    ///
+    /// `nil` for a divergence that is not expressible as intent (timing regressions) or whose
+    /// domains did not resolve.
+    var suggestedDeclaration: String? {
+        switch kind {
+        case .unexpectedEvent:
+            return "Emits(\(quoted(label)))"
+        case .missingEvent:
+            return "Omits(\(quoted(label)))"
+        case .valueMismatch:
+            // The detail's leading path is the changed field; suggest exactly it, so the pasted
+            // declaration is as narrow as what was observed.
+            let path = detail.range(of: ": ").map { String(detail[..<$0.lowerBound]) } ?? ""
+            return path.isEmpty
+                ? "Changes(\(quoted(label)))"
+                : "Changes(\(quoted(label)), field: \(quoted(path)))"
+        case .orderingRelaxed:
+            return fromDomain.flatMap(DomainName.init(recorded:))
+                .map { "Relaxes(orderingOf: \($0.dslText))" }
+        case .orderingLost:
+            return "Drops(synchronizationOf: \(quoted(label)))"
+        case .orderingAdded:
+            return "Awaits(\(quoted(label)))"
+        case .reordered:
+            return "Reorders(\(quoted(label)))"
+        case .domainMigration:
+            guard let origin = fromDomain.flatMap(DomainName.init(recorded:)),
+                  let destination = toDomain.flatMap(DomainName.init(recorded:)) else {
+                return nil
+            }
+            return "Moves(\(quoted(label)), from: \(origin.dslText), to: \(destination.dslText))"
+        case .timingRegression:
+            return nil // not expressible as declared intent — always collateral
+        }
+    }
+}
+
+private func quoted(_ text: String) -> String {
+    "\"\(text)\""
 }
 
 public extension TraceDiff {
     /// Extension mode: reclassify divergences the intent spec declared as `.intended`, then re-derive
     /// the verdict from the residual (gating, collateral) divergences. `Intent.none` is a no-op
     /// (parity mode) — every divergence stays collateral and the verdict is unchanged.
+    ///
+    /// Also records `unobservedIntent`: the declarations that matched nothing *in this comparison*.
+    /// For a single diff that is the finished fact; a sweep that compares many probes intersects the
+    /// per-probe sets (a declaration is observed if any probe matched it) and overwrites the
+    /// reported diff's copy — see `Spec.verify`.
     func classified(against intent: Intent) -> TraceDiff {
         var result = self
-        for index in result.divergences.indices where intent.declares(result.divergences[index]) {
-            result.divergences[index].classification = .intended
+        var observed = Set<String>()
+        let declarations = intent.declarations
+        for index in result.divergences.indices {
+            var matched = false
+            for declaration in declarations where declaration.matches(result.divergences[index]) {
+                observed.insert(declaration.text)
+                matched = true
+            }
+            if matched {
+                result.divergences[index].classification = .intended
+            }
         }
+        result.unobservedIntent = declarations.map(\.text).filter { !observed.contains($0) }
         result.verdict = result.divergences.contains(where: \.isGating) ? .diverged : .equivalent
         return result
     }

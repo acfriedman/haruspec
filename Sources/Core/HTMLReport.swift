@@ -422,6 +422,29 @@ public enum HTML {
     """
 }
 
+public extension HTML {
+    /// The dead-declaration panel: declared intent the whole sweep never observed.
+    ///
+    /// Styled like the abstention panel deliberately — it is the same species of fact: the gate
+    /// does not pass, for a reason no divergence card shows.
+    static func unobservedIntentSection(_ declarations: [String]) -> String {
+        guard !declarations.isEmpty else {
+            return ""
+        }
+        let items = declarations.map { "<li><code>\(esc($0))</code></li>" }.joined()
+        return """
+        <section class="abstain">
+          <h2>⚠️ Declared but not observed</h2>
+          <p>The replay swept the whole recorded surface and never saw these declared changes — a dark
+          feature, or stale intent; either way a standing excuse that would silently absorb a future
+          divergence. This check does not pass (exit 6): remove the declarations, or make the change
+          actually produce them.</p>
+          <ul>\(items)</ul>
+        </section>
+        """
+    }
+}
+
 // MARK: - Entry points
 
 public extension TraceDiff {
@@ -445,13 +468,13 @@ public extension TraceDiff {
     /// every full-page entry point.
     internal var body: String {
         if !divergences.isEmpty {
-            return HTML.divergenceSection(divergences)
+            return HTML.unobservedIntentSection(unobservedIntent) + HTML.divergenceSection(divergences)
         }
         switch verdict {
         case .cannotVerify:
             return HTML.abstentionSection(reason: "The oracle could not faithfully isolate this change.")
         default:
-            return HTML.cleanSection(
+            return HTML.unobservedIntentSection(unobservedIntent) + HTML.cleanSection(
                 summary: "Behavior matched",
                 detail: "Every compared event produced a byte-for-byte identical behavior trace "
                     + "(within declared tolerances). No divergences."

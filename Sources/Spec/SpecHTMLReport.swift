@@ -34,6 +34,7 @@ public extension SpecVerdict {
             // Right under the stats, on every verdict: the stats say what was found, this says what
             // the finding was measured over — the disclaimer, rendered.
             HTML.qualificationSection(qualificationEntries),
+            HTML.unobservedIntentSection(diff.unobservedIntent),
             HTML.counterexampleSection(seams: counterexampleSeamPairs, order: failingOrder),
             body
         ])

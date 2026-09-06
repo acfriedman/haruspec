@@ -55,6 +55,38 @@ public enum DomainName: Sendable, Equatable {
         }
         return String(description[..<hash])
     }
+
+    /// The declaration spelling — `.queue("com.emporium.cart")`.
+    ///
+    /// Used by unobserved-intent warnings, grammar errors, and the report's suggested
+    /// declarations, so every rendering is a line `IntentGrammar` parses back.
+    public var dslText: String {
+        switch self {
+        case .main: ".main"
+        case .ambient: ".ambient"
+        case let .queue(label): ".queue(\"\(label)\")"
+        case let .actor(type): ".actor(\"\(type)\")"
+        }
+    }
+
+    /// The declaration-level name of a domain as a divergence records it —
+    /// `"queue(serial):com.emporium.cart"` → `.queue("com.emporium.cart")`.
+    ///
+    /// Discipline and instance numbering drop away, so a report can suggest the declaration that
+    /// would match what it saw.
+    public init?(recorded: String) {
+        switch recorded {
+        case "main": self = .main
+        case "ambient": self = .ambient
+        default:
+            for prefix in ["queue(serial):", "queue(concurrent):"] where recorded.hasPrefix(prefix) {
+                self = .queue(String(recorded.dropFirst(prefix.count)))
+                return
+            }
+            guard recorded.hasPrefix("actor:") else { return nil }
+            self = .actor(String(Self.droppingInstance(recorded).dropFirst("actor:".count)))
+        }
+    }
 }
 
 extension DomainName: Codable {

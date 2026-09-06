@@ -15,10 +15,14 @@ import HaruspecTrace
 //
 // Exit codes:  0 ok / equivalent · 1 runtime error · 2 usage error · 3 behavioral divergence ·
 //              4 cannot-verify (the oracle abstained — an uncovered/un-isolable surface) ·
-//              5 unstable (identical replays disagreed — the verdict cannot be reproduced).
-// A CI gate should treat 3, 4 AND 5 as non-pass; only 0 is green.
+//              5 unstable (identical replays disagreed — the verdict cannot be reproduced) ·
+//              6 unobserved intent (a declaration matched nothing — a dark feature or stale excuse).
+// A CI gate should treat 3, 4, 5 AND 6 as non-pass; only 0 is green.
 
-enum ExitCode: Int32 { case success = 0, runtime = 1, usage = 2, diverged = 3, cannotVerify = 4, unstable = 5 }
+enum ExitCode: Int32 {
+    case success = 0, runtime = 1, usage = 2, diverged = 3, cannotVerify = 4, unstable = 5
+    case unobservedIntent = 6
+}
 
 /// Maps a four-tier `TraceDiff.Verdict` to the process `ExitCode`. The bare two-file `diff` path never produces
 /// `.cannotVerify` or `.unstable` (it makes no coverage or repetition claim); this is shared so the
@@ -30,6 +34,19 @@ func exitCode(for verdict: TraceDiff.Verdict) -> ExitCode {
     case .cannotVerify: .cannotVerify
     case .unstable: .unstable
     }
+}
+
+/// The verdict-artifact form: an otherwise-green verdict whose intent declared something the sweep
+/// never observed fails as exit 6.
+///
+/// Behavior matched, but a standing excuse matched nothing, and merging it would let that excuse
+/// silently absorb a future divergence. A red verdict keeps its own (more primary) code; the
+/// diverged paths make no unobserved claim by construction.
+func exitCode(for verdict: SpecVerdict) -> ExitCode {
+    if verdict.verdict == .equivalent, !verdict.diff.unobservedIntent.isEmpty {
+        return .unobservedIntent
+    }
+    return exitCode(for: verdict.verdict)
 }
 
 func fail(_ message: String, code: ExitCode) -> Never {
@@ -121,6 +138,14 @@ USAGE:
       Serve the engine as MCP tools over stdio (verify_behavioral_parity, canonicalize_trace),
       so agents (Claude Code, Cursor, …) can gate changes on behavioral proof. Register with:
       { "command": "haruspec", "args": ["mcp"] }
+
+  haruspec intent --body <file> --out <dir>
+      Resolve a PR description's declared intent. Extracts every ```haruspec-intent <spec> fenced
+      block from <file>, parses the declarations (the DSL's own spellings — Changes("Search.query"),
+      Moves("L", from: .main, to: .ambient), …), and writes one <spec>.intent.json per block into
+      <dir> for the replay to pick up via HARUSPEC_INTENT_PATH. A body with no blocks writes
+      nothing: parity mode. Exits 1 on an unparseable block — a declaration nobody can read must
+      fail loudly, never silently become parity.
 """
 
 func runDiff(_ rest: [String]) -> Never {
@@ -147,7 +172,10 @@ func runDiff(_ rest: [String]) -> Never {
                 print("\n" + result.agentBrief())
             }
         }
-        exit(exitCode(for: result.verdict).rawValue)
+        let code = result.verdict == .equivalent && !result.unobservedIntent.isEmpty
+            ? ExitCode.unobservedIntent
+            : exitCode(for: result.verdict)
+        exit(code.rawValue)
     } catch {
         fail("diff failed: \(error)", code: .runtime)
     }
@@ -293,7 +321,7 @@ func runReport(_ rest: [String]) -> Never {
             // In markdown mode the brief is machine-facing text, not prose — fence it.
             print(markdown ? "\n```text\n\(brief)\n```" : "\n" + brief)
         }
-        exit(exitCode(for: verdict.verdict).rawValue)
+        exit(exitCode(for: verdict).rawValue)
     } catch {
         fail("report failed: \(error)", code: .runtime)
     }
@@ -325,8 +353,8 @@ func runContinuousReport(_ flags: [String: String], _ positionals: [String]) -> 
     }
     let report = ContinuousReport(entries: entries, changed: changed)
     print(flags["markdown"] != nil ? report.markdown() : report.text())
-    let worst = report.verdicts
-        .map { $0.map { exitCode(for: $0).rawValue } ?? ExitCode.runtime.rawValue }
+    let worst = entries
+        .map { $0.verdict.map { exitCode(for: $0).rawValue } ?? ExitCode.runtime.rawValue }
         .max() ?? ExitCode.success.rawValue
     exit(worst)
 }
@@ -341,6 +369,7 @@ case "demo": runDemo(rest)
 case "canonicalize": runCanonicalize(rest)
 case "report": runReport(rest)
 case "audit": runAudit(rest)
+case "intent": runIntent(rest)
 case "mcp": MCPServer().run()
 case "help", "--help", "-h": print(usage); exit(ExitCode.success.rawValue)
 default: fail("unknown command \"\(command)\"\n\n\(usage)", code: .usage)

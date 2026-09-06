@@ -1,4 +1,7 @@
 {
+  "acceptedBlindSpots" : [
+
+  ],
   "counterexample" : {
     "schemaVersion" : 1,
     "tracks" : {
@@ -28,6 +31,9 @@
   "qualification" : {
     "coveredClasses" : [
       "PromoCart"
+    ],
+    "derivedDefaults" : [
+
     ],
     "operations" : 3,
     "origins" : [
@@ -86,11 +92,14 @@
           "label" : "PromoCart.checkout"
         }
       ],
+      "unobservedIntent" : [
+
+      ],
       "verdict" : "diverged"
     },
     "verdict" : "diverged"
   },
-  "schemaVersion" : 2,
+  "schemaVersion" : 3,
   "stability" : {
     "outcomes" : [
       {

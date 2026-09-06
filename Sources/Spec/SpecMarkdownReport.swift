@@ -17,9 +17,12 @@ public extension SpecVerdict {
     /// coverage numbers describe one replay and would mislead next to an EQUIVALENT's).
     func markdownReport() -> String {
         var sections = [headline]
+        // Dead declarations lead, before the verdict body: on an otherwise-green run they are the
+        // entire reason the gate fails (exit 6), and burying them under a ✅ body would read as a pass.
+        sections.append(contentsOf: unobservedIntentSection)
         switch verdict {
         case .equivalent:
-            sections.append(equivalentBody)
+            sections.append(contentsOf: equivalentBody)
         case .diverged:
             sections.append(contentsOf: divergedBody)
         case .cannotVerify:
@@ -41,10 +44,13 @@ public extension SpecVerdict {
         let subject = diff.baselineName == diff.candidateName
             ? "`\(diff.baselineName)`"
             : "`\(diff.baselineName)` → `\(diff.candidateName)`"
-        return "### \(TraceDiff.banner(verdict)) — \(subject)"
+        // An extension-mode green gets a visibly different banner: it passed *because* intent
+        // absorbed divergences, and a reader must never mistake it for parity.
+        let mode = verdict == .equivalent && diff.intendedCount > 0 ? " · declared intent absorbed" : ""
+        return "### \(TraceDiff.banner(verdict))\(mode) — \(subject)"
     }
 
-    private var equivalentBody: String {
+    private var equivalentBody: [String] {
         // "all N orderings" only when the sweep was exhaustive: a sampled run that says "all" is
         // claiming a surface it never walked.
         let scope = exploration.isExhaustive
@@ -52,14 +58,49 @@ public extension SpecVerdict {
             : "\(exploration.orderingsExplored) of "
             + "\(exploration.orderingsAreExact ? "" : "≥")\(exploration.orderingsAvailable)"
         let plural = orderingsExplored == 1 ? "" : "s"
-        var lines = ["Behavior matched across everything explored — \(scope) "
-            + "call ordering\(plural) and every recorded seam variant replayed to traces identical "
-            + "to the goldens, within declared tolerances."]
+        var sections: [String] = []
+        // Extension mode passes WITH disclosure: the intended table leads, so what was absorbed is
+        // on the comment, not behind it.
+        let intended = diff.divergences.filter { $0.classification == .intended }
+        if !intended.isEmpty {
+            sections.append(
+                "This PR **diverges as declared**: \(intended.count) intended "
+                    + "divergence\(intended.count == 1 ? "" : "s") absorbed by the declared intent, "
+                    + "no collateral divergence."
+            )
+            sections.append(
+                "**Intended — declared in the intent spec; reported, not gating:**\n\n"
+                    + divergenceTable(intended)
+            )
+        }
+        var lines = ["\(intended.isEmpty ? "Behavior" : "Everything else") matched across everything "
+            + "explored — \(scope) call ordering\(plural) and every recorded seam variant replayed "
+            + "to traces identical to the goldens, within declared tolerances."]
         if let coverageLine {
             lines.append("")
             lines.append(coverageLine)
         }
-        return lines.joined(separator: "\n")
+        sections.append(lines.joined(separator: "\n"))
+        return sections
+    }
+
+    /// The dead-declaration block: declared intent the whole sweep never observed. Rendered on any
+    /// verdict that carries one (the diverged paths clear the claim by construction).
+    private var unobservedIntentSection: [String] {
+        let unobserved = diff.unobservedIntent
+        guard !unobserved.isEmpty else {
+            return []
+        }
+        let plural = unobserved.count == 1 ? "" : "s"
+        return ["""
+        **⚠️ Declared but not observed — this check does not pass (exit 6).** The replay swept the \
+        whole recorded surface and never saw the change\(plural) declared below: a dark feature, or \
+        stale intent — and either way a standing excuse that would silently absorb a future \
+        divergence. Remove the declaration\(plural) from the PR description, or make this PR \
+        actually produce the change\(plural):
+
+        \(unobserved.map { "- `\($0)`" }.joined(separator: "\n"))
+        """]
     }
 
     private var divergedBody: [String] {
@@ -89,7 +130,43 @@ public extension SpecVerdict {
                 "**Counterexample:** " + seams.map { "`\($0.key)=\($0.value)`" }.joined(separator: " · ")
             )
         }
+        sections.append(contentsOf: declarationOffer(for: gating))
         return sections
+    }
+
+    /// The teaching half of the red gate: the exact declarations that would mark the collateral
+    /// divergences intended, as a block the author pastes into the PR description.
+    ///
+    /// The whole intent-signaling loop in one copy-paste — but offered, never presumed: the
+    /// sentence around it says when pasting is the wrong move.
+    private func declarationOffer(for gating: [Divergence]) -> [String] {
+        var suggestions: [String] = []
+        for divergence in gating where divergence.isGating {
+            guard let suggested = divergence.suggestedDeclaration,
+                  !suggestions.contains(suggested) else { continue }
+            suggestions.append(suggested)
+        }
+        guard !suggestions.isEmpty else {
+            return []
+        }
+        // The four-backtick fence renders the inner block literally, ready to copy.
+        return ["""
+        <details><summary>Is this change the point of the PR?</summary>
+
+        If these divergences are the intended behavior change, declare them: paste this block into \
+        the PR description (edit it down to what is genuinely intended) and the check re-runs in \
+        extension mode — declared divergences are disclosed instead of gating, and anything \
+        undeclared still fails. If you did not mean to change behavior, this is a regression: fix \
+        the code, don't declare it.
+
+        ````
+        ```\(IntentGrammar.fenceLabel) \(diff.baselineName)
+        \(suggestions.joined(separator: "\n"))
+        ```
+        ````
+
+        </details>
+        """]
     }
 
     private var divergenceSummary: String {

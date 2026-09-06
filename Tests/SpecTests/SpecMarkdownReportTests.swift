@@ -158,6 +158,63 @@ final class SpecMarkdownReportTests: XCTestCase {
         XCTAssertTrue(markdown.contains("**Intended — declared in the intent spec"))
     }
 
+    func testAFullyDeclaredChangePassesWithTheDisclosureBanner() async throws {
+        let plan = await cart(system: makeGood).record()
+        // Declare exactly what the red verdicts offer (accumulating: a red stops at its first
+        // divergent probe) until the change is fully declared.
+        var intentText = ""
+        for _ in 0 ..< 5 {
+            let declared = try IntentGrammar.intent(parsing: intentText)
+            let verdict = await cart(system: makeLoyaltyRoundBug).verify(replaying: plan, declaring: declared)
+            guard verdict.verdict == .equivalent else {
+                intentText += "\n" + verdict.diff.divergences
+                    .compactMap(\.suggestedDeclaration).joined(separator: "\n")
+                continue
+            }
+
+            let markdown = verdict.markdownReport()
+            XCTAssertTrue(
+                markdown.hasPrefix("### ✅ EQUIVALENT · declared intent absorbed"),
+                "an extension-mode green must not read as parity: \(markdown.components(separatedBy: "\n")[0])"
+            )
+            XCTAssertTrue(markdown.contains("diverges as declared"))
+            XCTAssertTrue(markdown.contains("**Intended — declared in the intent spec"), "disclosure leads")
+            return
+        }
+        XCTFail("the offered declarations never fully covered the change")
+    }
+
+    func testTheRedVerdictOffersItsDeclarations() async throws {
+        let plan = await cart(system: makeGood).record()
+        let verdict = await cart(system: makeRoundBug).verify(replaying: plan)
+        XCTAssertEqual(verdict.verdict, .diverged)
+
+        let markdown = verdict.markdownReport()
+        XCTAssertTrue(markdown.contains("```haruspec-intent promo-cart.markdown"), markdown)
+        // The offered block must parse back through the grammar — the loop is one paste.
+        let fenced = try XCTUnwrap(
+            markdown.range(of: "```haruspec-intent promo-cart.markdown\n").map { range in
+                String(markdown[range.upperBound...].prefix(while: { $0 != "`" }))
+            }
+        )
+        let intent = try IntentGrammar.intent(parsing: fenced)
+        XCTAssertFalse(intent.declarationTexts.isEmpty)
+    }
+
+    func testAnUnobservedDeclarationLeadsTheReport() async throws {
+        let plan = await cart(system: makeGood).record()
+        let verdict = await cart(system: makeRefactor)
+            .verify(replaying: plan, declaring: Intent(expectedNewEvents: ["NeverEmitted"]))
+        XCTAssertEqual(verdict.verdict, .equivalent, "behavior matched — only the declaration is dead")
+
+        let markdown = verdict.markdownReport()
+        XCTAssertTrue(markdown.contains("**⚠️ Declared but not observed — this check does not pass (exit 6).**"))
+        XCTAssertTrue(markdown.contains(#"`Emits("NeverEmitted")`"#))
+        let banner = try XCTUnwrap(markdown.range(of: "Declared but not observed")?.lowerBound)
+        let body = try XCTUnwrap(markdown.range(of: "matched across everything explored")?.lowerBound)
+        XCTAssertLessThan(banner, body, "the dead declaration leads, before the green body")
+    }
+
     func testOpDriftAbstentionNamesTheDrift() async {
         let plan = await cart(system: makeGood).record()
         let drifted = Spec<PromoCart>("promo-cart.markdown")

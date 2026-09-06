@@ -3,85 +3,6 @@ import HaruspecCore
 import HaruspecSeams
 import HaruspecTrace
 
-/// The outcome of a spec run: the resolved verdict *with the coverage it was measured over*, how
-/// much was explored, and — for an order-dependent divergence — the failing call sequence: shrunk to
-/// minimal by `verify(against:)`, but the *raw recorded ordering* on `verify(replaying:)`, which never
-/// shrinks (a shrunk variant has no recorded golden to diff against).
-/// `Codable`, so a verify run is writable as a `result.json` artifact a reviewer can read and reproduce.
-public struct SpecVerdict: Codable, Sendable {
-    /// The artifact's version stamp — `SpecPlan`'s discipline applied to the verdict side (see
-    /// `supportedSchemaVersion` in SpecVerdictSerialization.swift). An unstamped `result.json`
-    /// predates the qualification block and is refused with "re-run", never part-decoded.
-    public let schemaVersion: Int
-    /// The diff + coverage pair carrying the *resolved* verdict (see `VerificationResult`): an
-    /// EQUIVALENT the replay can't stand behind (an op or seam fell back to live) downgrades to
-    /// CANNOT-VERIFY; a DIVERGED always stands.
-    public let result: VerificationResult
-    public let orderingsExplored: Int
-    public let failingOrder: [String]?
-    /// Declared `.after` preconditions the failing order broke, as `"removeMug after addMug"`. That
-    /// stratum is explored on purpose, so a divergence here is a finding about a defensive path — worth
-    /// separating from one on the surface the author described. Empty on an in-order failure, `nil`
-    /// where no order was reported at all.
-    public let violatedPreconditions: [String]?
-    /// The generated input that triggered a divergence (its varied seam values are the counterexample).
-    public let counterexample: CassetteData?
-    /// The budget spent and the surface it covered.
-    public let exploration: Exploration
-    /// What the verdict was measured over — the disclaimer's feeds, rendered as the qualification
-    /// block on every surface (see Qualification.swift). No default: an empty qualification would
-    /// claim a surface of nothing, which is a statement, not an absence.
-    public let qualification: Qualification
-    /// How the verdict behaved across repeated replays. `.singleRun` where repetition never happened
-    /// (the live differential, a one-pass replay) — reported as unmeasured, never as reproduced.
-    public let stability: Stability
-    /// Channels the spec and check site declared acceptable as uncaptured, carried on the verdict so
-    /// *every* audit path resolves the same declarations — the env-driven audit inside a verify and
-    /// an explicit `audited(against:)` afterwards must not disagree. `nil` on artifacts recorded
-    /// before the field existed; treated as none declared.
-    public let acceptedBlindSpots: [String]?
-
-    public init(
-        schemaVersion: Int = SpecVerdict.supportedSchemaVersion,
-        result: VerificationResult,
-        orderingsExplored: Int,
-        failingOrder: [String]?,
-        counterexample: CassetteData?,
-        exploration: Exploration,
-        qualification: Qualification,
-        violatedPreconditions: [String]? = nil,
-        stability: Stability = .singleRun,
-        acceptedBlindSpots: [String]? = nil
-    ) {
-        self.schemaVersion = schemaVersion
-        self.result = result
-        self.orderingsExplored = orderingsExplored
-        self.failingOrder = failingOrder
-        self.counterexample = counterexample
-        self.exploration = exploration
-        self.qualification = qualification
-        self.violatedPreconditions = violatedPreconditions
-        self.stability = stability
-        self.acceptedBlindSpots = acceptedBlindSpots
-    }
-
-    /// The resolved verdict, with stability applied above coverage: disagreeing replays flip *any*
-    /// underlying verdict to UNSTABLE — a coin flip reported as red (or green) would spend the gate's
-    /// credibility on noise. `result.verdict` keeps run 1's underlying verdict for forensics.
-    public var verdict: TraceDiff.Verdict {
-        stability.isStable ? result.verdict : .unstable
-    }
-
-    public var diff: TraceDiff {
-        result.diff
-    }
-
-    /// The declared interrogation surface (`op:` boundaries + seams) and how much of it was exercised.
-    public var coverage: Coverage {
-        result.coverage
-    }
-}
-
 /// The golden template and everything resolved off it (see `goldenSurface()`).
 private struct GoldenSurface<S> {
     let golden: CassetteData
@@ -113,44 +34,43 @@ public extension Spec {
         let surface = await goldenSurface()
         let (golden, plan, qualification) = (surface.golden, surface.plan, surface.qualification)
 
+        // Sweep-wide intent facts (disclosure + unobserved intersection) — see `IntentSweep`.
+        var sweep = IntentSweep()
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index) {
-                let run = await compare(
+                var run = await compare(
                     make: makeSystem,
                     candidate: candidate,
                     order: order,
                     cassette: cassette,
                     declaring: intent
                 )
+                sweep.observe(run.diff)
                 guard run.diff.isEquivalent else {
-                    let shrunk = await shrink(
+                    return await divergedLiveVerdict(
+                        run: DivergedRun(
+                            diff: run.diff,
+                            candidateReplay: run.candidateReplay,
+                            order: order,
+                            cassette: cassette
+                        ),
                         candidate: candidate,
-                        failing: order,
-                        cassette: cassette,
+                        surface: surface,
                         declaring: intent
-                    )
-                    let coverage = plannedCoverage(replay: run.candidateReplay, domainHeld: false, plan: plan)
-                    let failing = exploreOrdering ? shrunk.map(\.label) : nil
-                    return SpecVerdict(
-                        result: VerificationResult(diff: run.diff, coverage: coverage),
-                        orderingsExplored: plan.orderings.count,
-                        failingOrder: failing,
-                        counterexample: plan.domains.isEmpty ? nil : cassette,
-                        exploration: plan.exploration,
-                        qualification: qualification,
-                        violatedPreconditions: failing.map(preconditionViolations(in:))
                     )
                 }
             }
         }
         // Held across the whole explored surface: the swept seams earn domain-coverage credit.
-        let representative = await compare(
+        var representative = await compare(
             make: makeSystem,
             candidate: candidate,
             order: operations,
             cassette: golden,
             declaring: intent
         )
+        sweep.observe(representative.diff)
+        representative.diff = sweep.settle(representative.diff)
         let coverage = plannedCoverage(replay: representative.candidateReplay, domainHeld: true, plan: plan)
         return SpecVerdict(
             result: VerificationResult(diff: representative.diff, coverage: coverage),
@@ -159,6 +79,44 @@ public extension Spec {
             counterexample: nil,
             exploration: plan.exploration,
             qualification: qualification
+        )
+    }
+
+    /// The comparison that broke the live sweep, with everything the diverged exit needs to pin it.
+    private struct DivergedRun {
+        let diff: TraceDiff
+        let candidateReplay: Cassette
+        let order: [Op<S>]
+        let cassette: CassetteData
+    }
+
+    /// The first-divergence exit of the live sweep: shrinks the failing order and pins what exposed it.
+    ///
+    /// Makes no unobserved-intent claim — a truncated sweep cannot prove a declaration dead.
+    private func divergedLiveVerdict(
+        run: DivergedRun,
+        candidate: @escaping (SeamContext) -> S,
+        surface: GoldenSurface<S>,
+        declaring intent: Intent
+    ) async -> SpecVerdict {
+        var diff = run.diff
+        diff.unobservedIntent = []
+        let shrunk = await shrink(
+            candidate: candidate,
+            failing: run.order,
+            cassette: run.cassette,
+            declaring: intent
+        )
+        let coverage = plannedCoverage(replay: run.candidateReplay, domainHeld: false, plan: surface.plan)
+        let failing = exploreOrdering ? shrunk.map(\.label) : nil
+        return SpecVerdict(
+            result: VerificationResult(diff: diff, coverage: coverage),
+            orderingsExplored: surface.plan.orderings.count,
+            failingOrder: failing,
+            counterexample: surface.plan.domains.isEmpty ? nil : run.cassette,
+            exploration: surface.plan.exploration,
+            qualification: surface.qualification,
+            violatedPreconditions: failing.map(preconditionViolations(in:))
         )
     }
 

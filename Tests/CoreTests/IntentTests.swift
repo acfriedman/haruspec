@@ -82,4 +82,44 @@ final class IntentTests: XCTestCase {
         XCTAssertTrue(intent.expectedRemovedEvents.isEmpty)
         XCTAssertTrue(intent.expectedValueChanges.isEmpty)
     }
+
+    // MARK: - Declared but not observed
+
+    func testADeclarationMatchingNothingIsNamedUnobserved() {
+        let classified = diff([d(.unexpectedEvent, "LoyaltyPointsEarned")])
+            .classified(against: Intent(expectedNewEvents: ["LoyaltyPointsEarned", "NeverEmitted"]))
+        XCTAssertTrue(classified.isEquivalent, "the matched declaration still absorbs")
+        XCTAssertEqual(classified.unobservedIntent, [#"Emits("NeverEmitted")"#])
+    }
+
+    func testParityModeHasNoUnobservedIntent() {
+        XCTAssertEqual(diff([d(.unexpectedEvent, "X")]).classified(against: .none).unobservedIntent, [])
+    }
+
+    func testUnobservedIsPerField() {
+        // Declaring two fields and observing one leaves the OTHER declaration dead — the same
+        // specificity that keeps a broad declaration from hiding a regression, read in reverse.
+        let classified = diff([d(.valueMismatch, "CheckoutDidComplete", "pointsEarned: baseline=null candidate=25")])
+            .classified(against: Intent(expectedValueChanges: ["CheckoutDidComplete": ["pointsEarned", "totalCents"]]))
+        XCTAssertEqual(classified.unobservedIntent, [#"Changes("CheckoutDidComplete", field: "totalCents")"#])
+    }
+
+    func testUnobservedListsEveryDeclarationKindInItsDSLSpelling() {
+        let intent = Intent {
+            Moves("Cart.add", from: .queue("com.emporium.cart"), to: .actor("SwiftCartActor"))
+            Relaxes(orderingOf: .queue("delivery"))
+        }
+        let classified = diff([d(.unexpectedEvent, "Unrelated")]).classified(against: intent)
+        XCTAssertEqual(classified.unobservedIntent, [
+            #"Relaxes(orderingOf: .queue("delivery"))"#,
+            #"Moves("Cart.add", from: .queue("com.emporium.cart"), to: .actor("SwiftCartActor"))"#
+        ])
+    }
+
+    func testAnUnobservedDeclarationFailsTheAgentBriefGate() {
+        let classified = diff([]).classified(against: Intent(expectedNewEvents: ["NeverEmitted"]))
+        XCTAssertTrue(classified.isEquivalent, "behavior itself matched")
+        XCTAssertTrue(classified.agentBrief().contains("Gate: FAIL"), "exit 6 is a non-pass")
+        XCTAssertTrue(classified.report().contains("declared but not observed"), classified.report())
+    }
 }

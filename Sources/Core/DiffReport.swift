@@ -22,11 +22,26 @@ public extension TraceDiff {
         }
     }
 
+    /// The `⚠︎ declared but not observed` block — rendered by every textual surface, so a dead
+    /// declaration is named wherever the verdict is read.
+    ///
+    /// Empty in parity mode or when every declaration matched.
+    func unobservedIntentLines() -> [String] {
+        guard !unobservedIntent.isEmpty else {
+            return []
+        }
+        var lines = ["  ⚠︎ declared but not observed (\(unobservedIntent.count)) — a dark feature "
+            + "or stale intent; the continuous gate fails on it:"]
+        lines += unobservedIntent.map { "      \($0)" }
+        return lines
+    }
+
     /// The divergence summary + per-divergence lines (no banner), so `VerificationResult.report()` can
     /// prepend a coverage-aware headline and reuse this body verbatim.
     func bodyLines() -> [String] {
         guard !divergences.isEmpty else {
             return ["  behavior trace matches within declared tolerances (0 divergences)"]
+                + unobservedIntentLines()
         }
 
         var lines: [String] = []
@@ -62,17 +77,23 @@ public extension TraceDiff {
             )
             lines.append("        \(divergence.detail)")
         }
-        return lines
+        return lines + unobservedIntentLines()
     }
 
     /// A prompt-injected relay guide for a consuming agent (printed behind `--agent`). When the CLI
     /// is the agent's interface, the output itself teaches the agent how to communicate this
     /// ground-truth verdict to a human. Not meant for human eyes.
     func agentBrief() -> String {
-        let gate = verdict == .equivalent ? "PASS" : "FAIL"
-        let mergeGuard = collateralCount > 0
+        let gate = verdict == .equivalent && unobservedIntent.isEmpty ? "PASS" : "FAIL"
+        var mergeGuard = collateralCount > 0
             ? "\n• Do not merge until the user confirms each collateral change is acceptable."
             : ""
+        if !unobservedIntent.isEmpty {
+            mergeGuard += "\n• Unobserved declarations: \(unobservedIntent.count) "
+                + "(\(unobservedIntent.joined(separator: " · "))). Declared intent the oracle never "
+                + "observed — exit 6, non-pass. Tell the user to remove each dead declaration, or to "
+                + "make the change actually produce it."
+        }
         return """
         ── FOR THE AGENT · how to relay this verdict ──
         This is a deterministic behavioral-diff verdict from the oracle: ground truth from re-running

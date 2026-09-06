@@ -235,6 +235,7 @@ public extension Spec {
 
         var replays: [Cassette] = []
         var representative: TraceDiff?
+        var sweep = IntentSweep()
         for probe in surface.replayable {
             let replay = Cassette(replaying: probe.cassette)
             let current = await capture(
@@ -242,25 +243,31 @@ public extension Spec {
                 order: probe.ordering.compactMap { surface.opsByLabel[$0] },
                 cassette: replay
             )
-            let diff = BehavioralDiff.compare(
+            var diff = BehavioralDiff.compare(
                 baseline: probe.golden,
                 candidate: current,
                 tolerances: effectiveTolerances
             )
             .classified(against: intent)
+            sweep.observe(diff)
             replays.append(replay)
             if representative == nil {
                 representative = diff
             }
 
             guard diff.isEquivalent else {
+                // A sweep that stopped here walked only part of the surface: it cannot claim any
+                // declaration matched nothing, so the diverged verdict makes no unobserved claim.
+                diff.unobservedIntent = []
                 return divergedReplayVerdict(diff: diff, probe: probe, replay: replay, surface: surface)
             }
         }
 
         // Every replayable probe held. Coverage decides whether that EQUIVALENT can be trusted:
         // unreplayable ops or seam misses anywhere downgrade it to CANNOT-VERIFY.
-        let diff = representative ?? emptyDiff(golden: plan.specName)
+        // Zero replayable probes observed nothing, so classifying the empty diff reads back the
+        // whole declaration list as unobserved.
+        let diff = sweep.settle(representative ?? emptyDiff(golden: plan.specName).classified(against: intent))
         let coverage = coverage(
             replays: replays,
             domainHeld: true,
@@ -276,6 +283,38 @@ public extension Spec {
             exploration: surface.exploration,
             qualification: surface.qualification
         )
+    }
+
+    /// Sweep-wide intent bookkeeping shared by the replay and live verify loops: a sweep compares
+    /// many probes but reports one diff, and intent facts are sweep-wide, not per-probe.
+    ///
+    /// Two corrections it applies to the reported diff:
+    ///  - **disclosure** — a green-by-declaration verdict must show what it absorbed, and the
+    ///    reported probe may be clean while a later probe carried the change; the first absorbing
+    ///    diff is preferred.
+    ///  - **unobserved intersection** — a declaration is observed if ANY probe matched it, so the
+    ///    sweep-wide unobserved set is the intersection of the per-probe ones.
+    struct IntentSweep {
+        private var intendedRepresentative: TraceDiff?
+        private var unobservedAcross: Set<String>?
+
+        mutating func observe(_ diff: TraceDiff) {
+            unobservedAcross = unobservedAcross
+                .map { $0.intersection(diff.unobservedIntent) } ?? Set(diff.unobservedIntent)
+            if intendedRepresentative == nil, diff.intendedCount > 0 {
+                intendedRepresentative = diff
+            }
+        }
+
+        /// The diff the verdict should carry: the first absorbing diff when one exists (else
+        /// `fallback`), its unobserved list corrected to the sweep-wide intersection.
+        func settle(_ fallback: TraceDiff) -> TraceDiff {
+            var diff = intendedRepresentative ?? fallback
+            if let unobservedAcross {
+                diff.unobservedIntent = diff.unobservedIntent.filter(unobservedAcross.contains)
+            }
+            return diff
+        }
     }
 
     /// The first-divergence exit: stops, and pins the probe that exposed it.
