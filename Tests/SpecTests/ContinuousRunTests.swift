@@ -95,6 +95,43 @@ final class ContinuousRunTests: XCTestCase {
         XCTAssertEqual(intent?.path, "/tmp/intent/search.combine.intent.json")
     }
 
+    func testCensusParsesRefusesIntentAndNeedsNoPlanPath() throws {
+        let run = try ContinuousRun.fromEnvironment([
+            "HARUSPEC_MODE": "census",
+            "HARUSPEC_RESULTS_DIR": "/tmp/census"
+        ])
+        guard case .census = run else {
+            return XCTFail("expected census, got \(String(describing: run))")
+        }
+        XCTAssertThrowsError(try ContinuousRun.fromEnvironment(["HARUSPEC_MODE": "census"]))
+        XCTAssertThrowsError(try ContinuousRun.fromEnvironment([
+            "HARUSPEC_MODE": "census",
+            "HARUSPEC_RESULTS_DIR": "/tmp/census",
+            "HARUSPEC_INTENT_PATH": "/tmp/x.intent.json"
+        ]))
+    }
+
+    func testCensusWritesOneMarkerPerSpec() async {
+        let dir = scratch()
+        let outcome = await cart(system: makeGood).runContinuous(.census(resultsDirectory: dir))
+        XCTAssertTrue(outcome.succeeded, outcome.summary)
+        let marker = dir.appendingPathComponent("promo-cart.continuous.census.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+    }
+
+    func testCensusEnumeratesTheWholeCatalogWithoutSelection() {
+        let catalog = SpecCatalog(
+            cart(system: makeGood).entry(),
+            cart(system: makeRoundBug).entry()
+        )
+        // Replay with several entries requires HARUSPEC_SPEC; a census never narrows.
+        XCTAssertEqual(catalog.continuousSpecs(environment: ["HARUSPEC_MODE": "replay"]), [])
+        XCTAssertEqual(
+            catalog.continuousSpecs(environment: ["HARUSPEC_MODE": "census"]).count,
+            2
+        )
+    }
+
     func testAnIntentOnTheRecordSideIsRefused() {
         XCTAssertThrowsError(try ContinuousRun.fromEnvironment([
             "HARUSPEC_MODE": "record",

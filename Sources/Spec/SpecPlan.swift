@@ -67,13 +67,21 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// which is the payoff of keeping `@Traced` on — a semantic-tier-only spec can't be scoped.
     public var coveredClasses: [String]
 
+    /// The record-on-merge freshness stamp (`PlanProvenance`), or `nil` for a plan recorded
+    /// outside the reconciler.
+    ///
+    /// Absence is meaningful — an unstamped plan sweeps as stale — so this is a genuine optional,
+    /// not a migration decoder, and adding it did not bump the plan schema.
+    public var provenance: PlanProvenance?
+
     public init(
         schemaVersion: Int = SpecPlan.supportedSchemaVersion,
         specName: String,
         seed: UInt64,
         variedSeams: [String],
         probes: [SpecProbe],
-        coveredClasses: [String]
+        coveredClasses: [String],
+        provenance: PlanProvenance? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.specName = specName
@@ -81,6 +89,7 @@ public struct SpecPlan: Codable, Sendable, Equatable {
         self.variedSeams = variedSeams
         self.probes = probes
         self.coveredClasses = coveredClasses
+        self.provenance = provenance
     }
 }
 

@@ -158,8 +158,12 @@ public struct SpecCatalog {
     public func continuousSpecs(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String] {
-        guard ContinuousMode.fromEnvironment(environment) != nil else {
+        guard let mode = ContinuousMode.fromEnvironment(environment) else {
             return []
+        }
+        // A census exists to enumerate the whole catalog, so selection never narrows it.
+        if mode == .census {
+            return entries.map(\.name)
         }
         guard let selected = environment[Self.specKey], !selected.isEmpty else {
             // One declared spec needs no selection; several are ambiguous and must be named.

@@ -122,4 +122,33 @@ final class IntentTests: XCTestCase {
         XCTAssertTrue(classified.agentBrief().contains("Gate: FAIL"), "exit 6 is a non-pass")
         XCTAssertTrue(classified.report().contains("declared but not observed"), classified.report())
     }
+
+    // MARK: Merging (the record-on-merge union)
+
+    func testMergingUnionsEveryKindAndDeduplicates() {
+        let first = Intent(
+            expectedNewEvents: ["LoyaltyPointsEarned"],
+            expectedValueChanges: ["Receipt": ["total"]],
+            expectedDomainMigrations: [.init(from: .main, to: .ambient)]
+        )
+        let second = Intent(
+            expectedNewEvents: ["LoyaltyPointsEarned", "CartRewardsDidUpdate"],
+            expectedValueChanges: ["Receipt": ["points"], "Search.query": []],
+            expectedDomainMigrations: [.init(from: .main, to: .ambient)],
+            acceptedBlindSpots: ["Combine"]
+        )
+        let merged = first.merging(second)
+        XCTAssertEqual(merged.expectedNewEvents, ["LoyaltyPointsEarned", "CartRewardsDidUpdate"])
+        XCTAssertEqual(merged.expectedValueChanges["Receipt"], ["total", "points"])
+        XCTAssertEqual(merged.expectedValueChanges["Search.query"], [])
+        XCTAssertEqual(merged.expectedDomainMigrations.count, 1)
+        XCTAssertEqual(merged.acceptedBlindSpots, ["Combine"])
+    }
+
+    func testMergingAWholesaleValueChangeSubsumesPerFieldForms() {
+        let wholesale = Intent(expectedValueChanges: ["Receipt": []])
+        let perField = Intent(expectedValueChanges: ["Receipt": ["total"]])
+        XCTAssertEqual(wholesale.merging(perField).expectedValueChanges["Receipt"], [])
+        XCTAssertEqual(perField.merging(wholesale).expectedValueChanges["Receipt"], [])
+    }
 }

@@ -17,6 +17,12 @@ import HaruspecCore
 public enum ContinuousMode: String, Sendable {
     case record
     case replay
+    /// Catalog enumeration for the record-on-merge sweep: every declared spec writes a marker
+    /// naming itself, and nothing records or replays.
+    ///
+    /// Linking a spec into the test target is its registration — the census reads that registry,
+    /// so a new spec needs no manifest entry.
+    case census
 
     public static let environmentKey = "HARUSPEC_MODE"
 
@@ -36,6 +42,9 @@ public enum ContinuousRun: Sendable {
     /// Changed-build side: replay the committed `planURL`, write the verdict into `resultsDirectory`.
     /// `intentURL` is the PR's declared intent for this spec (extension mode); `nil` is parity mode.
     case replay(planURL: URL, resultsDirectory: URL, intentURL: URL?)
+    /// Sweep side: write a `<spec>.census.json` marker into `resultsDirectory` — the declared-spec
+    /// inventory the record-on-merge sweep diffs against the committed plans.
+    case census(resultsDirectory: URL)
 
     public static let planPathKey = "HARUSPEC_PLAN_PATH"
     public static let resultsDirectoryKey = "HARUSPEC_RESULTS_DIR"
@@ -73,6 +82,7 @@ public enum ContinuousRun: Sendable {
         switch self {
         case .record: .record
         case .replay: .replay
+        case .census: .census
         }
     }
 
@@ -84,8 +94,6 @@ public enum ContinuousRun: Sendable {
         guard let mode = ContinuousMode.fromEnvironment(environment) else {
             return nil
         }
-        let planPath = try environment.requiredPath(Self.planPathKey, mode: mode)
-        let planURL = URL(fileURLWithPath: planPath)
         let intentPath = environment[Self.intentPathKey].flatMap { $0.isEmpty ? nil : $0 }
         switch mode {
         case .record:
@@ -94,8 +102,10 @@ public enum ContinuousRun: Sendable {
             if let intentPath {
                 throw ContinuousRunError.intentOnRecord(path: intentPath)
             }
-            return .record(planURL: planURL)
+            let planPath = try environment.requiredPath(Self.planPathKey, mode: mode)
+            return .record(planURL: URL(fileURLWithPath: planPath))
         case .replay:
+            let planPath = try environment.requiredPath(Self.planPathKey, mode: mode)
             let resultsPath = try environment.requiredPath(Self.resultsDirectoryKey, mode: mode)
             // A conventioned intent file must name the same spec as the plan it excuses: a mispaired
             // stem means one spec's declarations were about to be applied to another's verdict.
@@ -106,10 +116,18 @@ public enum ContinuousRun: Sendable {
                 throw ContinuousRunError.mispairedIntent(intentSpec: intentSpec, planSpec: planSpec)
             }
             return .replay(
-                planURL: planURL,
+                planURL: URL(fileURLWithPath: planPath),
                 resultsDirectory: URL(fileURLWithPath: resultsPath, isDirectory: true),
                 intentURL: intentPath.map { URL(fileURLWithPath: $0) }
             )
+        case .census:
+            // A census enumerates what is declared; an intent excuses a change. Pointing one at the
+            // other is a mispointed pipeline — refuse rather than silently ignore.
+            if let intentPath {
+                throw ContinuousRunError.intentOnCensus(path: intentPath)
+            }
+            let resultsPath = try environment.requiredPath(Self.resultsDirectoryKey, mode: mode)
+            return .census(resultsDirectory: URL(fileURLWithPath: resultsPath, isDirectory: true))
         }
     }
 }
@@ -118,6 +136,7 @@ public enum ContinuousRun: Sendable {
 public enum ContinuousRunError: Error, CustomStringConvertible, Sendable {
     case missingPath(key: String, mode: ContinuousMode)
     case intentOnRecord(path: String)
+    case intentOnCensus(path: String)
     case mispairedIntent(intentSpec: String, planSpec: String)
 
     public var description: String {
@@ -128,6 +147,9 @@ public enum ContinuousRunError: Error, CustomStringConvertible, Sendable {
             "\(ContinuousRun.intentPathKey)=\(path) with \(ContinuousMode.environmentKey)=record — "
                 + "intent declares a change against a baseline, and a record run is the baseline; "
                 + "unset it (intent applies on replay only)"
+        case let .intentOnCensus(path):
+            "\(ContinuousRun.intentPathKey)=\(path) with \(ContinuousMode.environmentKey)=census — "
+                + "a census only enumerates declared specs; unset it (intent applies on replay only)"
         case let .mispairedIntent(intentSpec, planSpec):
             "\(ContinuousRun.intentPathKey) names spec \"\(intentSpec)\" but "
                 + "\(ContinuousRun.planPathKey) names spec \"\(planSpec)\" — "
@@ -181,6 +203,8 @@ public extension Spec {
             await recordContinuous(to: planURL)
         case let .replay(planURL, resultsDirectory, intentURL):
             await replayContinuous(plan: planURL, into: resultsDirectory, intent: intentURL)
+        case let .census(resultsDirectory):
+            censusContinuous(into: resultsDirectory)
         }
     }
 
@@ -200,6 +224,24 @@ public extension Spec {
             )
         } catch {
             return .failed("record failed: \(error)")
+        }
+    }
+
+    private func censusContinuous(into resultsDirectory: URL) -> ContinuousOutcome {
+        do {
+            try FileManager.default.createDirectory(at: resultsDirectory, withIntermediateDirectories: true)
+            let markerURL = resultsDirectory.appendingPathComponent("\(name).census.json")
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            try encoder.encode(["spec": name]).write(to: markerURL)
+            return ContinuousOutcome(
+                succeeded: true,
+                summary: "census: \(name)",
+                artifactPath: markerURL.path,
+                htmlReportPath: nil
+            )
+        } catch {
+            return .failed("census failed: \(error)")
         }
     }
 

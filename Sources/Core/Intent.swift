@@ -204,6 +204,51 @@ public extension Intent {
     var declarationTexts: [String] {
         declarations.map(\.text)
     }
+
+    /// Returns the union of this spec and `other`: every declaration either side makes, once.
+    ///
+    /// Sound only where the combined excuses were each individually endorsed — the record-on-merge
+    /// sweep replaying one plan across several merged PRs' declarations. A union must never judge a
+    /// single PR: it would absorb divergences that PR never declared.
+    ///
+    /// A wholesale `Changes(label)` (empty field list) subsumes that label's per-field forms, so the
+    /// merged value-change map keeps the wholesale spelling when either side declared it.
+    func merging(_ other: Intent) -> Intent {
+        var valueChanges = expectedValueChanges
+        for (label, fields) in other.expectedValueChanges {
+            let existing = valueChanges[label]
+            if fields.isEmpty || existing?.isEmpty == true {
+                valueChanges[label] = []
+            } else {
+                valueChanges[label] = uniqued((existing ?? []) + fields)
+            }
+        }
+        return Intent(
+            expectedNewEvents: uniqued(expectedNewEvents + other.expectedNewEvents),
+            expectedRemovedEvents: uniqued(expectedRemovedEvents + other.expectedRemovedEvents),
+            expectedValueChanges: valueChanges,
+            expectedOrderingRelaxations: uniqued(
+                expectedOrderingRelaxations + other.expectedOrderingRelaxations
+            ),
+            expectedOrderingLosses: uniqued(expectedOrderingLosses + other.expectedOrderingLosses),
+            expectedOrderingAdditions: uniqued(
+                expectedOrderingAdditions + other.expectedOrderingAdditions
+            ),
+            expectedReorders: uniqued(expectedReorders + other.expectedReorders),
+            expectedDomainMigrations: uniqued(expectedDomainMigrations + other.expectedDomainMigrations),
+            acceptedBlindSpots: uniqued(acceptedBlindSpots + other.acceptedBlindSpots)
+        )
+    }
+}
+
+/// First occurrence wins, order preserved — a merged intent renders declarations in the order the
+/// PRs merged, which is the order a reader can retrace.
+private func uniqued<T: Equatable>(_ values: [T]) -> [T] {
+    values.reduce(into: []) { result, value in
+        if !result.contains(value) {
+            result.append(value)
+        }
+    }
 }
 
 public extension Divergence {
