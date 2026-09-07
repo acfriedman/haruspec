@@ -31,6 +31,22 @@ public enum ContinuousMode: String, Sendable {
     ) -> ContinuousMode? {
         environment[environmentKey].flatMap(ContinuousMode.init(rawValue:))
     }
+
+    /// Whether live (in-build) checks should stand down for this process: true under `record` and
+    /// `census`, false otherwise.
+    ///
+    /// A record run's code coverage becomes the plan's dependency list, so anything else that
+    /// executes — a port under `check()`, another subject's campaign — pollutes it into spurious
+    /// staleness. Replay keeps live checks running: a PR gate wants the in-build campaign too.
+    /// Suites apply this as `@Suite(.disabled(if: ContinuousMode.standsDownLiveChecks()))`.
+    public static func standsDownLiveChecks(
+        _ environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        switch fromEnvironment(environment) {
+        case .record, .census: true
+        case .replay, nil: false
+        }
+    }
 }
 
 /// A fully-specified run. Modeled as a sum rather than a mode plus optional paths so the destinations

@@ -119,6 +119,14 @@ final class ContinuousRunTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
     }
 
+    func testLiveChecksStandDownOnlyForBaselineMeasuringModes() {
+        XCTAssertTrue(ContinuousMode.standsDownLiveChecks(["HARUSPEC_MODE": "record"]))
+        XCTAssertTrue(ContinuousMode.standsDownLiveChecks(["HARUSPEC_MODE": "census"]))
+        // Replay is the PR gate — the in-build campaign must keep running there.
+        XCTAssertFalse(ContinuousMode.standsDownLiveChecks(["HARUSPEC_MODE": "replay"]))
+        XCTAssertFalse(ContinuousMode.standsDownLiveChecks([:]))
+    }
+
     func testCensusEnumeratesTheWholeCatalogWithoutSelection() {
         let catalog = SpecCatalog(
             cart(system: makeGood).entry(),
