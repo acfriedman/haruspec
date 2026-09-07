@@ -118,4 +118,63 @@ final class CombineSeamTests: XCTestCase {
         XCTAssertTrue(DeferredTimers.fire(for: mine))
         XCTAssertTrue(fired)
     }
+
+    /// The cancellable form's `.timer` payload is the declared stride, never a clock difference:
+    /// under a clock that slips between reads (the loaded-runner shape that once recorded 299 for
+    /// a declared 300), the payload still reads exactly 300.
+    func testACancellableTimerRecordsTheDeclaredStrideNotAClockDifference() {
+        let recorder = TraceRecorder(name: "timer-data", clock: ManualClock())
+        let scheduler = TracedScheduler(wrapping: SlippingClockScheduler())
+        TraceContext.withThreadRecorder(recorder, spawnedBy: nil) {
+            let base = scheduler.now
+            _ = scheduler.schedule(
+                after: base.advanced(by: .milliseconds(300)),
+                interval: .milliseconds(300),
+                tolerance: .zero,
+                options: nil
+            ) {}
+            XCTAssertTrue(DeferredTimers.fire(for: recorder))
+        }
+        let timer = recorder.trace().events.first { $0.kind == .timer }
+        XCTAssertEqual(timer?.payload, .int(300), "declared 300ms must record as data, unshrunk")
+    }
+}
+
+/// A scheduler whose clock slips 50ms forward on every `now` read — the jitter shape a loaded CI
+/// runner produces, exaggerated so a date-derived delay could never round back to the declared one.
+private final class SlippingClockScheduler: Scheduler {
+    typealias SchedulerTimeType = DispatchQueue.SchedulerTimeType
+    typealias SchedulerOptions = DispatchQueue.SchedulerOptions
+
+    private var reads = 0
+
+    var now: SchedulerTimeType {
+        reads += 1
+        return SchedulerTimeType(.now() + .milliseconds(50 * reads))
+    }
+
+    var minimumTolerance: SchedulerTimeType.Stride {
+        .zero
+    }
+
+    func schedule(options _: SchedulerOptions?, _ action: @escaping () -> Void) {
+        action()
+    }
+
+    func schedule(
+        after _: SchedulerTimeType,
+        tolerance _: SchedulerTimeType.Stride,
+        options _: SchedulerOptions?,
+        _: @escaping () -> Void
+    ) {}
+
+    func schedule(
+        after _: SchedulerTimeType,
+        interval _: SchedulerTimeType.Stride,
+        tolerance _: SchedulerTimeType.Stride,
+        options _: SchedulerOptions?,
+        _: @escaping () -> Void
+    ) -> Cancellable {
+        AnyCancellable {}
+    }
 }

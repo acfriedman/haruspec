@@ -140,7 +140,9 @@ public enum DeferredTimers {
                         action
                     )
                 }
-                let delay = delayMilliseconds(until: date)
+                // The declared stride, never a clock difference: a date-derived reading costs a
+                // second `now` read after the operator's own, and shrinks under load (300 → 299).
+                let delay = milliseconds(of: interval)
                 let body = CombineSeam.rebinding(recorded(delay, on: recorder, action), for: recorder)
                 let token = VirtualTimerToken()
                 DeferredTimers.hold(for: recorder, delayMilliseconds: delay) {
@@ -151,12 +153,18 @@ public enum DeferredTimers {
                 return token
             }
 
-            /// The requested delay as milliseconds — read off the declared fire date, normalized
-            /// across the stock schedulers (nanosecond `Int` strides and second `Double` strides;
-            /// rounding absorbs the two `now` reads' jitter). `nil` for a scheduler whose stride
-            /// exposes neither, which fires last and records its absence honestly.
+            /// The one-shot form's delay: read off the fire date, which costs one `now` read —
+            /// rounding absorbs sub-half-millisecond jitter, the best available when the call
+            /// declared no stride.
             private func delayMilliseconds(until date: SchedulerTimeType) -> Int? {
-                let stride = wrapped.now.distance(to: date)
+                milliseconds(of: wrapped.now.distance(to: date))
+            }
+
+            /// A stride as whole milliseconds, normalized across the stock schedulers (nanosecond
+            /// `Int` strides and second `Double` strides). Pure — no clock read, so a declared
+            /// stride records as data, never as measurement. `nil` for a scheduler whose stride
+            /// exposes neither, which fires last and records its absence honestly.
+            func milliseconds(of stride: SchedulerTimeType.Stride) -> Int? {
                 if let nanoseconds = stride.magnitude as? Int {
                     return Int((Double(nanoseconds) / 1_000_000).rounded())
                 }
