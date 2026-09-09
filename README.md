@@ -3,8 +3,10 @@
 <!-- Tagline: one sentence, plain words. What it does, not how.
      Working slot: "Prove a change kept the behavior you didn't mean to change." -->
 
-<!-- Badges: Swift version · platforms · license · CI. Add as each becomes real
-     (no LICENSE file or engine-repo CI workflow exists yet). -->
+![Tests](https://github.com/acfriedman/haruspec/actions/workflows/tests.yml/badge.svg)
+![Swift 6.0](https://img.shields.io/badge/Swift-6.0-orange)
+![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20iOS-blue)
+![License](https://img.shields.io/badge/license-Apache%202.0-green)
 
 Haruspec is a spec-driven differential testing framework for Swift and Objective-C. Your existing
 code is the **behavioral oracle**: you declare a **spec** of what the subject does (its operations,

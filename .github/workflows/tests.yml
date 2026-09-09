@@ -1,0 +1,25 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # self-hosted while the repo is private (free-tier minutes exhausted; macOS burns
+    # them at 10x). Flip to macos-15 in the SAME commit that makes the repo public —
+    # a self-hosted runner on a public repo executes fork PRs on the host machine.
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run engine tests
+        # TOOLCHAINS stripped: a broken 6.3.1 pin lingers in some shells; the workflow
+        # must always build with the Xcode-selected toolchain.
+        run: |
+          unset TOOLCHAINS
+          swift test
