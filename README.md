@@ -15,9 +15,20 @@ declared you **intended**, and nothing else.
 
 > ⚠️ **Haruspec is not omniscient. It is a best-effort oracle.**
 
-## Two shapes
+## The two shapes of changing code
 
-One spec verifies in two shapes:
+You may reach for Haruspec for two different reasons, and each takes its own shape.
+
+The first: you are rewriting something that must not change behavior. An Objective-C class is
+moving to Swift, a serial queue is becoming an actor, a hand-rolled parser is giving way to a
+library. That is a **campaign**. The old implementation and its port live in the same build, the
+old one is the oracle, and every port is verified directly against it until the day the port
+ships and the old code is deleted.
+
+The second: you want to know when any PR quietly changes behavior nobody meant to change. That is
+the **continuous** shape. `main`'s behavior is recorded once as a plan, every PR replays that
+plan against its own build, and the plan is re-recorded on merge, because merging is the
+endorsement of the new behavior.
 
 |  | Campaign | Continuous |
 | --- | --- | --- |
@@ -26,17 +37,13 @@ One spec verifies in two shapes:
 | The question | Does the port behave like the original? | Did this PR change behavior it didn't declare? |
 | Ends when | The port ships and the old code is deleted | Never; it is the standing PR gate |
 
-A **campaign** is a migration in progress, such as Objective-C to Swift or a serial queue to an
-actor: the legacy implementation is the baseline and every port is a candidate, verified against
-it directly in the same build. The **continuous** shape guards a single implementation across
-builds: `main`'s behavior is recorded once as a plan, every PR replays that plan, and the plan is
-re-recorded on merge, because merging is the endorsement of the new behavior. The same spec
-declaration drives both.
+The same spec declaration drives both.
 
 ## At a glance
 
-This is the entire authored surface for a small checkout subject, verified in the campaign shape. No mocks, no assertions, no
-expected values: the legacy implementation is the expected value.
+This is the entire authored surface for a small checkout subject, verified in the campaign
+shape. No mocks, no assertions, no expected values: the legacy implementation is the expected
+value.
 
 ```swift
 let cart = Spec<PromoCart>("promo-cart")
