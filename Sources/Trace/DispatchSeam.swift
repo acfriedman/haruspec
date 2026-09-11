@@ -111,7 +111,7 @@ public enum DispatchSeam {
     /// `RecordingOperationQueue` reads its own `maxConcurrentOperationCount`. (The queue's *identity*
     /// needs no such channel: an `OperationQueue`'s `name` renames its underlying dispatch label, so
     /// the label rung already answers, minus the " (QOS: …)" decoration the resolver strips.)
-    static func markingQueueEntry<T>(serial: Bool? = nil, _ body: () -> T) -> T {
+    static func markingQueueEntry<T>(serial: Bool? = nil, _ body: () throws -> T) rethrows -> T {
         let dictionary = Thread.current.threadDictionary
         let depth = dictionary[enteredKey] as? Int ?? 0
         let previousSerial = dictionary[enteredSerialKey]
@@ -123,7 +123,7 @@ public enum DispatchSeam {
             dictionary[enteredKey] = depth
             dictionary[enteredSerialKey] = previousSerial
         }
-        return body()
+        return try body()
     }
 
     /// The C shim passes only an opaque recorder handle across the hop, so the cause rides alongside it
