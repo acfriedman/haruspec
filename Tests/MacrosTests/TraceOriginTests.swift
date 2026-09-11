@@ -6,7 +6,7 @@ import XCTest
 // collected when the instrumented body runs. These pin the case that makes searching for the label
 // useless: `Cart` is answered by a Swift port *and* an Obj-C class behind a forwarder, neither of
 // which is named "Cart". The subjects live in TracedForwarderMacroTests.swift (same target):
-// `@Traced("Cart") CartPort` and `@TracedForwarder(wrapping: CartManager.self, label: "Cart")`.
+// `@Traced("Cart") CartPort` and `@TracedForwarder(label: "Cart")` over `CartManager`.
 
 final class TraceOriginTests: XCTestCase {
     /// Build the recorder *inside* the binding: it picks the collector up at init, so a capture that
@@ -49,6 +49,14 @@ final class TraceOriginTests: XCTestCase {
         XCTAssertEqual(origins.count, 1)
         XCTAssertEqual(origins.first?.symbol, "CartManager")
         XCTAssertNil(origins.first?.source, "an Obj-C implementation has no Swift source to audit")
+    }
+
+    /// The symbol is read from the wrapped instance, so the same forwarder names whichever side it
+    /// wraps — a Swift port's own declaration is what its audit then opens.
+    func testAForwardedPortNamesThePort() {
+        let origins = collect { _ in TracedCart(SwiftCart()).add(Product(sku: "A"), quantity: 1) }
+
+        XCTAssertEqual(origins.map(\.symbol), ["SwiftCart"])
     }
 
     /// Registration is per *reached* method, so a class nobody called never appears — the origin set

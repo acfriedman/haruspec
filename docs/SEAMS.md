@@ -101,14 +101,14 @@ injectability refactor is EQUIVALENT (then is retired), and as the irreducible n
 | Seam | Mechanism | Record | Replay | Notes |
 |------|-----------|:------:|:------:|-------|
 | Protocol boundaries | direct injection | ✅ | ✅ | The *easy* case — clean DI needs no interception. |
-| Singletons / `.shared` | settable-`.shared`-behind-protocol → inject recording double | ✅ | ✅ | The one-file injectability refactor: extract a protocol, keep `+sharedInstance` as callers use it, make the backing store settable. The DEBUG/harness path sets a recording double (a generated `@TracedForwarder` seam); production ships the real one. Certified once by a swizzle bootstrap, then pure DI. |
+| Singletons / `.shared` | settable-`.shared`-behind-protocol → inject recording double | ✅ | ✅ | The one-file injectability refactor: extract a protocol, keep `+sharedInstance` as callers use it, make the backing store settable. The DEBUG/harness path sets a recording double (a generated `@TracedDouble`); production ships the real one. Certified once by a swizzle bootstrap, then pure DI. |
 | Global mutable state | source shim / interpose | 🔬 | 🔬 | Snapshot + restore around the replay. |
 | Swizzle bootstrap / no-source binary | `SeamSwizzle` (`method_exchangeImplementations`) | ✅ | ✅ | **Not a standing mechanism.** One-shot: swizzle the pre-refactor `@objc dynamic`/ObjC singleton to capture a golden, apply the injectability refactor, diff → EQUIVALENT certifies the seam; then drop the swizzle. Also the last reach for a third-party *binary* framework with no source to make injectable. Bootstrap proven on a real `.m`/`.h` singleton (`LegacyObjC`). |
 
 ### Third-party SDKs
 | Seam | Mechanism | Record | Replay | Notes |
 |------|-----------|:------:|:------:|-------|
-| Analytics / logging / silent singletons | injected recording seam (`@TracedForwarder`) | ✅ | n/a | *Observed*, not stubbed: make the collaborator injectable (settable-`.shared`-behind-protocol), inject a generated `@TracedForwarder` that records each outbound call as a semantic `effect` event before forwarding, so a dropped/altered call diverges. A *capture* channel (watch the boundary), not a value-replay seam — nothing to replay. Clean DI, no runtime interception. |
+| Analytics / logging / silent singletons | injected recording double (`@TracedDouble`) | ✅ | n/a | *Observed*, not stubbed: make the collaborator injectable (settable-`.shared`-behind-protocol), inject a generated `@TracedDouble` that records each outbound call as a semantic `effect` event before forwarding, so a dropped/altered call diverges. A *capture* channel (watch the boundary), not a value-replay seam — nothing to replay. Clean DI, no runtime interception. |
 | Crash reporters | no-op in DEBUG harness | 📋 | 📋 | Suppress side effects during replay. |
 
 ---

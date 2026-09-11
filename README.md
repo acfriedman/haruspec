@@ -103,19 +103,22 @@ One `import Haruspec` surfaces the macros, capture runtime, seams, and the Spec 
 ## Getting started
 
 **1. Declare a spec.** Name the subject's operations, the effects worth observing, and the input
-domains to sweep. Most of it can be derived from the boundary protocol itself:
+domains to sweep. Most of it can be derived from the boundary protocol itself, and the baseline
+is named by type: it is built through the protocol's pasted init and wrapped in the generated
+forwarder, and every port takes exactly the same path.
 
 ```swift
-Spec<Cart>("cart.objc-to-swift", derivedFrom: DerivedCart.self) {
+Spec<Cart>("cart.objc-to-swift", derivedFrom: DerivedCart.self, baseline: CartManager.self) {
     Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
     Amend("checkout").last()
 }
 ```
 
-**2. Verify.** In the campaign shape, two implementations in one build compare directly:
+**2. Verify.** In the campaign shape, two implementations in one build compare directly. The
+port carries no Haruspec attribute; conforming it to the boundary protocol is the whole adoption:
 
 ```swift
-let verdict = await spec.verify(against: makeSwiftPort)
+try await spec.check(SwiftCart.self)
 ```
 
 In the continuous shape, record the current behavior once, then replay the recorded plan against

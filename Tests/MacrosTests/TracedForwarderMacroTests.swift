@@ -33,16 +33,19 @@ struct Product: Equatable { let sku: String }
 struct Receipt: Equatable { let total: Int }
 
 /// The developer pastes the class's "Generated Interface" verbatim into a protocol and attaches the
-/// macro. The peer `TracedCart` is generated: a final class conforming to `Cart` that wraps a
-/// `CartManager`, forwards 1:1, and emits the same `call`/`ret` events `@Traced` would.
-@TracedForwarder(wrapping: CartManager.self, label: "Cart")
-protocol Cart {
+/// macro. The peer `TracedCart` is generated: a final class conforming to `Cart` that wraps any
+/// `Cart`, forwards 1:1, and emits the same `call`/`ret` events `@Traced` would.
+@TracedForwarder(label: "Cart")
+protocol Cart: AnyObject {
     func add(_ product: Product!, quantity: Int)
     func applyPromo(_ code: String!) -> Bool
     func checkout() -> Receipt! // IUO return — forwarded bare, no force-unwrap
     var summary: String { get } // read-only property — plain computed forward, untraced
     var note: String { get set } // settable — the setter records the write, then forwards
 }
+
+/// The baseline conforms by extension — the signatures are its own, verbatim.
+extension CartManager: Cart {}
 
 /// The equivalent hand-written `@Traced` "port": same stable label, forwarding to the same manager.
 /// Its events are the alignment target the generated forwarder must match byte-for-byte.
@@ -66,51 +69,148 @@ final class CartPort {
     }
 }
 
-// A stand-in for an injected singleton collaborator: a `shared()` accessor plus a `reserve` command.
-// `shared:` lets the generated forwarder self-wire to it, so the spec writes `TracedInventorySeam()`
-// with no hand-wiring — the forwarder itself stays role-neutral (whether it's observed as a durable
-// collaborator boundary is the spec's call, not this declaration's).
-final class Ledger {
-    nonisolated(unsafe) static let instance = Ledger() // test singleton; serial tests, no real sharing
-    static func shared() -> Ledger {
-        instance
-    } // mimics `NS_SWIFT_NAME(shared())`
-    private(set) var reserved: [(sku: String, qty: Int)] = []
-    func reserve(sku: String, quantity: Int) {
-        reserved.append((sku, quantity))
+/// A port with no Haruspec attribute at all, factored differently from the baseline: `add` goes
+/// through a private helper. Wrapped by the same forwarder, its trace must not know that.
+final class SwiftCart: Cart {
+    private var itemCount = 0
+    private var lastPromo: String?
+    var note = ""
+
+    func add(_: Product!, quantity: Int) {
+        bump(by: quantity)
+    }
+
+    private func bump(by quantity: Int) {
+        itemCount += quantity
+    }
+
+    func applyPromo(_ code: String!) -> Bool {
+        lastPromo = code
+        return code == "SAVE"
+    }
+
+    func checkout() -> Receipt! {
+        Receipt(total: itemCount * 10)
+    }
+
+    var summary: String {
+        "items:\(itemCount)"
     }
 }
 
-@TracedForwarder(wrapping: Ledger.self, label: "Inventory", shared: "shared()")
-protocol InventorySeam {
-    func reserve(sku: String, quantity: Int)
+/// An async boundary, so an actor can conform: one requirement declared main-isolated, one not.
+@TracedForwarder(label: "Till")
+protocol Till: AnyObject {
+    func ring(amount: Int) async
+    @MainActor func display(total: Int) async
 }
 
-final class TracedForwarderSharedInitTests: XCTestCase {
-    // `shared:` makes the forwarder self-wire: the no-arg init wraps the real singleton, so no hand-wiring.
-    func testSelfWiresToSharedSingleton() {
-        let seam: InventorySeam = TracedInventorySeam() // wraps Ledger.shared()
-        seam.reserve(sku: "SELF_WIRE", quantity: 1)
-        XCTAssertTrue(Ledger.shared().reserved.contains { $0.sku == "SELF_WIRE" })
+/// The Swift 6 destination shape: an actor port, carrying nothing.
+actor ActorTill: Till {
+    private let center: NotificationCenter
+    private var total = 0
+
+    init(center: NotificationCenter) {
+        self.center = center
     }
 
-    /// The self-wiring changes only the default; the forwarder still emits the standard call/ret and
-    /// forwards — an explicit wrapped instance overrides the default.
-    func testEmitsCallRetAndForwards() {
-        let ledger = Ledger()
-        let seam = TracedInventorySeam(ledger) // explicit wrapped, isolated from `shared()`
+    func ring(amount: Int) async {
+        total += amount
+        center.post(name: .init("TillDidRing"), object: nil, userInfo: ["total": total])
+    }
+
+    func display(total: Int) async {
+        center.post(name: .init("TillDidDisplay"), object: nil, userInfo: ["total": total])
+    }
+}
+
+/// A plain-class port whose `display` honors the requirement's main isolation.
+final class ClassTill: Till {
+    private let center: NotificationCenter
+
+    init(center: NotificationCenter) {
+        self.center = center
+    }
+
+    func ring(amount: Int) async {
+        center.post(name: .init("TillDidRing"), object: nil, userInfo: ["total": amount])
+    }
+
+    @MainActor func display(total: Int) async {
+        center.post(name: .init("TillDidDisplay"), object: nil, userInfo: ["total": total])
+    }
+}
+
+final class TracedForwarderIsolationTests: XCTestCase {
+    private func capture(_ body: () async -> Void) async -> [TraceEvent] {
         let recorder = TraceRecorder(name: "t")
+        await TraceContext.$current.withValue(recorder) { await body() }
+        return recorder.trace().events
+    }
 
-        TraceContext.$current.withValue(recorder) { seam.reserve(sku: "COFFEE", quantity: 2) }
+    /// A forwarded call into an actor is recorded as the actor — and the effect the actor emits
+    /// from inside inherits that domain, exactly as it did when `@Traced` sat on the actor.
+    func testAnActorConformerIsRecordedAsTheActor() async {
+        let events = await capture {
+            let till = TracedTill(ActorTill(center: RecordingNotificationCenter()))
+            await till.ring(amount: 5)
+        }
 
-        let events = recorder.trace().events
-        XCTAssertEqual(events.map(\.label), ["Inventory.reserve", "Inventory.reserve"]) // call + ret
-        XCTAssertEqual(events.first?.payload, ["sku": "COFFEE", "quantity": 2]) // canonical args
-        XCTAssertEqual(ledger.reserved.map(\.sku), ["COFFEE"]) // forwarded through
+        XCTAssertEqual(events.map(\.label), ["Till.ring", "TillDidRing", "Till.ring"])
+        let domains = Set(events.map(\.domain))
+        XCTAssertEqual(domains.count, 1, "call, effect and return share the actor's domain: \(events.map(\.domain))")
+        guard case let .actor(type, _)? = domains.first else {
+            return XCTFail("expected an actor domain, got \(domains)")
+        }
+        XCTAssertEqual(type, "ActorTill")
+    }
+
+    /// A requirement the protocol declares `@MainActor` is recorded as `main`, and a conformer
+    /// honoring it emits from `main` too — the isolation is the protocol's contract, so it needs no
+    /// attribute on the port to be seen.
+    func testAMainIsolatedRequirementIsRecordedAsMain() async {
+        let events = await capture {
+            let till = TracedTill(ClassTill(center: RecordingNotificationCenter()))
+            await till.display(total: 7)
+        }
+
+        XCTAssertEqual(events.map(\.label), ["Till.display", "TillDidDisplay", "Till.display"])
+        XCTAssertEqual(events.map(\.domain), [.main, .main, .main])
+    }
+
+    /// A plain class witnessing a nonisolated requirement declares nothing, so its call is ambient.
+    func testANonisolatedConformerIsAmbient() async {
+        let events = await capture {
+            let till = TracedTill(ClassTill(center: RecordingNotificationCenter()))
+            await till.ring(amount: 5)
+        }
+
+        XCTAssertEqual(events.map(\.domain), [.ambient, .ambient, .ambient])
     }
 }
 
 final class TracedForwarderMacroTests: XCTestCase {
+    private func run(_ body: () -> Void) -> [TraceEvent] {
+        let recorder = TraceRecorder(name: "t")
+        TraceContext.$current.withValue(recorder, operation: body)
+        return recorder.trace().events
+    }
+
+    /// The forwarder is typed by the protocol: the baseline and a port are wrapped by the same
+    /// class, and the two traces are identical — the port's private helper never appears.
+    func testWrapsBaselineAndPortThroughOneBoundary() {
+        func drive(_ cart: Cart) {
+            cart.add(Product(sku: "A"), quantity: 3)
+            _ = cart.applyPromo("SAVE")
+            _ = cart.checkout()
+        }
+        let baseline = run { drive(TracedCart(CartManager())) }
+        let port = run { drive(TracedCart(SwiftCart())) }
+
+        XCTAssertEqual(baseline, port)
+        XCTAssertFalse(port.contains { $0.label.contains("bump") }, "a port's factoring is not surface")
+    }
+
     /// The generated peer exists, is named per the default, and conforms to the protocol.
     func testGeneratesConformingPeer() {
         let cart: Cart = TracedCart(CartManager())
@@ -181,12 +281,6 @@ final class TracedForwarderMacroTests: XCTestCase {
 
     /// The generated forwarder's trace aligns byte-for-byte with the hand-written `@Traced` port.
     func testTraceAlignsWithTracedPort() {
-        func run(_ body: () -> Void) -> [TraceEvent] {
-            let recorder = TraceRecorder(name: "t")
-            TraceContext.$current.withValue(recorder, operation: body)
-            return recorder.trace().events
-        }
-
         let forwarded = run {
             let cart = TracedCart(CartManager())
             cart.add(Product(sku: "A"), quantity: 3)

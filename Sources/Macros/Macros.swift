@@ -111,50 +111,52 @@ public macro TracedProperty(_ typeLabel: String, declaredBy: String? = nil) =
 public macro Timed() =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TimedMarkerMacro")
 
-/// Generates a traced 1:1 forwarding shim from a pasted Obj-C "Generated Interface".
+/// Generates the traced boundary of a migration: a 1:1 forwarding shim, typed by the protocol, that
+/// wraps the baseline and every port alike.
 ///
-/// `@Traced` can't annotate an Obj-C class, so bringing a legacy Obj-C type under structural capture
-/// otherwise means hand-writing a Swift shim that forwards every method and re-emits the trace events.
-/// Instead, paste the class's Clang-imported signatures (IUOs and all) into a `protocol` and attach
-/// this macro; it emits, as a peer, a `final class` conforming to the protocol that wraps the Obj-C
-/// object and forwards each requirement — instrumented with the *same* `call`/`ret` events `@Traced`
-/// emits, so the forwarder's trace aligns with a `@Traced` port of the same behavior:
+/// Paste the baseline's signatures (an Obj-C class's Clang-imported interface, IUOs and all, or a
+/// Swift class's own) into a `protocol` and attach this macro; it emits, as a peer, a `final class`
+/// conforming to the protocol that wraps `any <Protocol>` and forwards each requirement, instrumented
+/// with the same `call`/`ret` events `@Traced` emits. Both sides of a differential check are wrapped
+/// by this one class, so both traces are protocol-shaped by construction: a port's private helpers
+/// and internal factoring never reach its trace, and a shipped port carries no Haruspec attribute.
 ///
-///     @TracedForwarder(wrapping: CartManager.self, label: "Cart")
-///     protocol Cart {
+///     @TracedForwarder(label: "Cart")
+///     protocol Cart: AnyObject {
+///         init(inventory: InventoryReserving, notificationCenter: NotificationCenter)
 ///         func add(_ product: Product!, quantity: Int)
 ///         func checkout() -> Receipt!
 ///     }
-///     // → final class TracedCart: Cart { … forwards to a CartManager, traced as "Cart.add" etc. }
+///     extension CartManager: Cart {}   // the baseline; a port conforms the same way
+///     // → final class TracedCart: Cart { … forwards to any Cart, traced as "Cart.add" etc. }
 ///
-/// `wrapping:` is the Obj-C class to wrap; `label:` is the stable trace label (match the port's
-/// `@Traced("<label>")` so their events align); `as:` optionally names the generated type (default
-/// `"Traced" + <protocolName>`). Because the protocol keeps the imported IUOs verbatim, a
-/// `checkout() -> Receipt!` forwards as a bare `__wrapped.checkout()` — no force-unwrap.
-/// The generated type name is declared as `prefixed(Traced)` rather than `arbitrary`: Swift forbids a
-/// peer macro from introducing *arbitrary* names at file scope (where a pasted-interface protocol
-/// naturally lives), but a known prefix is allowed there. The name is therefore always
-/// `Traced<Protocol>` — the compiler rejects a custom `as:` spelling anything else, at every scope,
-/// as not covered by the macro.
+/// `label:` is the stable trace label, the root of every event the forwarder records. Because the
+/// protocol keeps the imported IUOs verbatim, a `checkout() -> Receipt!` forwards as a bare
+/// `__wrapped.checkout()` — no force-unwrap. The generated type is always `Traced<Protocol>`: Swift
+/// forbids a peer macro from introducing *arbitrary* names at file scope (where a pasted-interface
+/// protocol naturally lives), but a known prefix is allowed there.
 ///
-/// `shared:` lets a **singleton** wrapped type declare its accessor so the forwarder self-wires to the
-/// real instance: `@TracedForwarder(wrapping: InventoryLedger.self, label: "Inventory", shared: "shared()")`
-/// generates an `init` defaulting to `InventoryLedger.shared()`, so `TracedInventorySeam()` needs no
-/// argument. Absent `shared:`, the init defaults to a fresh `wrapping()` (the right choice for a SUT the
-/// spec constructs itself). The forwarder is *role-neutral* — it records the same `call`/`ret` whether
-/// it wraps the system under test or an injected collaborator; classifying a boundary as a durable
-/// collaborator is a spec concern, not a property of this declaration.
+/// Isolation is recorded as the conformer's, with nothing inside it: an `async` requirement is
+/// forwarded from inside the wrapped actor's isolation when the conformer is an actor, so its calls
+/// read as the actor and the effects it emits inherit that domain; a requirement the protocol
+/// declares `@MainActor` is forwarded on the main actor, so a conformer honoring the contract reads
+/// as `main` and one that leaves it reads as wherever it went. A sync requirement has no hop to
+/// make — an actor can only witness it `nonisolated` — and records at the caller's frame.
+///
+/// A pasted `init` requirement is the construction contract every conformer carries — a non-final
+/// class satisfies it only with a `required` init, so an Obj-C baseline is marked
+/// `objc_subclassing_restricted` (imported `final`) — and it is what lets the forwarder build a
+/// conformer from its type alone: `TracedCart(resolving: context, SwiftCart.self)` resolves each
+/// parameter (the capture's center for a `NotificationCenter`, the conformance-matched
+/// `@TracedDouble` for a collaborator) and wraps the result. That is the wiring `@DerivedOps`
+/// derives for the spec's baseline and for `check(SwiftCart.self)`. The forwarder's own witness of
+/// the requirement traps: a forwarder wraps, it never stands in for a conformer.
 ///
 /// The generated type is an `NSObject` subclass, so it can back an Obj-C `id<Protocol>` injection point
 /// when the pasted protocol refines an `@objc` seam (Swift forbids conforming to an `<NSObject>`-refining
 /// protocol without inheriting `NSObject`). This is inert for a Swift-only forwarder like `TracedCart`.
 @attached(peer, names: prefixed(Traced))
-public macro TracedForwarder(
-    wrapping: Any.Type,
-    label: String,
-    as generatedName: String? = nil,
-    shared: String? = nil
-) =
+public macro TracedForwarder(label: String) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedForwarderMacro")
 
 /// Derives a spec's op catalog from the boundary protocol — the mechanical two-thirds of an

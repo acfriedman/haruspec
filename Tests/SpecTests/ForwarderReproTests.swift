@@ -76,13 +76,15 @@ final class ReproLegacyManager {
     }
 }
 
-@TracedForwarder(wrapping: ReproLegacyManager.self, label: "Cart")
+@TracedForwarder(label: "Cart")
 protocol ReproCart: AnyObject {
     func add(_ product: ReproProduct!, quantity: Int)
     func removeSku(_ sku: String!)
     func applyPromo(_ code: String!) -> Bool
     func checkout() -> ReproReceipt!
 }
+
+extension ReproLegacyManager: ReproCart {}
 
 /// Faithful port — identical behavior, posting to `.default` directly.
 @Traced("Cart")
