@@ -51,6 +51,39 @@ public extension Spec {
         try candidate.check(in: self.name)
         return candidate.verdict
     }
+
+    /// `check(_:expecting:declaring:reportsIn:_:)` for a build the spec can construct itself: the
+    /// conformer is built through the boundary's pasted `init` — collaborators resolved to their
+    /// doubles, the capture's center injected — and wrapped in the forwarder, exactly as the
+    /// baseline is. The report is titled by the type unless `named` says otherwise.
+    ///
+    /// - Precondition: The spec must derive construction (`derivedFrom:` a catalog whose protocol
+    ///   pastes its `init` and carries a `@TracedForwarder`); otherwise author the build with the
+    ///   closure form. The type must conform to the boundary protocol — a spec generic over
+    ///   `any Proto` cannot demand that statically, so a non-conformer traps naming the extension
+    ///   to write.
+    @discardableResult
+    func check(
+        _ conformer: Any.Type,
+        named name: String? = nil,
+        expecting expected: TraceDiff.Verdict = .equivalent,
+        declaring intent: Intent = .none,
+        reportsIn directory: URL? = nil
+    ) async throws -> SpecVerdict {
+        guard let construct = makeConformer else {
+            preconditionFailure(
+                "spec '\(self.name)' derives no construction, so it cannot build \(conformer) — paste the "
+                    + "init into the @TracedForwarder protocol, or author the build: "
+                    + "check(\"\(conformer)\") { context in … }"
+            )
+        }
+        return try await check(
+            name ?? String(describing: conformer),
+            expecting: expected,
+            declaring: intent,
+            reportsIn: directory
+        ) { construct($0, conformer) }
+    }
 }
 
 public extension SpecProviding {
@@ -65,6 +98,18 @@ public extension SpecProviding {
         _ make: @escaping (SeamContext) -> System
     ) async throws -> SpecVerdict {
         try await spec.check(name, expecting: expected, declaring: intent, reportsIn: directory, make)
+    }
+
+    /// Verifies a build the spec constructs itself — see `Spec.check(_:named:expecting:declaring:reportsIn:)`.
+    @discardableResult
+    func check(
+        _ conformer: Any.Type,
+        named name: String? = nil,
+        expecting expected: TraceDiff.Verdict = .equivalent,
+        declaring intent: Intent = .none,
+        reportsIn directory: URL? = nil
+    ) async throws -> SpecVerdict {
+        try await spec.check(conformer, named: name, expecting: expected, declaring: intent, reportsIn: directory)
     }
 }
 

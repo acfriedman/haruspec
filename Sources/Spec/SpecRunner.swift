@@ -172,7 +172,9 @@ public extension Spec {
             makers: valueMakers,
             resourceMakers: specResourceMakers
         )
-        let system = make(context)
+        // Every build records through the spec's capture boundary, however it was constructed — the
+        // one choke point for baseline, candidate, record and replay alike.
+        let system = wrapCandidate(make(context))
         // The system states what its instrumentation can see of property writes (`@Traced` = full,
         // `@TracedForwarder` = boundary), and the trace carries it — the diff needs both sides'
         // answers before it may compare write timelines.

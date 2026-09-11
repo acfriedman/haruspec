@@ -100,6 +100,23 @@ import Foundation
         }
     }
 
+    /// The same lever, applied to `MainActor.run`. The standard form defaults `resultType:`, so an
+    /// overload claiming only the body is preferred at `await MainActor.run { … }`.
+    ///
+    /// The problem here is **naming**, not reaching or counting: the body is awaited (so it is
+    /// quiescence) and inherits the recorder, but the hop it makes is the runtime's own enqueue on
+    /// the main queue, which no seam sees — so an announcement delivered this way would resolve to
+    /// `ambient`, the same as one delivered nowhere in particular. Marking the entry is what lets
+    /// the resolver read the main queue's label as a fact about the subject: it was *handed* this
+    /// work, exactly as `DispatchQueue.main.async` hands it.
+    public extension MainActor {
+        static func run<T: Sendable>(_ body: @MainActor @Sendable () throws -> T) async rethrows -> T {
+            try await MainActor.run(resultType: T.self) {
+                try DispatchSeam.markingQueueEntry(serial: true) { try body() }
+            }
+        }
+    }
+
 #endif
 
 public extension DispatchSeam {

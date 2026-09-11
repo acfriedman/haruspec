@@ -262,6 +262,15 @@ public struct Spec<S> {
         )
     }
 
+    /// Constructs a conformer through the boundary's pasted `init` and wraps it — set by
+    /// `.operations(derivedFrom:)` when the catalog derives construction, and what
+    /// `check(_ conformer:)` runs. `nil` when construction has to be authored.
+    var makeConformer: ((SeamContext, Any.Type) -> S)?
+    /// Wraps a candidate in the capture boundary before it is driven — the `@TracedForwarder`
+    /// sibling when the catalog has one, so a port authored by closure records through the same
+    /// class as the baseline. Identity when the spec knows no boundary.
+    var wrapCandidate: (S) -> S = { $0 }
+
     var operations: [Op<S>] = []
     var tolerances: Tolerance = .strict
     var seamDomains: [String: SeamDomain] = [:]

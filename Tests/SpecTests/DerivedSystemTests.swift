@@ -47,17 +47,20 @@ final class KioskManager {
 }
 
 /// The pasted interface, init included — construction is part of the Clang interface, and pasting it
-/// is what lets the wiring derive. Conformers (the forwarder, ports) must carry the same init.
+/// is what lets the wiring derive. Every conformer (baseline and ports) carries the same init, which
+/// is what lets the spec build any of them from its type.
 @DerivedOps
-@TracedForwarder(wrapping: KioskManager.self, label: "Kiosk")
+@TracedForwarder(label: "Kiosk")
 protocol Kiosk: AnyObject {
     init(printer: ReceiptPrinting, center: NotificationCenter)
     func ring(amount: Int)
     func total() -> Int
 }
 
-/// A faithful port, conforming directly (final class, init in the body satisfies the requirement).
-@Traced("Kiosk")
+extension KioskManager: Kiosk {}
+
+/// A faithful port, conforming directly (final class, init in the body satisfies the requirement)
+/// and carrying no Haruspec attribute — the forwarder is its capture boundary too.
 final class SwiftKiosk: Kiosk {
     private let printer: ReceiptPrinting
     private let center: NotificationCenter
@@ -108,14 +111,15 @@ final class RegisterManager {
 }
 
 @DerivedOps
-@TracedForwarder(wrapping: RegisterManager.self, label: "Register")
+@TracedForwarder(label: "Register")
 protocol Register: AnyObject {
     init(book: TallyBook, center: NotificationCenter)
     func punch(amount: Int)
     func tally() -> Int
 }
 
-@Traced("Register")
+extension RegisterManager: Register {}
+
 final class SwiftRegister: Register {
     private let book: TallyBook
     private let center: NotificationCenter
@@ -139,13 +143,25 @@ final class SwiftRegister: Register {
 final class DerivedSystemTests: XCTestCase {
     /// The collapsed spec: one entry point, no `.system`, no `.vary` — the authored residue alone.
     private var spec: Spec<Kiosk> {
-        Spec<Kiosk>("kiosk.derived", derivedFrom: DerivedKiosk.self) {
+        Spec<Kiosk>("kiosk.derived", derivedFrom: DerivedKiosk.self, baseline: KioskManager.self) {
             Amend("total").last()
         }
     }
 
     func testTheCatalogCarriesTheDerivedSystemFactory() {
         XCTAssertNotNil(DerivedKiosk.derivedSystem, "a pasted init + forwarder sibling derive the wiring")
+        XCTAssertNotNil(DerivedKiosk.derivedWrapper, "a forwarder sibling is the capture boundary")
+    }
+
+    /// The port is built and wrapped exactly as the baseline was — nothing authored, no attribute
+    /// on the port. This is the check a migration test writes.
+    func testAConformerChecksFromItsTypeAlone() async throws {
+        let verdict = try await spec.vary {
+            Ordering(max: 4)
+            Budget(runs: 60)
+        }.check(SwiftKiosk.self)
+
+        XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
 
     func testADerivedSpecExploresAtTheDefaultsWithoutAVaryBlock() {
@@ -164,10 +180,9 @@ final class DerivedSystemTests: XCTestCase {
         XCTAssertEqual(tuned.explorationBudget, 40)
     }
 
-    func testTheDerivedSystemDrivesAFullDifferentialAgainstAPort() async {
-        // Baseline construction is entirely derived: TracedTill(resolving:) resolves the printer
-        // double by conformance and takes the capture's center. The candidate authors its closure —
-        // the port side is the next collapse, not this one.
+    func testAClosureBuiltPortIsWrappedByTheSameBoundary() async {
+        // The authored route survives for a port with bespoke wiring; the runner still wraps what
+        // the closure returns, so an unattributed port records through the forwarder.
         let verdict = await spec.vary {
             Ordering(max: 4)
             Budget(runs: 60)
@@ -204,7 +219,7 @@ final class DerivedSystemTests: XCTestCase {
         // The persistence-bearing-subject shape: the injected state is a resource (.provides), built
         // fresh per capture for isolation, and observed through the subject's own read op — which is
         // what makes hidden state comparable surface.
-        let spec = Spec<Register>("register.derived", derivedFrom: DerivedRegister.self)
+        let spec = Spec<Register>("register.derived", derivedFrom: DerivedRegister.self, baseline: RegisterManager.self)
             .provides(TallyBook.self) { _ in TallyBook() }
             .vary {
                 Ordering(max: 4)

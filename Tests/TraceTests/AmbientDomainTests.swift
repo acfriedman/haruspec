@@ -10,17 +10,21 @@ import XCTest
 /// That is the same failure `worker-N` had, one level up: a field meant to remove scheduling
 /// nondeterminism, reintroducing it.
 final class AmbientDomainTests: XCTestCase {
-    /// A subject that declares nothing. `MainActor.run` would not do here — that closure genuinely
-    /// *is* isolated, and `.main` would be the right answer for it.
+    /// A subject that declares nothing.
     private nonisolated static func record(into recorder: TraceRecorder) {
         TraceContext.$current.withValue(recorder) { Haruspec.marker("work") }
     }
 
     /// Identical work, two calling contexts. Nothing about the subject differs, so nothing about its
     /// recorded domain should either.
+    ///
+    /// The main-side caller merely *occupies* main: the standard `resultType:` form of
+    /// `MainActor.run` is the one the seam does not claim, so nothing marks the hop as work handed
+    /// to the main queue. The claimed form (`MainActor.run { … }`) is a different fact — the subject
+    /// delivering onto main — and `.main` is the right answer for it (see `MainActorSeamTests`).
     func testUnisolatedWorkRecordsTheSameDomainFromAnyCaller() async {
         let fromMain = TraceRecorder(name: "from-main")
-        await MainActor.run { Self.record(into: fromMain) }
+        await MainActor.run(resultType: Void.self) { Self.record(into: fromMain) }
 
         let fromPool = TraceRecorder(name: "from-pool")
         await Task.detached { Self.record(into: fromPool) }.value

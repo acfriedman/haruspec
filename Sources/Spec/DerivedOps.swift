@@ -17,17 +17,29 @@ import HaruspecSeams
 public protocol DerivedOperations {
     associatedtype System
     static var derivedOps: [DerivedOp<System>] { get }
-    /// The derived system factory — emitted when the protocol carries a pasted `init` requirement
-    /// and a `@TracedForwarder` sibling (the forwarder's `init(resolving:)` holds the wiring).
-    /// `nil` when construction has to be authored.
-    static var derivedSystem: ((SeamContext) -> System)? { get }
+    /// The capture boundary — emitted when the protocol carries a `@TracedForwarder` sibling: wraps
+    /// a build in the forwarder (identity for one already wrapped), so the baseline and every
+    /// candidate record through the same protocol-shaped class. `nil` when there is no forwarder.
+    static var derivedWrapper: ((System) -> System)? { get }
+    /// The derived construction — emitted when the protocol carries a pasted `init` requirement
+    /// and a `@TracedForwarder` sibling (the forwarder's `init(resolving:_:)` holds the wiring):
+    /// builds the given conformer through the requirement and wraps it. `nil` when construction
+    /// has to be authored.
+    ///
+    /// The conformer is a bare `Any.Type` because a spec generic over `any Proto` has no spelling
+    /// for `any Proto.Type`; a type that does not conform traps naming the extension to write.
+    static var derivedSystem: ((SeamContext, Any.Type) -> System)? { get }
     /// The boundary's observed properties, one per `var` requirement — the derivation's half of
     /// `.observes(_:)`. Empty when the protocol declares none.
     static var derivedProperties: [DerivedProperty<System>] { get }
 }
 
 public extension DerivedOperations {
-    static var derivedSystem: ((SeamContext) -> System)? {
+    static var derivedWrapper: ((System) -> System)? {
+        nil
+    }
+
+    static var derivedSystem: ((SeamContext, Any.Type) -> System)? {
         nil
     }
 
@@ -468,24 +480,52 @@ public extension Spec {
 }
 
 public extension Spec {
-    /// The collapsed spec: name, derived catalog, and the authored residue — one entry point.
+    /// The collapsed spec: name, derived catalog, the baseline, and the authored residue — one
+    /// entry point.
     ///
-    ///     Spec<Cart>("cart.objc-to-swift", derivedFrom: DerivedCart.self) {
+    ///     Spec<Cart>("cart.objc-to-swift", derivedFrom: DerivedCart.self, baseline: CartManager.self) {
     ///         Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
     ///         Amend("checkout").last()
     ///     }
     ///
-    /// The system factory comes from the catalog when the protocol pasted its `init` (a
-    /// `@TracedForwarder` sibling derives the wiring); otherwise `.system { }` is still authored.
-    /// Exploration runs at the derived defaults; `.vary` overrides them.
+    /// - Precondition: The catalog must derive construction — a pasted `init` requirement and a
+    ///   forwarder sibling. A protocol without one authors `.system { }` and uses
+    ///   `init(_:derivedFrom:overriding:)`. The baseline must conform to the boundary protocol;
+    ///   one that does not traps at the first capture, naming the extension to write.
+    ///
+    /// The baseline is constructed through the protocol's pasted `init` and wrapped in the
+    /// `@TracedForwarder` sibling — the same path `check(SwiftCart.self)` runs a port through, so
+    /// the two sides differ in nothing but the conformer. Exploration runs at the derived defaults;
+    /// `.vary` overrides them.
+    init<D: DerivedOperations>(
+        _ name: String,
+        derivedFrom source: D.Type,
+        baseline: Any.Type,
+        @OperationOverridesBuilder<S> overriding build: () -> [OperationOverride<S>] = { [] }
+    ) where D.System == S {
+        self.init(name, derivedFrom: source, overriding: build)
+        guard let derived = D.derivedSystem else {
+            preconditionFailure(
+                "\(D.self) derives no construction, so it cannot build \(baseline) — paste the "
+                    + "baseline's init into the @TracedForwarder protocol, or author .system { context in … } "
+                    + "and drop `baseline:`"
+            )
+        }
+        self = system { derived($0, baseline) }
+    }
+
+    /// The collapsed spec with construction authored: name, derived catalog, and the authored
+    /// residue, with `.system { }` still to follow. For a protocol that pastes its `init`, prefer
+    /// `init(_:derivedFrom:baseline:overriding:)`.
     init<D: DerivedOperations>(
         _ name: String,
         derivedFrom source: D.Type,
         @OperationOverridesBuilder<S> overriding build: () -> [OperationOverride<S>] = { [] }
     ) where D.System == S {
         self.init(name)
-        if let derived = D.derivedSystem {
-            self = system(derived)
+        makeConformer = D.derivedSystem
+        if let wrap = D.derivedWrapper {
+            wrapCandidate = wrap
         }
         self = operations(derivedFrom: source, overriding: build)
     }

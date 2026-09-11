@@ -193,11 +193,16 @@ public struct TracedPropertyMacro: AccessorMacro {
 
 // MARK: - Shared instrumentation emitter
 
-/// The `noteOrigin` argument list an instrumented body registers itself with. `sourceExpression` is
-/// already a Swift expression — a `#fileID` string literal from the expansion context, or nil where the
-/// behavior has no Swift source to point at.
+/// The `noteOrigin` argument list an instrumented body registers itself with. `symbolExpression` and
+/// `sourceExpression` are already Swift expressions — a string literal, a `#fileID` literal from the
+/// expansion context, a runtime `type(of:)` read — or nil where there is nothing to point at.
+func originArguments(label: String, symbolExpression: String?, sourceExpression: String?) -> String {
+    "\(literalString(label)), symbol: \(symbolExpression ?? "nil"), source: \(sourceExpression ?? "nil")"
+}
+
+/// `originArguments` for a symbol known at expansion time.
 func originArguments(label: String, symbol: String?, sourceExpression: String?) -> String {
-    "\(literalString(label)), symbol: \(symbol.map(literalString) ?? "nil"), source: \(sourceExpression ?? "nil")"
+    originArguments(label: label, symbolExpression: symbol.map(literalString), sourceExpression: sourceExpression)
 }
 
 /// Builds the `call`/`ret` instrumented body shared by `@TracedMethod` and `@TracedForwarder`.
@@ -211,12 +216,16 @@ func originArguments(label: String, symbol: String?, sourceExpression: String?) 
 /// Both the baseline (`@Traced`, `innerBody` = the method's own statements) and the port
 /// (`@TracedForwarder`, `innerBody` = a `__wrapped.<method>(…)` forwarding call) run this one emitter,
 /// so their instrumentation stays byte-for-byte aligned and their traces diff cleanly.
+///
+/// `isolationExpression`, when given, is passed as each record's `isolation:` in place of the
+/// call site's own `#isolation` — how a forwarder records as the isolation it forwards into.
 func tracedBody(
     function: FunctionDeclSyntax,
     label rawLabel: String,
     innerBody: String,
     timed: Bool,
-    origin: String
+    origin: String,
+    isolationExpression: String? = nil
 ) -> String {
     let label = literalString(rawLabel)
 
@@ -237,18 +246,20 @@ func tracedBody(
     }
     let callArgs = innerNames.isEmpty ? "" :
         ", args: [" + innerNames.map { "\"\($0)\": RuntimeValue.canonical(\($0) as Any)" }.joined(separator: ", ") + "]"
+    let isolation = isolationExpression.map { ", isolation: \($0)" } ?? ""
 
-    let retVoid = "__oracle?.ret(\(label), subject: self)"
-    let retValue = "__oracle?.ret(\(label), subject: self, value: RuntimeValue.canonical(__oracleResult as Any))"
+    let retVoid = "__oracle?.ret(\(label), subject: self\(isolation))"
+    let retValue = "__oracle?.ret(\(label), subject: self, "
+        + "value: RuntimeValue.canonical(__oracleResult as Any)\(isolation))"
     let retThrew = "__oracle?.ret(\(label), subject: self, "
-        + "value: [\"__threw\": RuntimeValue.canonical(String(describing: error))])"
+        + "value: [\"__threw\": RuntimeValue.canonical(String(describing: error))]\(isolation))"
     let timedStop = "if let __oracle, let __oracleStart "
         + "{ __oracle.signpost(\(label), subject: self, durationTicks: __oracle.now() - __oracleStart) }"
 
     var lines: [String] = [
         "let __oracle = TraceContext.active",
         "__oracle?.noteOrigin(\(origin))",
-        "__oracle?.call(\(label), subject: self\(callArgs))",
+        "__oracle?.call(\(label), subject: self\(callArgs)\(isolation))",
         "\(nestedSignature) { \(innerBody)",
         "}"
     ]
@@ -300,9 +311,11 @@ func tracedBody(
 
 // MARK: - @TracedForwarder (peer: generate a traced 1:1 forwarding shim)
 
-/// Attached to a `protocol` of pasted Clang-imported signatures, generates a peer `final class` that
-/// wraps an Obj-C object and forwards every requirement 1:1 — instrumented with the *same* `call`/`ret`
-/// events `@Traced` emits (see `tracedBody`), so the forwarder's trace aligns with a `@Traced` port.
+/// Attached to a `protocol` of pasted signatures, generates a peer `final class` that wraps *any*
+/// conformer — `any Proto` — and forwards every requirement 1:1, instrumented with the `call`/`ret`
+/// events of `tracedBody`. The Obj-C baseline and a Swift port are wrapped by the same class, so both
+/// traces are protocol-shaped by construction: a port's private helpers never appear, and product
+/// code carries no Haruspec attribute.
 ///
 /// Because the protocol keeps the imported IUOs verbatim (`checkout() -> Receipt!`), each forward is a
 /// bare `__wrapped.checkout()` — no hand-written shim, no force-unwrap. Method requirements are traced;
@@ -310,6 +323,12 @@ func tracedBody(
 /// `{ get set }` requirement's setter records the write as a `stateChange` before forwarding — the
 /// boundary half of property capture, hence `BoundaryMutationCapture` on the generated class.
 /// `static`/`class` requirements are skipped — no instance `self`.
+///
+/// A pasted `init` requirement is the construction contract every conformer carries, and what lets
+/// the forwarder construct one from its metatype alone: `init(resolving:_:)` resolves each parameter
+/// (the capture's center for a `NotificationCenter`, the conformance-matched double otherwise) and
+/// wraps the result. The forwarder's own witness of that requirement traps — a forwarder wraps, it
+/// never stands in for a conformer.
 public struct TracedForwarderMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
@@ -319,18 +338,12 @@ public struct TracedForwarderMacro: PeerMacro {
         guard let proto = declaration.as(ProtocolDeclSyntax.self) else {
             throw MacroError("@TracedForwarder can only be attached to a protocol")
         }
-        guard let wrapping = typeArgument(of: node, name: "wrapping") else {
-            throw MacroError("@TracedForwarder requires a 'wrapping:' class to forward to")
-        }
         guard let label = stringArgument(of: node, name: "label") else {
-            throw MacroError("@TracedForwarder requires a 'label:' string matching the port's @Traced label")
+            throw MacroError("@TracedForwarder requires a 'label:' string — the root of every event it records")
         }
         let protoName = proto.name.text
-        let generatedName = stringArgument(of: node, name: "as") ?? "Traced\(protoName)"
-
-        // A singleton wrapped type can declare its accessor (`shared: "shared()"`) so the forwarder
-        // self-wires to the real instance; absent it, the init defaults to a fresh `wrapping()`.
-        let sharedAccessor = stringArgument(of: node, name: "shared")
+        let generatedName = "Traced\(protoName)"
+        let wrapped = "any \(protoName)"
 
         var members: [String] = []
         var pastedInits: [InitializerDeclSyntax] = []
@@ -340,33 +353,25 @@ public struct TracedForwarderMacro: PeerMacro {
                 if isStaticOrClass(function.modifiers) {
                     continue
                 }
-                members.append(forwardingMethod(function, label: label, wrapping: wrapping))
+                members.append(forwardingMethod(function, label: label))
             } else if let variable = decl.as(VariableDeclSyntax.self) {
                 if isStaticOrClass(variable.modifiers) {
                     continue
                 }
-                if let property = forwardingProperty(variable, label: label, wrapping: wrapping) {
+                if let property = forwardingProperty(variable, label: label) {
                     members.append(property)
                 }
             } else if let initializer = decl.as(InitializerDeclSyntax.self) {
                 pastedInits.append(initializer)
-                members.append(mirrorInit(initializer, wrapping: wrapping))
+                members.append(refusingInit(initializer, generatedName: generatedName))
             }
         }
         // The first pasted init is the designated one: derive the wiring a spec would otherwise
         // author — collaborators resolved to their synthesized doubles, the notification center to
         // the capture's isolated one. `resolve` traps informatively when a parameter has no double.
         if let designated = pastedInits.first {
-            members.append(resolvingInit(designated))
+            members.append(resolvingInit(designated, wrapped: wrapped))
         }
-
-        // With a pasted init, construction is the protocol's business and the bare `W()` default
-        // disappears — it assumed an NSObject-style `-init`, which a Swift baseline may not have,
-        // and a compiled default argument fails even for callers who never use it. Without one, the
-        // historical default stands (`shared:` accessor, or the wrapped type's own `init()`).
-        let wrappedDefault = pastedInits.isEmpty
-            ? " = \(sharedAccessor.map { "\(wrapping).\($0)" } ?? "\(wrapping)()")"
-            : ""
 
         // Rooted in NSObject so the forwarder can back an Obj-C `id<Protocol>` injection point when the
         // protocol refines an Obj-C (`@objc`) seam — harmless for a Swift-only forwarder, required for an
@@ -376,11 +381,14 @@ public struct TracedForwarderMacro: PeerMacro {
         // `BoundaryMutationCapture`: the generated setter records writes that cross this wrapper, and
         // nothing records the wrapped object's internal writes — so the trace says "boundary", and
         // the mutation-order diff knows not to read the wrapped side's silence as behavior.
+        // `@unchecked Sendable`: an immutable single-reference wrapper that forwards into the
+        // wrapped conformer's isolation — the conformer's own thread-safety is the conformer's, as it
+        // always was, and the compiler would otherwise refuse to carry `self` across that hop.
+        let conformances = "NSObject, \(protoName), TraceLabeled, BoundaryMutationCapture, @unchecked Sendable"
         let source = """
-        final class \(generatedName): NSObject, \(protoName), TraceLabeled, BoundaryMutationCapture {
-            private let __wrapped: \(wrapping)
-            init(_ wrapped: \(wrapping)\(wrappedDefault)) { __wrapped = wrapped; super.init() }
-
+        final class \(generatedName): \(conformances) {
+            private let __wrapped: \(wrapped)
+            init(_ wrapped: \(wrapped)) { __wrapped = wrapped; super.init() }
             nonisolated var traceLabel: String { \(quotedLiteral(label)) }
 
         \(members.joined(separator: "\n\n"))
@@ -389,12 +397,30 @@ public struct TracedForwarderMacro: PeerMacro {
         return [DeclSyntax("\(raw: source)")]
     }
 
-    /// One traced forwarding method: same signature as the requirement, body forwards to `__wrapped`.
-    private static func forwardingMethod(
-        _ function: FunctionDeclSyntax,
-        label: String,
-        wrapping: String
-    ) -> String {
+    /// The origin an instrumented forward registers: the *wrapped* type, read at runtime, and no
+    /// source. The generated forwarder lives in the protocol's file, but the behavior lives in
+    /// whatever it wraps — an Obj-C class the audit finds by `@implementation`, a Swift port it finds
+    /// by declaration — and naming the pasted-interface file would let an audit read a file with
+    /// nothing in it and call the label covered.
+    private static func wrappedOrigin(label: String) -> String {
+        originArguments(
+            label: label,
+            symbolExpression: "String(describing: type(of: __wrapped))",
+            sourceExpression: nil
+        )
+    }
+
+    /// One traced forwarding method: same signature and attributes as the requirement, body forwards
+    /// to `__wrapped`.
+    ///
+    /// An `async` requirement is recorded *as the isolation it forwards into*: the body runs in a
+    /// nested function whose `isolated` parameter is the wrapped actor when there is one, else the
+    /// method's own isolation (`#isolation` — `MainActor` when the requirement declares it, `nil`
+    /// otherwise). Recording there, rather than at the caller's frame, is what keeps an actor
+    /// port's calls attributed to the actor and lets the effects it emits inherit that domain — the
+    /// attribution `@Traced` gave from inside the type, now available with nothing inside it. A
+    /// sync requirement has no hop to make: an actor can only witness it `nonisolated`.
+    private static func forwardingMethod(_ function: FunctionDeclSyntax, label: String) -> String {
         // Forward each parameter under its external argument label (dropping `_`), passing the value
         // by internal name — reproducing the imported call, IUOs and all, with no unwrap.
         let forwarded = function.signature.parameterClause.parameters.map { param -> String in
@@ -404,84 +430,91 @@ public struct TracedForwarderMacro: PeerMacro {
         }.joined(separator: ", ")
 
         let effects = function.signature.effectSpecifiers
-        let prefix = "\(effects?.throwsClause != nil ? "try " : "")\(effects?.asyncSpecifier != nil ? "await " : "")"
+        let isAsync = effects?.asyncSpecifier != nil
+        let isThrows = effects?.throwsClause != nil
+        let prefix = "\(isThrows ? "try " : "")\(isAsync ? "await " : "")"
         let call = "\(prefix)__wrapped.\(function.name.text)(\(forwarded))"
 
         let returnType = function.signature.returnClause?.type.trimmedDescription
         let isVoid = returnType == nil || returnType == "Void" || returnType == "()"
         let innerBody = isVoid ? call : "return \(call)"
 
-        // No `source:`. The generated forwarder does live in the protocol's file, but the *behavior*
-        // lives in the Obj-C class it wraps — pointing an audit at the pasted-interface file would
-        // read as "audited" while the code that can bypass a channel was never opened. The wrapped
-        // type name is what a reader (or a later Obj-C path) has to go on.
-        let body = tracedBody(
+        var body = tracedBody(
             function: function,
             label: "\(label).\(function.name.text)",
             innerBody: innerBody,
             timed: false,
-            origin: originArguments(label: label, symbol: wrapping, sourceExpression: nil)
+            origin: wrappedOrigin(label: label),
+            isolationExpression: isAsync ? "__oracleIsolation" : nil
         )
+        if isAsync {
+            // Arguments cross into the wrapped isolation by capture. They are the caller's values,
+            // handed to the conformer exactly as an un-forwarded call would hand them, so the
+            // compiler's sending check is answered here rather than pushed onto every conformer.
+            let names = function.signature.parameterClause.parameters.map { ($0.secondName ?? $0.firstName).text }
+            let launder = names.map { "nonisolated(unsafe) let __oracleArg_\($0) = \($0)\n" }.joined()
+            let rebind = names.map { "let \($0) = __oracleArg_\($0)\n" }.joined()
+            let signature = "func __oracleForward(__oracleIsolation: isolated (any Actor)?) async "
+                + "\(isThrows ? "throws " : "")-> \(returnType ?? "Void")"
+            let hop = "\(prefix)__oracleForward(__oracleIsolation: (__wrapped as? any Actor) ?? #isolation)"
+            body = "\(launder)\(signature) {\n\(indent(rebind + body))\n}\n\(isVoid ? hop : "return \(hop)")"
+        }
+        let attributes = function.attributes.isEmpty ? "" : "\(function.attributes.trimmedDescription) "
         let generics = function.genericParameterClause?.trimmedDescription ?? ""
         let whereClause = function.genericWhereClause.map { " \($0.trimmedDescription)" } ?? ""
-        return "    func \(function.name.text)\(generics)\(function.signature.trimmedDescription)"
+        return "    \(attributes)func \(function.name.text)\(generics)\(function.signature.trimmedDescription)"
             + "\(whereClause) {\n\(indent(body))\n    }"
     }
 
-    /// A pasted `init` requirement mirrors 1:1 onto the wrapped class — which is also what satisfies
-    /// the requirement on the generated conformer, so the protocol can carry the construction
-    /// contract without burdening it.
-    private static func mirrorInit(_ initializer: InitializerDeclSyntax, wrapping: String) -> String {
-        let parameters = initializer.signature.parameterClause.parameters
-        let forwarded = parameters.map { param -> String in
-            let external = param.firstName.text
-            let internalName = (param.secondName ?? param.firstName).text
-            return external == "_" ? internalName : "\(external): \(internalName)"
-        }.joined(separator: ", ")
+    /// The forwarder's witness of a pasted `init` requirement. Conformance demands one, but a
+    /// forwarder has nothing to construct — so it traps, naming the two routes that do.
+    private static func refusingInit(_ initializer: InitializerDeclSyntax, generatedName: String) -> String {
+        let message = "\(generatedName) is a forwarder, not a conformer — wrap one: "
+            + "\(generatedName)(<conformer>), or construct it from its type: "
+            + "\(generatedName)(resolving: context, <Conformer>.self)"
         return "    convenience init\(initializer.signature.parameterClause.trimmedDescription) {\n"
-            + "        self.init(\(wrapping)(\(forwarded)))\n"
+            + "        preconditionFailure(\(quotedLiteral(message)))\n"
             + "    }"
     }
 
-    /// The derived system wiring: each parameter of the designated pasted init resolves by type —
+    /// The derived construction: each parameter of the designated pasted init resolves by type —
     /// the capture's notification center for a `NotificationCenter`, the conformance-matched
-    /// synthesized double for a collaborator boundary. What this cannot resolve, `resolve` reports
-    /// at spec construction with the authored `.system { }` spelled out.
-    private static func resolvingInit(_ initializer: InitializerDeclSyntax) -> String {
+    /// synthesized double for a collaborator boundary — and the conformer is built through the
+    /// requirement itself, then wrapped. What this cannot resolve, `resolve` reports at spec
+    /// construction with the authored `.system { }` spelled out.
+    private static func resolvingInit(_ initializer: InitializerDeclSyntax, wrapped: String) -> String {
         let arguments = initializer.signature.parameterClause.parameters.map { param -> String in
             let external = param.firstName.text
-            let internalName = (param.secondName ?? param.firstName).text
             let spelled = param.type.trimmedDescription
             let bare = spelled.hasSuffix("!") || spelled.hasSuffix("?") ? String(spelled.dropLast()) : spelled
             let value = bare == "NotificationCenter" || bare == "NSNotificationCenter"
                 ? "__context.notifications"
                 : "__context.resolve(\(bare).self)"
-            return external == "_" ? value : "\(external == "_" ? internalName : external): \(value)"
+            return external == "_" ? value : "\(external): \(value)"
         }.joined(separator: ", ")
-        return "    convenience init(resolving __context: SeamContext) {\n"
-            + "        self.init(\(arguments))\n"
+        return "    convenience init(resolving __context: SeamContext, _ __conformer: \(wrapped).Type) {\n"
+            + "        self.init(__conformer.init(\(arguments)))\n"
             + "    }"
     }
 
     /// One forwarding property. A read-only `var x: T { get }` forwards as a plain computed property
-    /// — reads are not effects, so nothing records. A `{ get set }` requirement forwards both
-    /// accessors, and the setter records the write as a `stateChange` before it forwards — the
-    /// boundary half of property capture (the wrapped object's *internal* writes never cross this
-    /// wrapper, which is why the generated class declares `BoundaryMutationCapture`).
-    private static func forwardingProperty(
-        _ variable: VariableDeclSyntax,
-        label: String,
-        wrapping: String
-    ) -> String? {
+    /// — reads are not effects, so nothing records; a `{ get async }` requirement (how an actor
+    /// witnesses state) forwards with `await`. A `{ get set }` requirement forwards both accessors,
+    /// and the setter records the write as a `stateChange` before it forwards — the boundary half of
+    /// property capture (the wrapped object's *internal* writes never cross this wrapper, which is
+    /// why the generated class declares `BoundaryMutationCapture`).
+    private static func forwardingProperty(_ variable: VariableDeclSyntax, label: String) -> String? {
         guard variable.bindingSpecifier.tokenKind == .keyword(.var),
               let binding = variable.bindings.first,
               let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
               let type = binding.typeAnnotation?.type.trimmedDescription
         else { return nil }
         guard hasSetterRequirement(binding) else {
-            return "    var \(name): \(type) { __wrapped.\(name) }"
+            return hasAsyncGetter(binding)
+                ? "    var \(name): \(type) { get async { await __wrapped.\(name) } }"
+                : "    var \(name): \(type) { __wrapped.\(name) }"
         }
-        let origin = originArguments(label: label, symbol: wrapping, sourceExpression: nil)
+        let origin = wrappedOrigin(label: label)
         return """
             var \(name): \(type) {
                 get { __wrapped.\(name) }
@@ -501,6 +534,12 @@ public struct TracedForwarderMacro: PeerMacro {
         guard case let .accessors(accessors) = binding.accessorBlock?.accessors else { return false }
         return accessors.contains { $0.accessorSpecifier.tokenKind == .keyword(.set) }
     }
+}
+
+/// Whether a protocol var requirement's accessor block declares `get async`.
+func hasAsyncGetter(_ binding: PatternBindingSyntax) -> Bool {
+    guard case let .accessors(accessors) = binding.accessorBlock?.accessors else { return false }
+    return accessors.contains { $0.effectSpecifiers?.asyncSpecifier != nil }
 }
 
 // MARK: - @Seamed (un-injected reach)
@@ -630,19 +669,6 @@ func stringArgument(of node: AttributeSyntax, name: String) -> String? {
         if let literal = argument.expression.as(StringLiteralExprSyntax.self) {
             return literal.segments.compactMap { $0.as(StringSegmentSyntax.self)?.content.text }.joined()
         }
-    }
-    return nil
-}
-
-/// Extracts a labeled metatype argument (`Foo.self`) as its type name, e.g. `CartManager.self` → "CartManager".
-private func typeArgument(of node: AttributeSyntax, name: String) -> String? {
-    guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else { return nil }
-    for argument in arguments where argument.label?.text == name {
-        if let member = argument.expression.as(MemberAccessExprSyntax.self),
-           member.declName.baseName.text == "self", let base = member.base {
-            return base.trimmedDescription
-        }
-        return argument.expression.trimmedDescription
     }
     return nil
 }

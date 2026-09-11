@@ -38,19 +38,37 @@ public struct DerivedOpsMacro: PeerMacro {
             )
         }
 
-        // With a @TracedForwarder sibling and a pasted init requirement, the system factory derives
-        // too: the forwarder's generated `init(resolving:)` carries the wiring, so the whole
-        // `.system { }` closure collapses into the catalog.
-        var systemEntry = ""
+        // With a @TracedForwarder sibling, every build the spec runs is wrapped by it — the baseline
+        // the spec names and the candidate a check hands in alike, so both traces are shaped by the
+        // protocol. With a pasted init requirement as well, construction derives too: the forwarder's
+        // `init(resolving:_:)` builds any conformer from its metatype, so `.system { }` and the
+        // candidate's construction closure both collapse into the catalog.
+        var boundaryEntries: [String] = []
         let hasPastedInit = proto.memberBlock.members.contains { $0.decl.is(InitializerDeclSyntax.self) }
-        if hasPastedInit, let forwarder = forwarderName(of: proto) {
-            systemEntry = """
-
-                static var derivedSystem: ((SeamContext) -> \(system))? {
-                    { \(forwarder)(resolving: $0) }
+        if let forwarder = forwarderName(of: proto) {
+            boundaryEntries.append("""
+                static var derivedWrapper: ((\(system)) -> \(system))? {
+                    { $0 as? \(forwarder) ?? \(forwarder)($0) }
                 }
-            """
+            """)
+            // The conformer arrives as a bare `Any.Type`: a spec generic over `any Proto` cannot
+            // spell `any Proto.Type`, so conformance is checked here, naming the line to write.
+            if hasPastedInit {
+                let refusal = "\\(type) does not conform to \(protoName) — declare it: "
+                    + "extension \\(type): \(protoName) {}"
+                boundaryEntries.append("""
+                    static var derivedSystem: ((SeamContext, Any.Type) -> \(system))? {
+                        { context, type in
+                            guard let conformer = type as? any \(protoName).Type else {
+                                preconditionFailure("\(refusal)")
+                            }
+                            return \(forwarder)(resolving: context, conformer)
+                        }
+                    }
+                """)
+            }
         }
+        let systemEntry = boundaryEntries.map { "\n\n\($0)" }.joined()
 
         // `var` requirements derive as observed properties: the spec snapshots each at the capture
         // boundary and scopes the write-timeline diff to exactly these labels.
@@ -108,12 +126,6 @@ public struct DerivedOpsMacro: PeerMacro {
             + "label: \(quotedLiteral("\(labelRoot).\(name)"))) { __sut in \(isAsync ? "await " : "")__sut.\(name) }"
     }
 
-    /// Whether a var requirement's accessor block declares `get async`.
-    private static func hasAsyncGetter(_ binding: PatternBindingSyntax) -> Bool {
-        guard case let .accessors(accessors) = binding.accessorBlock?.accessors else { return false }
-        return accessors.contains { $0.effectSpecifiers?.asyncSpecifier != nil }
-    }
-
     /// The sibling `@TracedForwarder`'s trace label, when the protocol carries one — property labels
     /// must match what the instrumentation records, and the forwarder's label is that root.
     private static func forwarderLabel(of proto: ProtocolDeclSyntax) -> String? {
@@ -129,13 +141,10 @@ public struct DerivedOpsMacro: PeerMacro {
     /// The sibling `@TracedForwarder`'s generated type name, when the protocol carries one — the two
     /// macros never talk, but both see the same attribute list.
     private static func forwarderName(of proto: ProtocolDeclSyntax) -> String? {
-        for element in proto.attributes {
-            guard let attribute = element.as(AttributeSyntax.self),
-                  attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "TracedForwarder"
-            else { continue }
-            return stringArgument(of: attribute, name: "as") ?? "Traced\(proto.name.text)"
+        let hasForwarder = proto.attributes.contains { element in
+            element.as(AttributeSyntax.self)?.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "TracedForwarder"
         }
-        return nil
+        return hasForwarder ? "Traced\(proto.name.text)" : nil
     }
 
     /// One `DerivedOp(...)` entry: the argument list and the forwarding call, both written from the

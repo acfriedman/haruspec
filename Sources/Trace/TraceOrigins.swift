@@ -6,12 +6,12 @@ import HaruspecCore
 ///
 /// A verdict's `coveredClasses` names *labels* (`"Cart"`), and a label is deliberately decoupled from
 /// the type carrying it — `@Traced("Cart") final class SwiftCartActor`, and
-/// `@TracedForwarder(wrapping: CartManager.self, label: "Cart")` for the Obj-C baseline. So a label
+/// `@TracedForwarder(label: "Cart")` wrapping the Obj-C baseline. So a label
 /// cannot be resolved to a file by searching for its own name: two ports can share one label, and
 /// neither has to be named after it. The macro is the one place that knows both halves at once, so it
-/// stamps the origin at expansion time and the recorder collects it when the method actually runs —
-/// which makes the origin set exactly the *reached* set, the same condition that puts a class in
-/// `coveredClasses`.
+/// stamps the origin at expansion time (a forwarder reads the wrapped type as it runs) and the
+/// recorder collects it when the method actually runs — which makes the origin set exactly the
+/// *reached* set, the same condition that puts a class in `coveredClasses`.
 public struct TraceOrigin: Codable, Hashable, Sendable, Comparable {
     /// The trace label the events carry (`"Cart"`) — the join key back to `coveredClasses`.
     public let label: String
