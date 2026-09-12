@@ -35,6 +35,11 @@ public struct Exploration: Codable, Sendable, Equatable {
     /// `variantsPerOrdering` runs out — and reported: a sweep that skipped 11 of its 38 edges should
     /// say so rather than read as edge-complete.
     public let boundaryEdgesCovered: Int
+    /// Variants per ordering that moved every declared seam at once — the all-edges vectors, the
+    /// interior rungs, and the uniform samples that share the budget with the edge pins. Zero means
+    /// no probe ever paired two seams' values, which is the honest thing to say about a sweep that
+    /// spent its whole budget one factor at a time.
+    public let combinedVariantsCovered: Int
 
     public init(
         orderingsExplored: Int,
@@ -43,7 +48,8 @@ public struct Exploration: Codable, Sendable, Equatable {
         variantsPerOrdering: Int,
         outOfOrderExplored: Int,
         boundaryEdgesScheduled: Int,
-        boundaryEdgesCovered: Int
+        boundaryEdgesCovered: Int,
+        combinedVariantsCovered: Int
     ) {
         self.orderingsExplored = orderingsExplored
         self.orderingsAvailable = orderingsAvailable
@@ -52,6 +58,7 @@ public struct Exploration: Codable, Sendable, Equatable {
         self.outOfOrderExplored = outOfOrderExplored
         self.boundaryEdgesScheduled = boundaryEdgesScheduled
         self.boundaryEdgesCovered = boundaryEdgesCovered
+        self.combinedVariantsCovered = combinedVariantsCovered
     }
 
     /// Differential runs spent: each drives the baseline and the candidate once.
@@ -227,12 +234,11 @@ extension Spec {
             ? linearExtensions(operations, max: split.orderings, repeating: orderingRepeats)
             : [operations]
 
-        // The schedule is deterministic from (domains × golden tracks), so its length is knowable
+        // The schedule is deterministic from (domains × golden tracks), so its shape is knowable
         // here without running generation — and recomputable at replay from the plan's golden probe.
-        let scheduled = hasSeams
+        let generator = hasSeams
             ? DomainSeamGenerator(domains: seamDomains, seed: SpecDefaults.seed, golden: golden.tracks)
-            .scheduledBoundaryEdges
-            : 0
+            : nil
 
         return ExplorationPlan(
             orderings: orderings,
@@ -243,8 +249,9 @@ extension Spec {
                 orderingsAreExact: available.exact,
                 variantsPerOrdering: split.variants,
                 outOfOrderExplored: outOfOrderCount(among: orderings.map { $0.map(\.label) }),
-                boundaryEdgesScheduled: scheduled,
-                boundaryEdgesCovered: Swift.min(split.variants, scheduled)
+                boundaryEdgesScheduled: generator?.scheduledBoundaryEdges ?? 0,
+                boundaryEdgesCovered: generator?.boundaryEdgesCovered(within: split.variants) ?? 0,
+                combinedVariantsCovered: generator?.combinedVariantsCovered(within: split.variants) ?? 0
             ),
             golden: golden,
             domains: seamDomains,

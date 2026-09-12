@@ -35,10 +35,11 @@ final class PositionalBoundaryTests: XCTestCase {
             seed: 1,
             golden: ["qty": Array(repeating: CanonicalValue.int(7), count: 2)]
         )
-        let variants = golden(["qty": 7], readings: 2).generatedVariants(count: 8, using: &generator)
+        let variants = golden(["qty": 7], readings: 2).generatedVariants(count: 16, using: &generator)
+        let pins = stride(from: 0, to: variants.count, by: 2).map { variants[$0] }
 
         XCTAssertEqual(
-            values(variants, "qty"),
+            values(pins, "qty"),
             [[0, 0], [0, 7], [20, 20], [7, 20], [1, 1], [1, 7], [19, 19], [7, 19]],
             "each edge appears twice: once as the aggregate case, once at a single reading"
         )
@@ -50,9 +51,10 @@ final class PositionalBoundaryTests: XCTestCase {
             seed: 1,
             golden: ["qty": Array(repeating: CanonicalValue.int(7), count: 3)]
         )
-        let variants = golden(["qty": 7], readings: 3).generatedVariants(count: 8, using: &generator)
-        // The odd variants are the single-reading pins; which slot they move must not be constant.
-        let moved = values(variants, "qty").enumerated().filter { $0.offset.isMultiple(of: 2) == false }
+        let variants = golden(["qty": 7], readings: 3).generatedVariants(count: 16, using: &generator)
+        let pins = stride(from: 0, to: variants.count, by: 2).map { variants[$0] }
+        // The odd pins are the single-reading ones; which slot they move must not be constant.
+        let moved = values(pins, "qty").enumerated().filter { $0.offset.isMultiple(of: 2) == false }
             .map { $0.element.firstIndex { $0 != 7 } }
 
         XCTAssertEqual(moved, [0, 1, 2, 0], "four edges over three readings cycle through every slot")
@@ -66,17 +68,19 @@ final class PositionalBoundaryTests: XCTestCase {
             seed: 1,
             golden: ["qty": Array(repeating: CanonicalValue.int(7), count: 1)]
         )
-        let variants = golden(["qty": 7], readings: 1).generatedVariants(count: 4, using: &generator)
+        let variants = golden(["qty": 7], readings: 1).generatedVariants(count: 8, using: &generator)
+        let pins = stride(from: 0, to: variants.count, by: 2).map { variants[$0] }
 
-        XCTAssertEqual(values(variants, "qty"), [[0], [20], [1], [19]])
+        XCTAssertEqual(values(pins, "qty"), [[0], [20], [1], [19]])
     }
 
     func testUnknownTrackLengthsFallBackToTheWholeTrackPass() {
         // A hand-built generator that says nothing about lengths must behave exactly as it used to.
         var generator = DomainSeamGenerator(domains: ["qty": .int(0 ... 20)], seed: 1)
-        let variants = golden(["qty": 7], readings: 2).generatedVariants(count: 4, using: &generator)
+        let variants = golden(["qty": 7], readings: 2).generatedVariants(count: 8, using: &generator)
+        let pins = stride(from: 0, to: variants.count, by: 2).map { variants[$0] }
 
-        XCTAssertEqual(values(variants, "qty"), [[0, 0], [20, 20], [1, 1], [19, 19]])
+        XCTAssertEqual(values(pins, "qty"), [[0, 0], [20, 20], [1, 1], [19, 19]])
     }
 
     func testEveryReadingGetsAnIsolatedPinEvenWhenTheDomainHasFewerEdges() {
@@ -84,7 +88,7 @@ final class PositionalBoundaryTests: XCTestCase {
         // reachable *only* by the whole-track pin — silently, and more so the higher `.repeating(_:)`
         // went. Golden 500 sits outside the domain so every pin is visible.
         let template = CassetteData(tracks: ["qty": Array(repeating: CanonicalValue.int(500), count: 6)])
-        let variants = template.generatedVariants(count: 10, varying: ["qty": .int(0 ... 20)], seed: 1)
+        let variants = template.generatedVariants(count: 20, varying: ["qty": .int(0 ... 20)], seed: 1)
 
         var isolated = Set<Int>()
         for variant in variants {
@@ -103,13 +107,14 @@ final class PositionalBoundaryTests: XCTestCase {
         // — a variant identical to one already run. Here `SAVE10` is both.
         let template = CassetteData(tracks: ["code": [CanonicalValue.string("SAVE10")]])
         let variants = template.generatedVariants(
-            count: 2,
+            count: 3,
             varying: ["code": .oneOf("SAVE10", "save10", "NOPE")],
             seed: 1
         )
+        let pins = stride(from: 0, to: variants.count, by: 2).map { variants[$0] }
 
         XCTAssertEqual(
-            variants.map { ($0.tracks["code"] ?? []).map(\.canonicalString) },
+            pins.map { ($0.tracks["code"] ?? []).map(\.canonicalString) },
             [["\"save10\""], ["\"NOPE\""]],
             "the budget should go to the two edges that actually change the input"
         )
@@ -121,9 +126,10 @@ final class PositionalBoundaryTests: XCTestCase {
         // `generatedVariants(count:varying:seed:)` is the path `ExplorationPlan` drives, so the engine
         // gets per-position pinning without the caller measuring anything.
         let variants = golden(["qty": 7], readings: 2)
-            .generatedVariants(count: 2, varying: ["qty": .int(0 ... 20)], seed: 1)
+            .generatedVariants(count: 3, varying: ["qty": .int(0 ... 20)], seed: 1)
+        let pins = stride(from: 0, to: variants.count, by: 2).map { variants[$0] }
 
-        XCTAssertEqual(values(variants, "qty"), [[0, 0], [0, 7]])
+        XCTAssertEqual(values(pins, "qty"), [[0, 0], [0, 7]])
     }
 
     func testACategoricalSeamReachesAMixedTrackDuringTheBoundaryPass() {

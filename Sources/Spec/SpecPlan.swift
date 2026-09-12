@@ -51,8 +51,11 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// gained its ordering discipline (`queue(serial):` / `queue(concurrent):`). Bumped to 7 when
     /// property capture landed: goldens now carry `.stateChange` / `.snapshot` events and a
     /// `mutationCapture` stamp — a version-6 plan's silence about writes would read as the subject
-    /// never writing.
-    public static let supportedSchemaVersion = 7
+    /// never writing. Bumped to 8 when the golden template began reading each domain's interior value
+    /// and the variant schedule interleaved combined variants with edge pins: a version-7 plan's
+    /// surface is every edge measured against a degenerate default, with no probe where two seams'
+    /// values meet — it replays faithfully but explores the wrong shape, so it is re-recorded.
+    public static let supportedSchemaVersion = 8
 
     public var schemaVersion: Int
     public var specName: String
@@ -175,7 +178,7 @@ public extension Spec {
     /// and pins every (input, golden trace) pair into a `SpecPlan`. Run on the **base** build; the
     /// first probe is the declared order under the golden cassette — the representative run.
     func record() async -> SpecPlan {
-        let recording = Cassette()
+        let recording = Cassette(recordingPreferring: goldenReadings)
         _ = await capture(make: makeSystem, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
 

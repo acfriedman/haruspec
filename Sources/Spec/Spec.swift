@@ -274,6 +274,13 @@ public struct Spec<S> {
     var operations: [Op<S>] = []
     var tolerances: Tolerance = .strict
     var seamDomains: [String: SeamDomain] = [:]
+    /// What the golden template reads at each declared seam: the domain's first interior value, so the
+    /// recording sits inside the declared surface (a cart with items in it) rather than at the op's
+    /// fallback default — the degenerate edge every other variant would then be measured against.
+    var goldenReadings: [String: CanonicalValue] {
+        seamDomains.compactMapValues(\.interiorValues.first)
+    }
+
     /// Which of `seamDomains` came from a typed op argument — so a `Seam(_:_:)` that collides with one
     /// traps instead of quietly redefining an argument's domain from a distance.
     var argumentSeams: Set<String> = []

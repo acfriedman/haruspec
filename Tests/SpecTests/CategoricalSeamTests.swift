@@ -54,10 +54,10 @@ final class CategoricalSeamTests: XCTestCase {
         XCTAssertEqual(first, second, "generation is seeded; a categorical draw must be reproducible")
     }
 
-    /// The golden probe runs under *live* seams, so it reads each seam's `default` — generated
-    /// variants replace it afterwards. A spec whose default sits outside its declared set therefore
-    /// verifies one input it never declared, which is worth seeing rather than discovering.
-    func testTheGoldenProbeReadsTheDefaultBeforeVariantsReplaceIt() async {
+    /// The golden probe reads each declared seam's first interior value — for a named set, its first
+    /// name — never the op's fallback `default`: the template must sit inside the declared surface,
+    /// and a default outside the set would verify one input nobody declared.
+    func testTheGoldenProbeReadsTheDeclaredDomainNotTheOpDefault() async {
         var seen: Set<String> = []
         let pinned = Spec<Greeter>("greeter.pinned")
             .system { _ in Greeter() }
@@ -71,7 +71,7 @@ final class CategoricalSeamTests: XCTestCase {
             .vary { Seam("salutation", .oneOf("only")) }
         _ = await pinned.record()
 
-        XCTAssertEqual(seen, ["undeclared", "only"])
+        XCTAssertEqual(seen, ["only"])
     }
 
     func testIntSetsVaryOverExactlyTheDeclaredValues() async {

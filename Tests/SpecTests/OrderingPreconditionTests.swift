@@ -196,7 +196,8 @@ final class OrderingPreconditionTests: XCTestCase {
                 variantsPerOrdering: 1,
                 outOfOrderExplored: 12,
                 boundaryEdgesScheduled: 0,
-                boundaryEdgesCovered: 0
+                boundaryEdgesCovered: 0,
+                combinedVariantsCovered: 0
             ),
             qualification: Qualification(
                 coveredClasses: [],

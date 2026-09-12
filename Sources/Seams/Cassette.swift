@@ -31,6 +31,19 @@ public final class Cassette: @unchecked Sendable {
         mode = .record
     }
 
+    /// A recording cassette that answers the listed seams with `preferred` values instead of the
+    /// op's own fallback, recording them as it goes. The golden template is recorded this way, from
+    /// each declared domain's first interior value, so the template sits inside the declared surface
+    /// — a cart with items in it — rather than at the degenerate default every edge is then measured
+    /// against. Seams not listed read live, exactly as `init()` records them.
+    public init(recordingPreferring preferred: [String: CanonicalValue]) {
+        mode = .record
+        self.preferred = preferred
+    }
+
+    /// Values a recording answers with in place of `live()`, by seam — see `init(recordingPreferring:)`.
+    private var preferred: [String: CanonicalValue] = [:]
+
     /// A replay cassette primed with a prior recording.
     public init(replaying data: CassetteData) {
         mode = .replay
@@ -56,7 +69,7 @@ public final class Cassette: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         switch mode {
         case .record:
-            let value = live()
+            let value = preferred[seam] ?? live()
             tracks[seam, default: []].append(value)
             return value
         case .replay:

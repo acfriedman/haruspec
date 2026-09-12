@@ -52,4 +52,14 @@ final class CassetteTests: XCTestCase {
         let snapshot = rec.snapshot()
         XCTAssertEqual(try CassetteData(jsonData: snapshot.jsonData()), snapshot)
     }
+
+    func testARecordingCanPreferAValueOverTheLiveRead() {
+        // The golden template is recorded this way: a declared seam answers with its domain's
+        // interior value and records it; an undeclared seam still reads live.
+        let cassette = Cassette(recordingPreferring: ["qty": .int(5)])
+
+        XCTAssertEqual(cassette.int(seam: "qty", live: { 0 }), 5)
+        XCTAssertEqual(cassette.int(seam: "other", live: { 42 }), 42)
+        XCTAssertEqual(cassette.snapshot().tracks, ["qty": [.int(5)], "other": [.int(42)]])
+    }
 }

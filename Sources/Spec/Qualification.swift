@@ -190,6 +190,7 @@ extension SpecVerdict {
             if dropped > 0 {
                 text += " (\(dropped) dropped — budget)"
             }
+            text += " · \(exploration.combinedVariantsCovered) combined (every seam at once)"
         }
         return text
     }

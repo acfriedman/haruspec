@@ -44,20 +44,20 @@ extension Spec {
         // The same merge the record's plan applied: packaged sweeps the golden reached are part of
         // the recomputed schedule, or a replayed plan would report fewer edges than it recorded.
         let domains = seamDomains.merging(resourceSweeps(reaching: goldenTracks.keys)) { declared, _ in declared }
-        let scheduled = Set(domains.keys).isDisjoint(with: goldenTracks.keys)
-            ? 0
+        let generator = Set(domains.keys).isDisjoint(with: goldenTracks.keys)
+            ? nil
             : DomainSeamGenerator(domains: domains, seed: plan.seed, golden: goldenTracks)
-            .scheduledBoundaryEdges
         return Exploration(
             orderingsExplored: orderings.count,
             orderingsAvailable: Swift.max(available.count, orderings.count),
             orderingsAreExact: available.exact,
             variantsPerOrdering: variants,
             outOfOrderExplored: outOfOrderCount(among: Array(orderings)),
-            boundaryEdgesScheduled: scheduled,
-            // `variants` is derived from probe counts (deduped at record), so this can undercount by
+            boundaryEdgesScheduled: generator?.scheduledBoundaryEdges ?? 0,
+            // `variants` is derived from probe counts (deduped at record), so these can undercount by
             // one near the boundary — never overcount, which is the honest direction for a coverage claim.
-            boundaryEdgesCovered: Swift.min(variants, scheduled)
+            boundaryEdgesCovered: generator?.boundaryEdgesCovered(within: variants) ?? 0,
+            combinedVariantsCovered: generator?.combinedVariantsCovered(within: variants) ?? 0
         )
     }
 
