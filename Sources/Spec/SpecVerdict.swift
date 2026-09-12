@@ -7,6 +7,10 @@ import HaruspecSeams
 /// minimal by `verify(against:)`, but the *raw recorded ordering* on `verify(replaying:)`, which never
 /// shrinks (a shrunk variant has no recorded golden to diff against).
 /// `Codable`, so a verify run is writable as a `result.json` artifact a reviewer can read and reproduce.
+///
+/// Read-only outside the module. Inside it, a step that adjusts one field (an audit's outcome, the
+/// collected origins) copies and mutates rather than rebuilding through the initializer, so a
+/// field added later is carried by every step without each one having to name it.
 public struct SpecVerdict: Codable, Sendable {
     /// The artifact's version stamp — `SpecPlan`'s discipline applied to the verdict side (see
     /// `supportedSchemaVersion` in SpecVerdictSerialization.swift). An unstamped `result.json`
@@ -15,30 +19,37 @@ public struct SpecVerdict: Codable, Sendable {
     /// The diff + coverage pair carrying the *resolved* verdict (see `VerificationResult`): an
     /// EQUIVALENT the replay can't stand behind (an op or seam fell back to live) downgrades to
     /// CANNOT-VERIFY; a DIVERGED always stands.
-    public let result: VerificationResult
-    public let orderingsExplored: Int
-    public let failingOrder: [String]?
+    public internal(set) var result: VerificationResult
+    public internal(set) var orderingsExplored: Int
+    public internal(set) var failingOrder: [String]?
     /// Declared `.after` preconditions the failing order broke, as `"removeMug after addMug"`. That
     /// stratum is explored on purpose, so a divergence here is a finding about a defensive path — worth
     /// separating from one on the surface the author described. Empty on an in-order failure, `nil`
     /// where no order was reported at all.
-    public let violatedPreconditions: [String]?
+    public internal(set) var violatedPreconditions: [String]?
     /// The generated input that triggered a divergence (its varied seam values are the counterexample).
-    public let counterexample: CassetteData?
+    public internal(set) var counterexample: CassetteData?
     /// The budget spent and the surface it covered.
-    public let exploration: Exploration
+    public internal(set) var exploration: Exploration
     /// What the verdict was measured over — the disclaimer's feeds, rendered as the qualification
     /// block on every surface (see Qualification.swift). No default: an empty qualification would
     /// claim a surface of nothing, which is a statement, not an absence.
-    public let qualification: Qualification
+    public internal(set) var qualification: Qualification
     /// How the verdict behaved across repeated replays. `.singleRun` where repetition never happened
     /// (the live differential, a one-pass replay) — reported as unmeasured, never as reproduced.
-    public let stability: Stability
+    public internal(set) var stability: Stability
     /// Channels the spec and check site declared acceptable as uncaptured, carried on the verdict so
     /// *every* audit path resolves the same declarations — the env-driven audit inside a verify and
     /// an explicit `audited(against:)` afterwards must not disagree. `nil` on artifacts recorded
     /// before the field existed; treated as none declared.
-    public let acceptedBlindSpots: [String]?
+    public internal(set) var acceptedBlindSpots: [String]?
+    /// Every failing case a red replay walked within its window after the first (see
+    /// `FailingCases`). `result.diff`, `failingOrder` and `counterexample` are the richest of them.
+    /// `nil` on a green verdict and on the live differential, which shrinks one case instead.
+    public internal(set) var failingCases: FailingCases?
+    /// Where each declared change was first observed, one entry per declaration the sweep saw hold
+    /// — the disclosure a green-by-declaration verdict owes. Empty in parity mode.
+    public internal(set) var intentObservations: [IntentObservation]
 
     public init(
         schemaVersion: Int = SpecVerdict.supportedSchemaVersion,
@@ -50,7 +61,9 @@ public struct SpecVerdict: Codable, Sendable {
         qualification: Qualification,
         violatedPreconditions: [String]? = nil,
         stability: Stability = .singleRun,
-        acceptedBlindSpots: [String]? = nil
+        acceptedBlindSpots: [String]? = nil,
+        failingCases: FailingCases? = nil,
+        intentObservations: [IntentObservation] = []
     ) {
         self.schemaVersion = schemaVersion
         self.result = result
@@ -62,6 +75,8 @@ public struct SpecVerdict: Codable, Sendable {
         self.violatedPreconditions = violatedPreconditions
         self.stability = stability
         self.acceptedBlindSpots = acceptedBlindSpots
+        self.failingCases = failingCases
+        self.intentObservations = intentObservations
     }
 
     /// The resolved verdict, with stability applied above coverage: disagreeing replays flip *any*

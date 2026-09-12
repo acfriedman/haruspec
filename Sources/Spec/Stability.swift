@@ -103,18 +103,9 @@ extension SpecVerdict {
     /// The same verdict, carrying what repetition showed. Everything else is run 1's — the
     /// representative pass whose diff, coverage, and counterexample the artifact keeps.
     func qualified(by stability: Stability) -> SpecVerdict {
-        SpecVerdict(
-            schemaVersion: schemaVersion,
-            result: result,
-            orderingsExplored: orderingsExplored,
-            failingOrder: failingOrder,
-            counterexample: counterexample,
-            exploration: exploration,
-            qualification: qualification,
-            violatedPreconditions: violatedPreconditions,
-            stability: stability,
-            acceptedBlindSpots: acceptedBlindSpots
-        )
+        var verdict = self
+        verdict.stability = stability
+        return verdict
     }
 }
 

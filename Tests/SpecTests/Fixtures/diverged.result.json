@@ -28,6 +28,9 @@
     "promo",
     "checkout"
   ],
+  "intentObservations" : [
+
+  ],
   "orderingsExplored" : 7,
   "qualification" : {
     "coveredClasses" : [
@@ -106,7 +109,7 @@
     },
     "verdict" : "diverged"
   },
-  "schemaVersion" : 5,
+  "schemaVersion" : 6,
   "stability" : {
     "outcomes" : [
       {

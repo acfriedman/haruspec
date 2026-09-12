@@ -187,9 +187,40 @@ final class SpecMarkdownReportTests: XCTestCase {
             )
             XCTAssertTrue(markdown.contains("diverges as declared"))
             XCTAssertTrue(markdown.contains("**Intended — declared in the intent spec"), "disclosure leads")
+            // Per declaration, what it absorbed and where — not only the first probe that absorbed
+            // anything, which is often the golden and says nothing about the values.
+            XCTAssertTrue(markdown.contains("**Declared changes, as first observed:**"), markdown)
+            XCTAssertFalse(verdict.intentObservations.isEmpty)
+            for observation in verdict.intentObservations {
+                XCTAssertTrue(declared.declarationTexts.contains(observation.declaration), observation.declaration)
+                XCTAssertEqual(observation.divergence.classification, .intended)
+                XCTAssertTrue(markdown.contains("`\(observation.declaration)`"), observation.declaration)
+            }
             return
         }
         XCTFail("the offered declarations never fully covered the change")
+    }
+
+    /// A red walks a window past its first failing case and reports the most informative one; the
+    /// offer is derived from every failing case, so a value that moves the same way in all of them
+    /// is offered as the direction, not pinned to the one value the first case happened to show.
+    func testARedReplayReportsTheRichestOfSeveralFailingCasesAndOffersTheirShape() async throws {
+        let plan = await cart(system: makeGood).record()
+        let verdict = await cart(system: makeRoundBug).verify(replaying: plan)
+        XCTAssertEqual(verdict.verdict, .diverged)
+
+        let cases = try XCTUnwrap(verdict.failingCases)
+        XCTAssertGreaterThan(cases.probes.count, 1, "the truncation bug fails in many probes")
+        XCTAssertLessThanOrEqual(cases.walkedAfterFirst, 64, "the window is bounded")
+        let richest = try XCTUnwrap(cases.richest)
+        XCTAssertEqual(verdict.counterexample, richest.inputs, "the reported case is the richest")
+        XCTAssertEqual(verdict.diff.divergences, richest.divergences)
+
+        let markdown = verdict.markdownReport()
+        XCTAssertTrue(markdown.contains("failing cases** among the"), markdown)
+        // Truncating the discount only ever raises the total: every failing case agrees on the direction.
+        XCTAssertTrue(markdown.contains(#"Changes("CheckoutCompleted", field: "total").increases()"#), markdown)
+        XCTAssertFalse(markdown.contains(#"field: "total").to("#), "one case's value must not be pinned")
     }
 
     func testTheRedVerdictOffersItsDeclarations() async throws {

@@ -39,7 +39,9 @@ public extension SpecVerdict {
     /// value mismatch structurally (`field`, `baselineValue`, `candidateValue`), so a precise
     /// declaration compares values instead of parsing them out of `detail`. Version 5 added the
     /// exploration's `combinedVariantsCovered`: how much of the seam budget moved every seam at once.
-    static let supportedSchemaVersion = 5
+    /// Version 6 added `failingCases` (every failing case a red walked after its first, the reported
+    /// one being the richest) and `intentObservations` (where each declaration was first observed).
+    static let supportedSchemaVersion = 6
 
     static func canonicalEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
