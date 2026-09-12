@@ -161,14 +161,22 @@ final class SpecMarkdownReportTests: XCTestCase {
     func testAFullyDeclaredChangePassesWithTheDisclosureBanner() async throws {
         let plan = await cart(system: makeGood).record()
         // Declare exactly what the red verdicts offer (accumulating: a red stops at its first
-        // divergent probe) until the change is fully declared.
-        var intentText = ""
-        for _ in 0 ..< 5 {
-            let declared = try IntentGrammar.intent(parsing: intentText)
+        // divergent probe) until the change is fully declared. A red offers the narrowest line its
+        // probe proves (`.to(<value>)`); the next probe proving a different value is the author's cue
+        // that the change is not one value, and the line widens to the bare field.
+        var lines: [String] = []
+        for _ in 0 ..< 8 {
+            let declared = try IntentGrammar.intent(parsing: lines.joined(separator: "\n"))
             let verdict = await cart(system: makeLoyaltyRoundBug).verify(replaying: plan, declaring: declared)
             guard verdict.verdict == .equivalent else {
-                intentText += "\n" + verdict.diff.divergences
-                    .compactMap(\.suggestedDeclaration).joined(separator: "\n")
+                for suggested in verdict.diff.divergences.filter(\.isGating).compactMap(\.suggestedDeclaration) {
+                    let head = suggested.components(separatedBy: ").").first.map { $0 + ")" } ?? suggested
+                    if let narrow = lines.firstIndex(where: { $0.hasPrefix(head) }) {
+                        lines[narrow] = head
+                    } else {
+                        lines.append(suggested)
+                    }
+                }
                 continue
             }
 

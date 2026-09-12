@@ -117,7 +117,8 @@ final class MCPServerTests: XCTestCase {
         let traces = try writeTraces()
         let intent = FileManager.default.temporaryDirectory
             .appendingPathComponent("intent-\(UUID().uuidString).json")
-        try Data(#"{"expectedValueChanges": {"CheckoutCompleted": ["total"]}}"#.utf8).write(to: intent)
+        try Data(#"{"expectedValueChanges": [{"label": "CheckoutCompleted", "field": "total"}]}"#.utf8)
+            .write(to: intent)
         addTeardownBlock { try? FileManager.default.removeItem(at: intent) }
 
         let result = callTool(

@@ -144,7 +144,8 @@ USAGE:
   haruspec intent (--body <file> | --bodies <dir>) --out <dir>
       Resolve a PR description's declared intent. Extracts every ```haruspec-intent <spec> fenced
       block from <file>, parses the declarations (the DSL's own spellings — Changes("Search.query"),
-      Moves("L", from: .main, to: .ambient), …), and writes one <spec>.intent.json per block into
+      Changes("Receipt", field: "discountCents").increases(), Moves("L", from: .main, to: .ambient),
+      …; a chained modifier narrows what the declaration absorbs), and writes one <spec>.intent.json per block into
       <dir> for the replay to pick up via HARUSPEC_INTENT_PATH. A body with no blocks writes
       nothing: parity mode. Exits 1 on an unparseable block — a declaration nobody can read must
       fail loudly, never silently become parity.

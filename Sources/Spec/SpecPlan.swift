@@ -257,7 +257,7 @@ public extension Spec {
                 candidate: current,
                 tolerances: effectiveTolerances
             )
-            .classified(against: intent)
+            .classified(against: intent, inputs: probe.cassette.tracks)
             sweep.observe(diff)
             replays.append(replay)
             if representative == nil {

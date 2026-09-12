@@ -35,3 +35,5 @@ identifier_name:
     - Seam
     - Ordering
     - Budget
+    # The intent modifier's one spelling: `Changes(…).to(11363)` reads as the sentence it is.
+    - to

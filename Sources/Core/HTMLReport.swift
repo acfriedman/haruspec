@@ -171,9 +171,11 @@ public enum HTML {
     // MARK: - One divergence, as a card
 
     private static func card(_ divergence: Divergence, intentInPlay: Bool) -> String {
-        let mismatch = divergence.kind == .valueMismatch ? parseValueMismatch(divergence.detail) : nil
-        let payload: String = if let mismatch {
-            valueDiff(field: mismatch.path, baseline: mismatch.baseline, candidate: mismatch.candidate)
+        let payload: String = if divergence.kind == .valueMismatch,
+                                 let field = divergence.field,
+                                 let baseline = divergence.baselineValue,
+                                 let candidate = divergence.candidateValue {
+            valueDiff(field: field, baseline: baseline.canonicalString, candidate: candidate.canonicalString)
         } else {
             "<div class=\"detail\">\(esc(divergence.detail))</div>"
         }
@@ -235,16 +237,6 @@ public enum HTML {
 
     /// `"<path>: baseline=<b> candidate=<c>"` → its three parts, or `nil` if the shape doesn't match
     /// (e.g. array-length mismatches, which fall back to the raw detail line).
-    private static func parseValueMismatch(_ detail: String) -> (path: String, baseline: String, candidate: String)? {
-        guard let colon = detail.range(of: ": ") else { return nil }
-        let path = String(detail[..<colon.lowerBound])
-        let rest = detail[colon.upperBound...]
-        guard rest.hasPrefix("baseline="), let candMark = rest.range(of: " candidate=") else { return nil }
-        let baseline = String(rest[rest.index(rest.startIndex, offsetBy: "baseline=".count) ..< candMark.lowerBound])
-        let candidate = String(rest[candMark.upperBound...])
-        return (path, baseline, candidate)
-    }
-
     // MARK: - Verdict vocabulary (the single HTML copy of it)
 
     /// The four-tier banner glyph + label.

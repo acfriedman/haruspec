@@ -35,8 +35,10 @@ public extension SpecVerdict {
     /// unstamped artifact predates all three. Version 2 added the qualification's `origins`: where the
     /// covered labels are declared, which a version-1 artifact cannot supply and must not pretend to.
     /// Version 3 added the diff's `unobservedIntent`: which declared intent matched nothing, which
-    /// the continuous gate fails on and an earlier artifact never measured.
-    static let supportedSchemaVersion = 3
+    /// the continuous gate fails on and an earlier artifact never measured. Version 4 carries a
+    /// value mismatch structurally (`field`, `baselineValue`, `candidateValue`), so a precise
+    /// declaration compares values instead of parsing them out of `detail`.
+    static let supportedSchemaVersion = 4
 
     static func canonicalEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()

@@ -60,10 +60,10 @@ public enum CheckoutSpec {
     /// actually posts), not on marker payloads. Anything else the change altered is collateral. A
     /// migration would use `Intent.none` instead — parity mode is just the empty intent.
     public static var intent: Intent {
-        Intent(
-            expectedNewEvents: ["LoyaltyPointsEarned"],
-            expectedValueChanges: ["CheckoutDidComplete": ["pointsEarned"]]
-        )
+        Intent {
+            Emits("LoyaltyPointsEarned")
+            Changes("CheckoutDidComplete", field: "pointsEarned")
+        }
     }
 
     /// The declared tolerance contract for this application: fresh UUIDs/timestamps are volatile,

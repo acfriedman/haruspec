@@ -32,6 +32,12 @@ public struct Divergence: Codable, Sendable, Equatable {
     /// without parsing prose out of `detail`.
     public var fromDomain: String?
     public var toDomain: String?
+    /// For a `valueMismatch`: the leaf path that differed (`"info.pointsEarned"`, `"query[0]"`) and
+    /// both sides' values, carried structurally so a precise declaration (`.to(32)`, `.increases()`)
+    /// compares values rather than parsing them back out of `detail`.
+    public var field: String?
+    public var baselineValue: CanonicalValue?
+    public var candidateValue: CanonicalValue?
     /// True when this divergence is reported but does not fail the verdict (a structural divergence
     /// under `structuralComparison == .advisory`).
     public var isAdvisory: Bool
@@ -52,6 +58,9 @@ public struct Divergence: Codable, Sendable, Equatable {
         detail: String,
         fromDomain: String? = nil,
         toDomain: String? = nil,
+        field: String? = nil,
+        baselineValue: CanonicalValue? = nil,
+        candidateValue: CanonicalValue? = nil,
         isAdvisory: Bool = false,
         classification: DivergenceClass = .collateral
     ) {
@@ -62,6 +71,9 @@ public struct Divergence: Codable, Sendable, Equatable {
         self.detail = detail
         self.fromDomain = fromDomain
         self.toDomain = toDomain
+        self.field = field
+        self.baselineValue = baselineValue
+        self.candidateValue = candidateValue
         self.isAdvisory = isAdvisory
         self.classification = classification
     }
@@ -245,14 +257,22 @@ public enum BehavioralDiff {
     ) {
         // Every matcher funnels its pairs through here, so this is where the alignment is recorded.
         scratch.alignedPairs.append((baseline, candidate))
-        for path in valueDivergences(baseline.payload ?? .null, candidate.payload ?? .null, path: "", spec: spec) {
+        for mismatch in valueDivergences(
+            baseline.payload ?? .null,
+            candidate.payload ?? .null,
+            path: "",
+            spec: spec
+        ) {
             scratch.divergences.append(
                 Divergence(
                     kind: .valueMismatch,
                     label: baseline.label,
                     baselineSeq: baseline.seq,
                     candidateSeq: candidate.seq,
-                    detail: path,
+                    detail: mismatch.detail,
+                    field: mismatch.path,
+                    baselineValue: mismatch.baseline,
+                    candidateValue: mismatch.candidate,
                     isAdvisory: isAdvisory
                 )
             )
@@ -272,14 +292,22 @@ public enum BehavioralDiff {
         }
     }
 
-    /// Structural, tolerance-aware value comparison. Returns one message per differing leaf path.
+    /// One differing leaf: where it differed and both sides' values, plus the rendered message.
+    struct ValueMismatch {
+        var path: String
+        var baseline: CanonicalValue
+        var candidate: CanonicalValue
+        var detail: String
+    }
+
+    /// Structural, tolerance-aware value comparison. Returns one mismatch per differing leaf path.
     /// Internal rather than private: the projection's multiset matching uses it as its predicate.
     static func valueDivergences(
         _ baseline: CanonicalValue,
         _ candidate: CanonicalValue,
         path: String,
         spec: Tolerance
-    ) -> [String] {
+    ) -> [ValueMismatch] {
         if let baselineNumber = numeric(baseline), let candidateNumber = numeric(candidate) {
             return abs(baselineNumber - candidateNumber) <= spec.numericEpsilon
                 ? [] : [mismatch(path, baseline, candidate)]
@@ -293,8 +321,13 @@ public enum BehavioralDiff {
             return baselineString == candidateString ? [] : [mismatch(path, baseline, candidate)]
         case let (.array(baselineArray), .array(candidateArray)):
             guard baselineArray.count == candidateArray.count else {
-                return ["\(label(path)): array length "
-                    + "baseline=\(baselineArray.count) candidate=\(candidateArray.count)"]
+                return [ValueMismatch(
+                    path: label(path),
+                    baseline: baseline,
+                    candidate: candidate,
+                    detail: "\(label(path)): array length "
+                        + "baseline=\(baselineArray.count) candidate=\(candidateArray.count)"
+                )]
             }
             return baselineArray.indices.flatMap {
                 valueDivergences(baselineArray[$0], candidateArray[$0], path: "\(label(path))[\($0)]", spec: spec)
@@ -326,7 +359,16 @@ public enum BehavioralDiff {
         path.isEmpty ? "value" : path
     }
 
-    private static func mismatch(_ path: String, _ baseline: CanonicalValue, _ candidate: CanonicalValue) -> String {
-        "\(label(path)): baseline=\(baseline.canonicalString) candidate=\(candidate.canonicalString)"
+    private static func mismatch(
+        _ path: String,
+        _ baseline: CanonicalValue,
+        _ candidate: CanonicalValue
+    ) -> ValueMismatch {
+        ValueMismatch(
+            path: label(path),
+            baseline: baseline,
+            candidate: candidate,
+            detail: "\(label(path)): baseline=\(baseline.canonicalString) candidate=\(candidate.canonicalString)"
+        )
     }
 }
