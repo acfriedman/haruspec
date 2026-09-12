@@ -10,6 +10,10 @@ import Foundation
 ///
 /// **Parity mode (migrations) is simply `Intent.none`.** Extension mode (features) is a populated
 /// spec. Same engine; the only difference is how much change was declared up front.
+///
+/// A declaration is a *standing excuse*, so each one is as narrow as its author can make it: a
+/// modifier (`ValueRelation`, `InputCondition`) narrows the match, and whatever the narrowed
+/// declaration rejects stays collateral.
 public struct Intent: Sendable, Equatable {
     /// One declared movement of work between isolation domains, named the way an author names
     /// domains (`DomainName`): a queue by label whatever its discipline, an actor by type whatever
@@ -32,16 +36,63 @@ public struct Intent: Sendable, Equatable {
         }
     }
 
-    /// Event labels the change is allowed to ADD (present in candidate, absent in baseline).
-    public var expectedNewEvents: [String]
+    /// One declared event addition or removal (`Emits` / `Omits`), narrowed by its conditions.
+    ///
+    /// A bare label is the unconditioned declaration, so a string literal spells one:
+    /// `expectedNewEvents: ["LoyaltyPointsEarned"]`.
+    public struct EventChange: Sendable, Equatable, ExpressibleByStringLiteral {
+        public var label: String
+        /// `.when(_:is:)` conditions, every one of which must hold in the probe.
+        public var conditions: [InputCondition]
 
-    /// Event labels the change is allowed to REMOVE (present in baseline, absent in candidate).
-    public var expectedRemovedEvents: [String]
+        public init(_ label: String, when conditions: [InputCondition] = []) {
+            self.label = label
+            self.conditions = conditions
+        }
 
-    /// Value changes the change is allowed to make: event label → the payload field paths that may
-    /// differ. An empty field list means "any value change on this label is intended." Declaring one
-    /// field does NOT excuse a change to another field of the same event — intent must be specific.
-    public var expectedValueChanges: [String: [String]]
+        public init(stringLiteral label: String) {
+            self.init(label)
+        }
+    }
+
+    /// One declared payload change (`Changes`): a label, the field that may differ (`nil` = any
+    /// field of that event), and the modifiers that say how.
+    ///
+    /// Declaring one field does NOT excuse a change to another field of the same event, and a
+    /// relation or condition excuses only the values it names — intent must be specific.
+    public struct ValueChange: Sendable, Equatable {
+        public var label: String
+        public var field: String?
+        public var relation: ValueRelation?
+        public var conditions: [InputCondition]
+
+        public init(
+            _ label: String,
+            field: String? = nil,
+            relation: ValueRelation? = nil,
+            when conditions: [InputCondition] = []
+        ) {
+            self.label = label
+            self.field = field
+            self.relation = relation
+            self.conditions = conditions
+        }
+
+        /// The bare, wholesale form (`Changes("Receipt")`) — no field, no modifier — which subsumes
+        /// every narrower declaration on the same label.
+        var isWholesale: Bool {
+            field == nil && relation == nil && conditions.isEmpty
+        }
+    }
+
+    /// Events the change is allowed to ADD (present in candidate, absent in baseline).
+    public var expectedNewEvents: [EventChange]
+
+    /// Events the change is allowed to REMOVE (present in baseline, absent in candidate).
+    public var expectedRemovedEvents: [EventChange]
+
+    /// Payload changes the change is allowed to make, one declaration per (label, field, modifiers).
+    public var expectedValueChanges: [ValueChange]
 
     /// Ordered domains whose ordering guarantee the change deliberately drops (`orderingRelaxed`).
     /// Replacing a serial queue with a task group is the canonical case: the relaxation is the point
@@ -81,9 +132,9 @@ public struct Intent: Sendable, Equatable {
     public var acceptedBlindSpots: [String]
 
     public init(
-        expectedNewEvents: [String] = [],
-        expectedRemovedEvents: [String] = [],
-        expectedValueChanges: [String: [String]] = [:],
+        expectedNewEvents: [EventChange] = [],
+        expectedRemovedEvents: [EventChange] = [],
+        expectedValueChanges: [ValueChange] = [],
         expectedOrderingRelaxations: [DomainName] = [],
         expectedOrderingLosses: [String] = [],
         expectedOrderingAdditions: [String] = [],
@@ -105,31 +156,34 @@ public struct Intent: Sendable, Equatable {
     /// The empty spec: nothing was declared, so every divergence stays collateral. This is parity mode.
     public static let none = Intent()
 
-    /// Does this spec declare `divergence` as an intended change?
-    public func declares(_ divergence: Divergence) -> Bool {
-        declarations.contains { $0.matches(divergence) }
+    /// Does this spec declare `divergence` as an intended change, in a probe that read `inputs`?
+    public func declares(_ divergence: Divergence, inputs: ProbeInputs? = nil) -> Bool {
+        declarations.contains { $0.matches(divergence, inputs) }
     }
 
-    /// A value-mismatch `detail` reads `"<path>: baseline=… candidate=…"`; match on that leading path.
-    private static func fieldMatches(_ field: String, _ detail: String) -> Bool {
-        let path = detail.range(of: ": ").map { String(detail[..<$0.lowerBound]) } ?? detail
+    /// A declared field matches the leaf that differed, or any leaf beneath it (`info` covers
+    /// `info.pointsEarned` and `info[0]`).
+    private static func fieldMatches(_ field: String, _ path: String?) -> Bool {
+        guard let path else {
+            return false
+        }
         return path == field || path.hasPrefix("\(field).") || path.hasPrefix("\(field)[")
     }
 }
 
 /// One atomic declaration inside an `Intent` — the unit "declared but not observed" is measured in.
 ///
-/// `text` is the declaration's DSL spelling (`Changes("Search.query")`), so a warning about a dead
-/// declaration names exactly the line to delete.
+/// `text` is the declaration's DSL spelling (`Changes("Search.query").increases()`), so a warning
+/// about a dead declaration names exactly the line to delete.
 struct IntentDeclaration: Sendable {
     let text: String
-    let matches: @Sendable (Divergence) -> Bool
+    let matches: @Sendable (Divergence, ProbeInputs?) -> Bool
 }
 
 extension Intent {
     /// The intent exploded into its atomic declarations, each pairing a matcher with its DSL spelling.
     ///
-    /// `declares(_:)` is a fold over this list, and the unobserved-intent check is its
+    /// `declares(_:inputs:)` is a fold over this list, and the unobserved-intent check is its
     /// complement: a declaration no divergence matched describes a change nobody saw.
     ///
     /// `acceptedBlindSpots` is deliberately absent: it excuses a *channel* the diff could never
@@ -140,47 +194,49 @@ extension Intent {
     /// stably across runs.
     var declarations: [IntentDeclaration] {
         var atoms: [IntentDeclaration] = []
-        for label in expectedNewEvents {
-            atoms.append(IntentDeclaration(text: "Emits(\(quoted(label)))") {
-                $0.kind == .unexpectedEvent && $0.label == label
+        for event in expectedNewEvents {
+            atoms.append(IntentDeclaration(text: "Emits(\(quoted(event.label)))\(event.conditions.dslText)") {
+                $0.kind == .unexpectedEvent && $0.label == event.label && event.conditions.allHold(in: $1)
             })
         }
-        for label in expectedRemovedEvents {
-            atoms.append(IntentDeclaration(text: "Omits(\(quoted(label)))") {
-                $0.kind == .missingEvent && $0.label == label
+        for event in expectedRemovedEvents {
+            atoms.append(IntentDeclaration(text: "Omits(\(quoted(event.label)))\(event.conditions.dslText)") {
+                $0.kind == .missingEvent && $0.label == event.label && event.conditions.allHold(in: $1)
             })
         }
         // Per-field atoms: declaring one field never excuses — and is never excused by — another.
-        for (label, fields) in expectedValueChanges.sorted(by: { $0.key < $1.key }) {
-            if fields.isEmpty {
-                atoms.append(IntentDeclaration(text: "Changes(\(quoted(label)))") {
-                    $0.kind == .valueMismatch && $0.label == label
-                })
-            }
-            for field in fields {
-                atoms.append(IntentDeclaration(text: "Changes(\(quoted(label)), field: \(quoted(field)))") {
-                    $0.kind == .valueMismatch && $0.label == label && Self.fieldMatches(field, $0.detail)
-                })
-            }
+        let valueChanges = expectedValueChanges.sorted {
+            ($0.label, $0.field ?? "") < ($1.label, $1.field ?? "")
+        }
+        for change in valueChanges {
+            atoms.append(IntentDeclaration(text: change.dslText) { divergence, inputs in
+                divergence.kind == .valueMismatch
+                    && divergence.label == change.label
+                    && change.field.map { Self.fieldMatches($0, divergence.field) } ?? true
+                    && change.relation.map {
+                        $0.holds(baseline: divergence.baselineValue, candidate: divergence.candidateValue)
+                    } ?? true
+                    && change.conditions.allHold(in: inputs)
+            })
         }
         for domain in expectedOrderingRelaxations {
-            atoms.append(IntentDeclaration(text: "Relaxes(orderingOf: \(domain.dslText))") {
-                $0.kind == .orderingRelaxed && domain.matches($0.fromDomain)
+            atoms.append(IntentDeclaration(text: "Relaxes(orderingOf: \(domain.dslText))") { divergence, _ in
+                divergence.kind == .orderingRelaxed && domain.matches(divergence.fromDomain)
             })
         }
         for label in expectedOrderingLosses {
-            atoms.append(IntentDeclaration(text: "Drops(synchronizationOf: \(quoted(label)))") {
-                $0.kind == .orderingLost && $0.label == label
+            atoms.append(IntentDeclaration(text: "Drops(synchronizationOf: \(quoted(label)))") { divergence, _ in
+                divergence.kind == .orderingLost && divergence.label == label
             })
         }
         for label in expectedOrderingAdditions {
-            atoms.append(IntentDeclaration(text: "Awaits(\(quoted(label)))") {
-                $0.kind == .orderingAdded && $0.label == label
+            atoms.append(IntentDeclaration(text: "Awaits(\(quoted(label)))") { divergence, _ in
+                divergence.kind == .orderingAdded && divergence.label == label
             })
         }
         for label in expectedReorders {
-            atoms.append(IntentDeclaration(text: "Reorders(\(quoted(label)))") {
-                $0.kind == .reordered && $0.label == label
+            atoms.append(IntentDeclaration(text: "Reorders(\(quoted(label)))") { divergence, _ in
+                divergence.kind == .reordered && divergence.label == label
             })
         }
         for move in expectedDomainMigrations {
@@ -189,12 +245,20 @@ extension Intent {
                 : move.labels.map(quoted).joined(separator: ", ") + ", from: "
             atoms.append(IntentDeclaration(
                 text: "Moves(\(scope)\(move.origin.dslText), to: \(move.destination.dslText))"
-            ) {
-                $0.kind == .domainMigration
-                    && move.matches(label: $0.label, from: $0.fromDomain, to: $0.toDomain)
+            ) { divergence, _ in
+                divergence.kind == .domainMigration
+                    && move.matches(label: divergence.label, from: divergence.fromDomain, to: divergence.toDomain)
             })
         }
         return atoms
+    }
+}
+
+extension Intent.ValueChange {
+    /// The declaration's one spelling: head, then relation, then conditions.
+    var dslText: String {
+        let head = field.map { "Changes(\(quoted(label)), field: \(quoted($0)))" } ?? "Changes(\(quoted(label)))"
+        return head + (relation?.dslText ?? "") + conditions.dslText
     }
 }
 
@@ -211,22 +275,16 @@ public extension Intent {
     /// sweep replaying one plan across several merged PRs' declarations. A union must never judge a
     /// single PR: it would absorb divergences that PR never declared.
     ///
-    /// A wholesale `Changes(label)` (empty field list) subsumes that label's per-field forms, so the
-    /// merged value-change map keeps the wholesale spelling when either side declared it.
+    /// Modifiers survive the union: two PRs narrowing the same label keep both narrow forms rather
+    /// than widening each other. Only a wholesale `Changes(label)` subsumes that label's narrower
+    /// forms, because it already absorbs everything they do.
     func merging(_ other: Intent) -> Intent {
-        var valueChanges = expectedValueChanges
-        for (label, fields) in other.expectedValueChanges {
-            let existing = valueChanges[label]
-            if fields.isEmpty || existing?.isEmpty == true {
-                valueChanges[label] = []
-            } else {
-                valueChanges[label] = uniqued((existing ?? []) + fields)
-            }
-        }
+        let valueChanges = uniqued(expectedValueChanges + other.expectedValueChanges)
+        let wholesale = Set(valueChanges.filter(\.isWholesale).map(\.label))
         return Intent(
             expectedNewEvents: uniqued(expectedNewEvents + other.expectedNewEvents),
             expectedRemovedEvents: uniqued(expectedRemovedEvents + other.expectedRemovedEvents),
-            expectedValueChanges: valueChanges,
+            expectedValueChanges: valueChanges.filter { $0.isWholesale || !wholesale.contains($0.label) },
             expectedOrderingRelaxations: uniqued(
                 expectedOrderingRelaxations + other.expectedOrderingRelaxations
             ),
@@ -255,6 +313,11 @@ public extension Divergence {
     /// The declaration that would mark this divergence intended — the exact line the teaching loop
     /// offers on a red verdict, and a line `IntentGrammar` parses back.
     ///
+    /// The narrowest line the divergence proves: a value mismatch with a scalar new value is
+    /// offered as `.to(<value>)`, which pins exactly what this probe observed. An author whose
+    /// change is a direction or a range rather than one value widens it (`.increases()`,
+    /// `.within(…)`, or the bare field) — the loop pushes toward precision by default.
+    ///
     /// `nil` for a divergence that is not expressible as intent (timing regressions) or whose
     /// domains did not resolve.
     var suggestedDeclaration: String? {
@@ -264,12 +327,8 @@ public extension Divergence {
         case .missingEvent:
             return "Omits(\(quoted(label)))"
         case .valueMismatch:
-            // The detail's leading path is the changed field; suggest exactly it, so the pasted
-            // declaration is as narrow as what was observed.
-            let path = detail.range(of: ": ").map { String(detail[..<$0.lowerBound]) } ?? ""
-            return path.isEmpty
-                ? "Changes(\(quoted(label)))"
-                : "Changes(\(quoted(label)), field: \(quoted(path)))"
+            let relation = candidateValue.flatMap { $0.isScalar ? ValueRelation.to($0) : nil }
+            return Intent.ValueChange(label, field: field, relation: relation).dslText
         case .orderingRelaxed:
             return fromDomain.flatMap(DomainName.init(recorded:))
                 .map { "Relaxes(orderingOf: \($0.dslText))" }
@@ -300,17 +359,20 @@ public extension TraceDiff {
     /// the verdict from the residual (gating, collateral) divergences. `Intent.none` is a no-op
     /// (parity mode) — every divergence stays collateral and the verdict is unchanged.
     ///
+    /// `inputs` are the probe's recorded seam reads, which a `.when(_:is:)` condition matches
+    /// against; without them no conditioned declaration can match.
+    ///
     /// Also records `unobservedIntent`: the declarations that matched nothing *in this comparison*.
     /// For a single diff that is the finished fact; a sweep that compares many probes intersects the
     /// per-probe sets (a declaration is observed if any probe matched it) and overwrites the
     /// reported diff's copy — see `Spec.verify`.
-    func classified(against intent: Intent) -> TraceDiff {
+    func classified(against intent: Intent, inputs: ProbeInputs? = nil) -> TraceDiff {
         var result = self
         var observed = Set<String>()
         let declarations = intent.declarations
         for index in result.divergences.indices {
             var matched = false
-            for declaration in declarations where declaration.matches(result.divergences[index]) {
+            for declaration in declarations where declaration.matches(result.divergences[index], inputs) {
                 observed.insert(declaration.text)
                 matched = true
             }
@@ -331,40 +393,5 @@ public extension TraceDiff {
     /// Undeclared divergences that gate the verdict — suspected regressions.
     var collateralCount: Int {
         divergences.filter(\.isGating).count
-    }
-}
-
-extension Intent: Codable {
-    enum CodingKeys: String, CodingKey {
-        case expectedNewEvents, expectedRemovedEvents, expectedValueChanges
-        case expectedOrderingRelaxations, expectedOrderingLosses, expectedOrderingAdditions
-        case expectedReorders, expectedDomainMigrations, acceptedBlindSpots
-    }
-
-    /// Every field is optional in JSON so a partial spec is ergonomic.
-    public init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        expectedNewEvents = try container.decodeIfPresent([String].self, forKey: .expectedNewEvents) ?? []
-        expectedRemovedEvents = try container.decodeIfPresent([String].self, forKey: .expectedRemovedEvents) ?? []
-        expectedValueChanges = try container
-            .decodeIfPresent([String: [String]].self, forKey: .expectedValueChanges) ?? [:]
-        expectedOrderingRelaxations = try container
-            .decodeIfPresent([DomainName].self, forKey: .expectedOrderingRelaxations) ?? []
-        expectedOrderingLosses = try container
-            .decodeIfPresent([String].self, forKey: .expectedOrderingLosses) ?? []
-        expectedOrderingAdditions = try container
-            .decodeIfPresent([String].self, forKey: .expectedOrderingAdditions) ?? []
-        expectedReorders = try container
-            .decodeIfPresent([String].self, forKey: .expectedReorders) ?? []
-        expectedDomainMigrations = try container
-            .decodeIfPresent([DomainMove].self, forKey: .expectedDomainMigrations) ?? []
-        acceptedBlindSpots = try container
-            .decodeIfPresent([String].self, forKey: .acceptedBlindSpots) ?? []
-    }
-}
-
-public extension Intent {
-    init(contentsOf url: URL) throws {
-        self = try JSONDecoder().decode(Intent.self, from: Data(contentsOf: url))
     }
 }

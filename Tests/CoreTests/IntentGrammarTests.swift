@@ -24,8 +24,11 @@ final class IntentGrammarTests: XCTestCase {
 
         XCTAssertEqual(intent.expectedNewEvents, ["LoyaltyPointsEarned"])
         XCTAssertEqual(intent.expectedRemovedEvents, ["CartDidChange"])
-        XCTAssertEqual(intent.expectedValueChanges["Search.query"], [])
-        XCTAssertEqual(intent.expectedValueChanges["CheckoutDidComplete"], ["totalCents", "discount"])
+        XCTAssertEqual(intent.expectedValueChanges, [
+            .init("Search.query"),
+            .init("CheckoutDidComplete", field: "totalCents"),
+            .init("CheckoutDidComplete", field: "discount")
+        ])
         XCTAssertEqual(intent.expectedReorders, ["Drawer.first", "Drawer.second"])
         XCTAssertEqual(intent.expectedOrderingAdditions, ["Inventory.reserve"])
         XCTAssertEqual(intent.expectedOrderingLosses, ["CatalogDidPrefetch"])
@@ -89,7 +92,10 @@ final class IntentGrammarTests: XCTestCase {
                 label: "Search.query",
                 baselineSeq: 0,
                 candidateSeq: 0,
-                detail: "query.0: baseline=MUG candidate=mug"
+                detail: "query.0: baseline=\"MUG\" candidate=\"mug\"",
+                field: "query.0",
+                baselineValue: "MUG",
+                candidateValue: "mug"
             ),
             Divergence(
                 kind: .domainMigration,
@@ -141,7 +147,7 @@ final class IntentGrammarTests: XCTestCase {
         ```
         """)
         XCTAssertEqual(intents.count, 2)
-        XCTAssertEqual(intents["search.combine"]?.expectedValueChanges["Search.query"], [])
+        XCTAssertEqual(intents["search.combine"]?.expectedValueChanges, [.init("Search.query")])
         XCTAssertEqual(intents["cart.objc-to-swift"]?.expectedNewEvents, ["CartDidSync"])
     }
 

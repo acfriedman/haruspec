@@ -149,6 +149,12 @@ public extension SpecVerdict {
         guard !suggestions.isEmpty else {
             return []
         }
+        // A `.to(…)` line pins the one value this probe saw; the author widens it only on purpose.
+        let narrowing = suggestions.contains { $0.contains(").to(") }
+            ? " A `.to(…)` modifier pins the value this probe observed; if the change is a direction or a "
+            + "range rather than one value, widen it to `.increases()`, `.decreases()`, or "
+            + "`.within(lo ... hi)` — every modifier you keep is a tripwire for the values it excludes."
+            : ""
         // The four-backtick fence renders the inner block literally, ready to copy.
         return ["""
         <details><summary>Is this change the point of the PR?</summary>
@@ -157,7 +163,7 @@ public extension SpecVerdict {
         the PR description (edit it down to what is genuinely intended) and the check re-runs in \
         extension mode — declared divergences are disclosed instead of gating, and anything \
         undeclared still fails. If you did not mean to change behavior, this is a regression: fix \
-        the code, don't declare it.
+        the code, don't declare it.\(narrowing)
 
         ````
         ```\(IntentGrammar.fenceLabel) \(diff.baselineName)

@@ -7,7 +7,10 @@ final class HTMLReportTests: XCTestCase {
         label: "cart.total",
         baselineSeq: 3,
         candidateSeq: 3,
-        detail: "cart.total: baseline=1200 candidate=1500"
+        detail: "cart.total: baseline=1200 candidate=1500",
+        field: "cart.total",
+        baselineValue: 1200,
+        candidateValue: 1500
     )
     private let missing = Divergence(
         kind: .missingEvent,
@@ -92,7 +95,10 @@ final class HTMLReportTests: XCTestCase {
             label: "<script>& \"x\"",
             baselineSeq: 1,
             candidateSeq: 1,
-            detail: "a<b: baseline=1 candidate=2"
+            detail: "a<b: baseline=1 candidate=2",
+            field: "a<b",
+            baselineValue: 1,
+            candidateValue: 2
         )
         let html = diff(.diverged, [hostile]).htmlReport()
         XCTAssertFalse(html.contains("<script>"))

@@ -232,7 +232,7 @@ public extension Spec {
             candidate: candidateTrace,
             tolerances: effectiveTolerances
         )
-        .classified(against: intent)
+        .classified(against: intent, inputs: cassette.tracks)
         return (diff, replay)
     }
 

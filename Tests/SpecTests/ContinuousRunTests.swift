@@ -228,10 +228,12 @@ final class ContinuousRunTests: XCTestCase {
         _ = await cart(system: makeGood).runContinuous(.record(planURL: planURL))
 
         // Iterative inventory: a red replay stops at its first divergent probe, so declaring what it
-        // showed can surface further divergences on the next run — accumulate until green.
-        var intentText = ""
-        for _ in 0 ..< 5 {
-            let intent = try IntentGrammar.intent(parsing: intentText)
+        // showed can surface further divergences on the next run — accumulate until green. A red
+        // offers the narrowest line its probe proves (`.to(<value>)`); when the next probe proves a
+        // different value for the same field, the author widens that line to the bare field.
+        var lines: [String] = []
+        for _ in 0 ..< 8 {
+            let intent = try IntentGrammar.intent(parsing: lines.joined(separator: "\n"))
             let verdict = try await cart(system: makeRoundBug)
                 .verify(replayingContentsOf: planURL, declaring: intent)
             if verdict.verdict == .equivalent {
@@ -239,9 +241,16 @@ final class ContinuousRunTests: XCTestCase {
                 XCTAssertEqual(verdict.diff.unobservedIntent, [], "no declaration may be dead")
                 return
             }
-            let suggested = verdict.diff.divergences.compactMap(\.suggestedDeclaration)
+            let suggested = verdict.diff.divergences.filter(\.isGating).compactMap(\.suggestedDeclaration)
             XCTAssertFalse(suggested.isEmpty, "a gating divergence must offer its declaration")
-            intentText += "\n" + suggested.joined(separator: "\n")
+            for line in suggested {
+                let head = line.components(separatedBy: ").").first.map { $0 + ")" } ?? line
+                if let narrow = lines.firstIndex(where: { $0.hasPrefix(head) }) {
+                    lines[narrow] = head
+                } else {
+                    lines.append(line)
+                }
+            }
         }
         XCTFail("the suggested declarations never turned the replay green")
     }

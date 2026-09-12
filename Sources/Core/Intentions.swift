@@ -251,28 +251,46 @@ public struct Reorders: Intention {
 }
 
 /// The change emits an event the baseline never had — a declared feature, not an accident.
+///
+/// Narrow it to the probes it belongs in: `Emits("Inventory.reserve").when("add.quantity", is: 1)`.
 public struct Emits: Intention {
-    let label: String
+    var declaration: Intent.EventChange
 
     public init(_ label: String) {
-        self.label = label
+        declaration = Intent.EventChange(label)
+    }
+
+    /// Only in a probe whose recorded reads of `seam` all returned `value`.
+    public func when(_ seam: String, is value: CanonicalValue) -> Emits {
+        var narrowed = self
+        narrowed.declaration.conditions.append(InputCondition(seam: seam, is: value))
+        return narrowed
     }
 
     public func apply(to intent: inout Intent) {
-        intent.expectedNewEvents.append(label)
+        intent.expectedNewEvents.append(declaration)
     }
 }
 
 /// The change omits an event the baseline produced — a declared removal.
+///
+/// Narrow it to the probes it belongs in: `Omits("Inventory.reserve").when("add.quantity", is: 0)`.
 public struct Omits: Intention {
-    let label: String
+    var declaration: Intent.EventChange
 
     public init(_ label: String) {
-        self.label = label
+        declaration = Intent.EventChange(label)
+    }
+
+    /// Only in a probe whose recorded reads of `seam` all returned `value`.
+    public func when(_ seam: String, is value: CanonicalValue) -> Omits {
+        var narrowed = self
+        narrowed.declaration.conditions.append(InputCondition(seam: seam, is: value))
+        return narrowed
     }
 
     public func apply(to intent: inout Intent) {
-        intent.expectedRemovedEvents.append(label)
+        intent.expectedRemovedEvents.append(declaration)
     }
 }
 
@@ -298,16 +316,75 @@ public struct Accepts: Intention {
 
 /// The change alters an event's payload — a specific field, or (with no fields named) any of them.
 /// Declaring one field does NOT excuse a change to another field of the same event.
+///
+/// Say *how* it changes and the declaration becomes a tripwire for everything else:
+///
+///     Changes("CheckoutDidComplete", field: "totalCents").to(11363)
+///     Changes("Receipt", field: "discountCents").increases()
+///     Changes("LoyaltyPointsEarned", field: "points").within(1 ... 64)
+///     Changes("Receipt", field: "discountCents").when("applyPromo.code", is: "SAVE10")
+///
+/// One value relation per declaration; a second is a contradiction and traps.
 public struct Changes: Intention {
     let label: String
     let fields: [String]
+    var relation: ValueRelation?
+    var conditions: [InputCondition] = []
 
     public init(_ label: String, field fields: String...) {
         self.label = label
         self.fields = fields
     }
 
+    /// The new value is exactly `value` — a scalar, the only shape the grammar can spell back.
+    public func to(_ value: CanonicalValue) -> Changes {
+        precondition(value.isScalar, "Changes(…).to(_:) takes a scalar, not \(value.canonicalString)")
+        return narrowed(.to(value))
+    }
+
+    /// The value went up.
+    public func increases() -> Changes {
+        narrowed(.increases)
+    }
+
+    /// The value went down.
+    public func decreases() -> Changes {
+        narrowed(.decreases)
+    }
+
+    /// The new value lies in `range`.
+    public func within(_ range: ClosedRange<Int>) -> Changes {
+        narrowed(.within(Double(range.lowerBound) ... Double(range.upperBound)))
+    }
+
+    /// The new value lies in `range`.
+    public func within(_ range: ClosedRange<Double>) -> Changes {
+        narrowed(.within(range))
+    }
+
+    /// Only in a probe whose recorded reads of `seam` all returned `value`.
+    public func when(_ seam: String, is value: CanonicalValue) -> Changes {
+        var narrowed = self
+        narrowed.conditions.append(InputCondition(seam: seam, is: value))
+        return narrowed
+    }
+
+    private func narrowed(_ relation: ValueRelation) -> Changes {
+        precondition(
+            self.relation == nil,
+            "Changes(\"\(label)\") already declares \(self.relation!.dslText); one value relation per declaration"
+        )
+        var narrowed = self
+        narrowed.relation = relation
+        return narrowed
+    }
+
     public func apply(to intent: inout Intent) {
-        intent.expectedValueChanges[label, default: []].append(contentsOf: fields)
+        let fields: [String?] = fields.isEmpty ? [nil] : fields
+        for field in fields {
+            intent.expectedValueChanges.append(
+                Intent.ValueChange(label, field: field, relation: relation, when: conditions)
+            )
+        }
     }
 }

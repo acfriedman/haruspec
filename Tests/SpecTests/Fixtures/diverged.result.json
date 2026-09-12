@@ -75,18 +75,24 @@
       "divergences" : [
         {
           "baselineSeq" : 11,
+          "baselineValue" : 1798,
           "candidateSeq" : 11,
+          "candidateValue" : 1799,
           "classification" : "collateral",
           "detail" : "total: baseline=1798 candidate=1799",
+          "field" : "total",
           "isAdvisory" : false,
           "kind" : "valueMismatch",
           "label" : "CheckoutCompleted"
         },
         {
           "baselineSeq" : 13,
+          "baselineValue" : 1798,
           "candidateSeq" : 13,
+          "candidateValue" : 1799,
           "classification" : "collateral",
           "detail" : "value: baseline=1798 candidate=1799",
+          "field" : "value",
           "isAdvisory" : false,
           "kind" : "valueMismatch",
           "label" : "PromoCart.checkout"
@@ -99,7 +105,7 @@
     },
     "verdict" : "diverged"
   },
-  "schemaVersion" : 3,
+  "schemaVersion" : 4,
   "stability" : {
     "outcomes" : [
       {

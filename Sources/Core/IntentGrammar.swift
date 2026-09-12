@@ -134,7 +134,7 @@ public struct IntentGrammarError: Error, CustomStringConvertible, Equatable {
 
 /// A single declaration line's recursive-descent parser — `Name(arguments)` with string literals,
 /// `label:` argument names, and `.domain` names, exactly the DSL's spellings.
-private struct DeclarationParser {
+struct DeclarationParser {
     let line: String
     let number: Int
     var index: String.Index
@@ -145,38 +145,73 @@ private struct DeclarationParser {
         index = line.startIndex
     }
 
-    /// The one-string declarations, by the `Intent` list each appends to. The labeled ones carry
-    /// their argument label (`Drops(synchronizationOf:)`); the bare ones `nil`.
+    /// The bare one-string declarations, by the `Intent` list each appends to. The labeled ones carry
+    /// their argument label (`Drops(synchronizationOf:)`); the bare ones `nil`. None takes a modifier.
     private static var stringDeclarations: [String: (label: String?, list: WritableKeyPath<Intent, [String]>)] {
         [
-            "Emits": (nil, \.expectedNewEvents),
-            "Omits": (nil, \.expectedRemovedEvents),
             "Awaits": (nil, \.expectedOrderingAdditions),
             "Drops": ("synchronizationOf", \.expectedOrderingLosses),
             "Accepts": ("uncaptured", \.acceptedBlindSpots)
         ]
     }
 
+    /// A parsed declaration head, before its modifiers: what the chained `.modifier(…)` calls may
+    /// narrow. A head that admits no modifier has already been appended.
+    enum Head {
+        case event(WritableKeyPath<Intent, [Intent.EventChange]>, label: String)
+        case value(label: String, fields: [String])
+        case unmodifiable(String)
+
+        var allowedModifiers: [String] {
+            switch self {
+            case .event: ["when"]
+            case .value: ["to", "increases", "decreases", "within", "when"]
+            case .unmodifiable: []
+            }
+        }
+    }
+
     mutating func parse(into intent: inout Intent) throws {
         let name = try identifier(expected: "a declaration")
         try expect("(")
-        try apply(name, into: &intent)
+        let head = try head(name, into: &intent)
         try expect(")")
+        var modifiers = Modifiers()
+        while consume(".") {
+            try modifier(on: head, into: &modifiers)
+        }
+        switch head {
+        case let .event(list, label):
+            intent[keyPath: list].append(Intent.EventChange(label, when: modifiers.conditions))
+        case let .value(label, fields):
+            let fields: [String?] = fields.isEmpty ? [nil] : fields
+            for field in fields {
+                intent.expectedValueChanges.append(
+                    Intent.ValueChange(label, field: field, relation: modifiers.relation, when: modifiers.conditions)
+                )
+            }
+        case .unmodifiable:
+            break
+        }
         skipSpaces()
         guard index == line.endIndex else {
             throw error("unexpected trailing text", hint: "one declaration per line")
         }
     }
 
-    private mutating func apply(_ name: String, into intent: inout Intent) throws {
+    mutating func head(_ name: String, into intent: inout Intent) throws -> Head {
         if let (label, list) = Self.stringDeclarations[name] {
             if let label {
                 try expectLabel(label)
             }
             try intent[keyPath: list].append(string())
-            return
+            return .unmodifiable(name)
         }
         switch name {
+        case "Emits":
+            return try .event(\.expectedNewEvents, label: string())
+        case "Omits":
+            return try .event(\.expectedRemovedEvents, label: string())
         case "Reorders":
             try intent.expectedReorders.append(contentsOf: strings())
         case "Changes":
@@ -186,7 +221,7 @@ private struct DeclarationParser {
                 try expectLabel("field")
                 fields = try strings()
             }
-            intent.expectedValueChanges[label, default: []].append(contentsOf: fields)
+            return .value(label: label, fields: fields)
         case "Relaxes":
             try expectLabel("orderingOf")
             try intent.expectedOrderingRelaxations.append(domain())
@@ -200,10 +235,11 @@ private struct DeclarationParser {
                     + "and Accepts(uncaptured:)"
             )
         }
+        return .unmodifiable(name)
     }
 
     /// `Moves("a", "b", from: X, to: Y)` or `Moves(everythingFrom: X, to: Y)`.
-    private mutating func move() throws -> Intent.DomainMove {
+    mutating func move() throws -> Intent.DomainMove {
         skipSpaces()
         if peek() != "\"" {
             try expectLabel("everythingFrom")
@@ -234,7 +270,7 @@ private struct DeclarationParser {
 
     /// `.main`, `.ambient`, `.queue("label")`, `.actor("Type")` — or `.actor(Type.self)`, so a
     /// declaration pasted from Swift parses unchanged.
-    private mutating func domain() throws -> DomainName {
+    mutating func domain() throws -> DomainName {
         try expect(".")
         let name = try identifier(expected: "a domain")
         switch name {
@@ -268,7 +304,7 @@ private struct DeclarationParser {
 
     // MARK: - Tokens
 
-    private mutating func strings() throws -> [String] {
+    mutating func strings() throws -> [String] {
         var values = try [string()]
         while consume(",") {
             try values.append(string())
@@ -276,7 +312,7 @@ private struct DeclarationParser {
         return values
     }
 
-    private mutating func string() throws -> String {
+    mutating func string() throws -> String {
         skipSpaces()
         guard consume("\"") else {
             throw error("expected a quoted string", hint: "labels are quoted: Emits(\"CartDidChange\")")
@@ -293,7 +329,7 @@ private struct DeclarationParser {
         throw error("unterminated string", hint: "close the quote")
     }
 
-    private mutating func identifier(expected: String) throws -> String {
+    mutating func identifier(expected: String) throws -> String {
         skipSpaces()
         var name = ""
         while index < line.endIndex, line[index].isLetter || line[index].isNumber || line[index] == "_" {
@@ -306,7 +342,7 @@ private struct DeclarationParser {
         return name
     }
 
-    private mutating func expectLabel(_ label: String, colon: Bool = true) throws {
+    mutating func expectLabel(_ label: String, colon: Bool = true) throws {
         let name = try identifier(expected: "\"\(label)\(colon ? ":" : "")\"")
         guard name == label else {
             throw error("expected \"\(label)\(colon ? ":" : "")\", found \"\(name)\"", hint: "")
@@ -316,14 +352,14 @@ private struct DeclarationParser {
         }
     }
 
-    private mutating func expect(_ character: Character) throws {
+    mutating func expect(_ character: Character) throws {
         skipSpaces()
         guard consume(character) else {
             throw error("expected \"\(character)\"", hint: "")
         }
     }
 
-    private mutating func consume(_ character: Character) -> Bool {
+    mutating func consume(_ character: Character) -> Bool {
         skipSpaces()
         guard index < line.endIndex, line[index] == character else {
             return false
@@ -332,18 +368,18 @@ private struct DeclarationParser {
         return true
     }
 
-    private mutating func peek() -> Character? {
+    mutating func peek() -> Character? {
         skipSpaces()
         return index < line.endIndex ? line[index] : nil
     }
 
-    private mutating func skipSpaces() {
+    mutating func skipSpaces() {
         while index < line.endIndex, line[index] == " " {
             index = line.index(after: index)
         }
     }
 
-    private func error(_ problem: String, hint: String) -> IntentGrammarError {
+    func error(_ problem: String, hint: String) -> IntentGrammarError {
         IntentGrammarError(line: number, text: line, problem: problem, hint: hint)
     }
 }

@@ -21,8 +21,26 @@ final class IntentionsTests: XCTestCase {
         XCTAssertEqual(intent.expectedOrderingAdditions, ["Analytics.flush"])
         XCTAssertEqual(intent.expectedNewEvents, ["LoyaltyPointsEarned"])
         XCTAssertEqual(intent.expectedRemovedEvents, ["LegacyPing"])
-        XCTAssertEqual(intent.expectedValueChanges, ["CheckoutDidComplete": ["totalCents"]])
+        XCTAssertEqual(intent.expectedValueChanges, [.init("CheckoutDidComplete", field: "totalCents")])
         XCTAssertEqual(intent.expectedReorders, ["Cart.itemCount", "Cart.total"])
+    }
+
+    /// Modifiers chain as data onto the sentence; a multi-field `Changes` carries them to every field.
+    func testTheBuilderNarrowsWithModifiers() {
+        let intent = Intent {
+            Changes("Receipt", field: "discountCents", "shippingCents")
+                .increases()
+                .when("applyPromo.code", is: "SAVE10")
+            Emits("CartRewardsDidUpdate").when("add.quantity", is: 1)
+        }
+        let promo = [InputCondition(seam: "applyPromo.code", is: "SAVE10")]
+        XCTAssertEqual(intent.expectedValueChanges, [
+            .init("Receipt", field: "discountCents", relation: .increases, when: promo),
+            .init("Receipt", field: "shippingCents", relation: .increases, when: promo)
+        ])
+        XCTAssertEqual(intent.expectedNewEvents, [
+            .init("CartRewardsDidUpdate", when: [.init(seam: "add.quantity", is: 1)])
+        ])
     }
 
     /// A queue is declared by label, whichever discipline it has: the *move* is what is declared,
@@ -108,7 +126,10 @@ final class IntentionsTests: XCTestCase {
                 label: label,
                 baselineSeq: 0,
                 candidateSeq: 0,
-                detail: "totalCents: baseline=1 candidate=2"
+                detail: "totalCents: baseline=1 candidate=2",
+                field: "totalCents",
+                baselineValue: 1,
+                candidateValue: 2
             )
         }
 
