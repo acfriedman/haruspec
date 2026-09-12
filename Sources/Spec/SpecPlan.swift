@@ -215,9 +215,11 @@ public extension Spec {
     }
 
     /// Cross-build verify: replays every probe's recorded inputs into the **current** build's system and
-    /// diffs against the stored golden traces. Divergence semantics match `verify(against:)` — first
-    /// divergence returns (no shrink: shrunk orderings have no recorded golden to compare against);
-    /// intent-declared deltas are absorbed and the residual collateral gates. Inputs the current build
+    /// diffs against the stored golden traces. Divergence semantics match `verify(against:)` except
+    /// at the exit: no shrink (shrunk orderings have no recorded golden to compare against), and a
+    /// red keeps walking a bounded window of further probes, reporting the richest failing case and
+    /// carrying every one (`FailingCases`); intent-declared deltas are absorbed and the residual
+    /// collateral gates. Inputs the current build
     /// can't reproduce (a renamed/removed op, a seam read past the recording) downgrade an otherwise
     /// EQUIVALENT verdict to CANNOT-VERIFY via `.unrecorded` coverage gaps.
     ///
@@ -247,39 +249,63 @@ public extension Spec {
 
         var replays: [Cassette] = []
         var representative: TraceDiff?
-        var sweep = IntentSweep()
+        var sweep = IntentSweep(intent: intent)
+        // A red does not stop the sweep: it opens a window (`RedWindow`). Every failing case inside
+        // it is kept, the richest is reported, and the offer is derived from all of them.
+        var window = RedWindow()
         for probe in surface.replayable {
+            guard window.admits() else { break }
             let replay = Cassette(replaying: probe.cassette)
             let current = await capture(
                 make: makeSystem,
                 order: probe.ordering.compactMap { surface.opsByLabel[$0] },
                 cassette: replay
             )
-            var diff = BehavioralDiff.compare(
+            let diff = BehavioralDiff.compare(
                 baseline: probe.golden,
                 candidate: current,
                 tolerances: effectiveTolerances
             )
             .classified(against: intent, inputs: probe.cassette.tracks)
-            sweep.observe(diff)
+            sweep.observe(diff, ordering: probe.ordering, inputs: probe.cassette)
             replays.append(replay)
             if representative == nil {
                 representative = diff
             }
-
-            guard diff.isEquivalent else {
-                // A sweep that stopped here walked only part of the surface: it cannot claim any
-                // declaration matched nothing, so the diverged verdict makes no unobserved claim.
-                diff.unobservedIntent = []
-                return divergedReplayVerdict(diff: diff, probe: probe, replay: replay, surface: surface)
+            if !diff.isEquivalent {
+                window.note(probe: probe, replay: replay, diff: diff)
             }
         }
 
-        // Every replayable probe held. Coverage decides whether that EQUIVALENT can be trusted:
-        // unreplayable ops or seam misses anywhere downgrade it to CANNOT-VERIFY.
-        // Zero replayable probes observed nothing, so classifying the empty diff reads back the
-        // whole declaration list as unobserved.
-        let diff = sweep.settle(representative ?? emptyDiff(golden: plan.specName).classified(against: intent))
+        if let reported = window.reported {
+            return divergedReplayVerdict(
+                reported,
+                surface: surface,
+                failingCases: window.cases,
+                observations: sweep.observations
+            )
+        }
+
+        return heldReplayVerdict(
+            diff: sweep.settle(representative ?? emptyDiff(golden: plan.specName).classified(against: intent)),
+            replays: replays,
+            surface: surface,
+            plan: plan,
+            observations: sweep.observations
+        )
+    }
+
+    /// The green exit: every replayable probe held. Coverage decides whether that EQUIVALENT can be
+    /// trusted — unreplayable ops or seam misses anywhere downgrade it to CANNOT-VERIFY. Zero
+    /// replayable probes observed nothing, so the classified empty diff reads back the whole
+    /// declaration list as unobserved.
+    private func heldReplayVerdict(
+        diff: TraceDiff,
+        replays: [Cassette],
+        surface: ReplaySurface<S>,
+        plan: SpecPlan,
+        observations: [IntentObservation]
+    ) -> SpecVerdict {
         let coverage = coverage(
             replays: replays,
             domainHeld: true,
@@ -293,49 +319,24 @@ public extension Spec {
             failingOrder: nil,
             counterexample: nil,
             exploration: surface.exploration,
-            qualification: surface.qualification
+            qualification: surface.qualification,
+            intentObservations: observations
         )
     }
 
-    /// Sweep-wide intent bookkeeping shared by the replay and live verify loops: a sweep compares
-    /// many probes but reports one diff, and intent facts are sweep-wide, not per-probe.
+    /// The red exit: pins the reported failing case — the richest of the window — and carries the rest.
     ///
-    /// Two corrections it applies to the reported diff:
-    ///  - **disclosure** — a green-by-declaration verdict must show what it absorbed, and the
-    ///    reported probe may be clean while a later probe carried the change; the first absorbing
-    ///    diff is preferred.
-    ///  - **unobserved intersection** — a declaration is observed if ANY probe matched it, so the
-    ///    sweep-wide unobserved set is the intersection of the per-probe ones.
-    struct IntentSweep {
-        private var intendedRepresentative: TraceDiff?
-        private var unobservedAcross: Set<String>?
-
-        mutating func observe(_ diff: TraceDiff) {
-            unobservedAcross = unobservedAcross
-                .map { $0.intersection(diff.unobservedIntent) } ?? Set(diff.unobservedIntent)
-            if intendedRepresentative == nil, diff.intendedCount > 0 {
-                intendedRepresentative = diff
-            }
-        }
-
-        /// The diff the verdict should carry: the first absorbing diff when one exists (else
-        /// `fallback`), its unobserved list corrected to the sweep-wide intersection.
-        func settle(_ fallback: TraceDiff) -> TraceDiff {
-            var diff = intendedRepresentative ?? fallback
-            if let unobservedAcross {
-                diff.unobservedIntent = diff.unobservedIntent.filter(unobservedAcross.contains)
-            }
-            return diff
-        }
-    }
-
-    /// The first-divergence exit: stops, and pins the probe that exposed it.
+    /// Makes no unobserved-intent claim: a sweep that stopped inside its window walked only part of
+    /// the surface and cannot prove a declaration dead.
     private func divergedReplayVerdict(
-        diff: TraceDiff,
-        probe: SpecProbe,
-        replay: Cassette,
-        surface: ReplaySurface<S>
+        _ reported: RedWindow.Entry,
+        surface: ReplaySurface<S>,
+        failingCases: FailingCases,
+        observations: [IntentObservation]
     ) -> SpecVerdict {
+        let (probe, replay) = (reported.probe, reported.replay)
+        var diff = reported.diff
+        diff.unobservedIntent = []
         let coverage = coverage(
             replays: [replay],
             domainHeld: false,
@@ -351,7 +352,9 @@ public extension Spec {
             qualification: surface.qualification,
             violatedPreconditions: surface.distinctOrderings > 1
                 ? preconditionViolations(in: probe.ordering)
-                : nil
+                : nil,
+            failingCases: failingCases,
+            intentObservations: observations
         )
     }
 

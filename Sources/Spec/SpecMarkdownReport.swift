@@ -72,6 +72,7 @@ public extension SpecVerdict {
                 "**Intended — declared in the intent spec; reported, not gating:**\n\n"
                     + divergenceTable(intended)
             )
+            sections.append(contentsOf: observationsSection)
         }
         var lines = ["\(intended.isEmpty ? "Behavior" : "Everything else") matched across everything "
             + "explored — \(scope) call ordering\(plural) and every recorded seam variant replayed "
@@ -130,8 +131,49 @@ public extension SpecVerdict {
                 "**Counterexample:** " + seams.map { "`\($0.key)=\($0.value)`" }.joined(separator: " · ")
             )
         }
-        sections.append(contentsOf: declarationOffer(for: gating))
+        sections.append(contentsOf: failingCasesSection)
+        sections.append(contentsOf: observationsSection)
+        sections.append(contentsOf: declarationOffer(for: failingCases?.gatingDivergences ?? gating))
         return sections
+    }
+
+    /// How many failing cases the red rests on: the reported one is the most informative of them,
+    /// and the offer below is derived from all of them.
+    private var failingCasesSection: [String] {
+        guard let failingCases, failingCases.probes.count > 1 else {
+            return []
+        }
+        let count = failingCases.probes.count
+        return ["**\(count) failing cases** among the \(failingCases.walkedAfterFirst + 1) checked from the "
+            + "first failure on. The tables above show the most informative one; the offer below is "
+            + "derived from all \(count)."]
+    }
+
+    /// Per declaration, the divergence it was first seen to absorb and the case that produced it —
+    /// so a green-by-declaration verdict shows *what* each declaration excused. The first absorbing
+    /// probe alone is not enough: it is often the golden, whose values say nothing.
+    private var observationsSection: [String] {
+        guard !intentObservations.isEmpty else {
+            return []
+        }
+        var lines = [
+            "**Declared changes, as first observed:**",
+            "",
+            "| Declaration | Where | Detail | In the case |",
+            "|---|---|---|---|"
+        ]
+        for observation in intentObservations.prefix(divergenceRowCap) {
+            let inputs = observation.inputs.tracks.keys.sorted().map { key in
+                "\(key)=\((observation.inputs.tracks[key] ?? []).map(\.canonicalString).joined(separator: ","))"
+            }
+            lines.append(
+                "| `\(tableCell(observation.declaration))` "
+                    + "| `\(tableCell(observation.divergence.label))` "
+                    + "| \(tableCell(observation.divergence.detail)) "
+                    + "| \(tableCell(inputs.joined(separator: " · "))) |"
+            )
+        }
+        return [lines.joined(separator: "\n")]
     }
 
     /// The teaching half of the red gate: the exact declarations that would mark the collateral
@@ -140,20 +182,17 @@ public extension SpecVerdict {
     /// The whole intent-signaling loop in one copy-paste — but offered, never presumed: the
     /// sentence around it says when pasting is the wrong move.
     private func declarationOffer(for gating: [Divergence]) -> [String] {
-        var suggestions: [String] = []
-        for divergence in gating where divergence.isGating {
-            guard let suggested = divergence.suggestedDeclaration,
-                  !suggestions.contains(suggested) else { continue }
-            suggestions.append(suggested)
-        }
+        let suggestions = Divergence.suggestedDeclarations(across: gating)
         guard !suggestions.isEmpty else {
             return []
         }
-        // A `.to(…)` line pins the one value this probe saw; the author widens it only on purpose.
-        let narrowing = suggestions.contains { $0.contains(").to(") }
-            ? " A `.to(…)` modifier pins the value this probe observed; if the change is a direction or a "
-            + "range rather than one value, widen it to `.increases()`, `.decreases()`, or "
-            + "`.within(lo ... hi)` — every modifier you keep is a tripwire for the values it excludes."
+        // A modifier is as narrow as the failing cases allow: one case pins `.to(…)`, several prove
+        // a direction or a range. The author widens it only on purpose.
+        let narrowing = suggestions.contains { $0.contains(").") }
+            ? " Each modifier is the narrowest the failing cases support — `.to(…)` when every case "
+            + "showed one value, a direction or a range when they differed; widen one only if the "
+            + "change is broader than what was seen — every modifier you keep is a tripwire for the "
+            + "values it excludes."
             : ""
         // The four-backtick fence renders the inner block literally, ready to copy.
         return ["""

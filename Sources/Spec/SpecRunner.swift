@@ -35,7 +35,7 @@ public extension Spec {
         let (golden, plan, qualification) = (surface.golden, surface.plan, surface.qualification)
 
         // Sweep-wide intent facts (disclosure + unobserved intersection) — see `IntentSweep`.
-        var sweep = IntentSweep()
+        var sweep = IntentSweep(intent: intent)
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index) {
                 var run = await compare(
@@ -45,7 +45,7 @@ public extension Spec {
                     cassette: cassette,
                     declaring: intent
                 )
-                sweep.observe(run.diff)
+                sweep.observe(run.diff, ordering: order.map(\.label), inputs: cassette)
                 guard run.diff.isEquivalent else {
                     return await divergedLiveVerdict(
                         run: DivergedRun(
@@ -69,7 +69,7 @@ public extension Spec {
             cassette: golden,
             declaring: intent
         )
-        sweep.observe(representative.diff)
+        sweep.observe(representative.diff, ordering: operations.map(\.label), inputs: golden)
         representative.diff = sweep.settle(representative.diff)
         let coverage = plannedCoverage(replay: representative.candidateReplay, domainHeld: true, plan: plan)
         return SpecVerdict(
@@ -78,7 +78,8 @@ public extension Spec {
             failingOrder: nil,
             counterexample: nil,
             exploration: plan.exploration,
-            qualification: qualification
+            qualification: qualification,
+            intentObservations: sweep.observations
         )
     }
 

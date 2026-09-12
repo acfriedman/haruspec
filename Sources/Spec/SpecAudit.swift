@@ -61,18 +61,10 @@ public extension SpecVerdict {
     /// The same verdict with an audit's outcome applied. Split out so a caller holding its own
     /// `AuditReport` (the CLI, a host tool auditing a recorded `result.json`) folds it in identically.
     internal func noting(_ outcome: AuditOutcome) -> SpecVerdict {
-        SpecVerdict(
-            schemaVersion: schemaVersion,
-            result: VerificationResult(diff: result.diff, coverage: coverage.noting(outcome)),
-            orderingsExplored: orderingsExplored,
-            failingOrder: failingOrder,
-            counterexample: counterexample,
-            exploration: exploration,
-            qualification: qualification.noting(blindSpots: outcome.entries),
-            violatedPreconditions: violatedPreconditions,
-            stability: stability,
-            acceptedBlindSpots: acceptedBlindSpots
-        )
+        var verdict = self
+        verdict.result = VerificationResult(diff: result.diff, coverage: coverage.noting(outcome))
+        verdict.qualification = qualification.noting(blindSpots: outcome.entries)
+        return verdict
     }
 }
 

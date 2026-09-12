@@ -60,34 +60,16 @@ extension SpecVerdict {
     /// Carries the origins one verification collected onto the verdict it produced. Applied last because
     /// the qualification is resolved off the golden template, before a candidate has run.
     func noting(origins: [TraceOrigin]) -> SpecVerdict {
-        SpecVerdict(
-            schemaVersion: schemaVersion,
-            result: result,
-            orderingsExplored: orderingsExplored,
-            failingOrder: failingOrder,
-            counterexample: counterexample,
-            exploration: exploration,
-            qualification: qualification.noting(origins: origins),
-            violatedPreconditions: violatedPreconditions,
-            stability: stability,
-            acceptedBlindSpots: acceptedBlindSpots
-        )
+        var verdict = self
+        verdict.qualification = qualification.noting(origins: origins)
+        return verdict
     }
 
     /// The same verdict carrying the declared-acceptable channels — spec-level and check-site merged.
     func declaring(accepted: [String]) -> SpecVerdict {
-        SpecVerdict(
-            schemaVersion: schemaVersion,
-            result: result,
-            orderingsExplored: orderingsExplored,
-            failingOrder: failingOrder,
-            counterexample: counterexample,
-            exploration: exploration,
-            qualification: qualification,
-            violatedPreconditions: violatedPreconditions,
-            stability: stability,
-            acceptedBlindSpots: accepted
-        )
+        var verdict = self
+        verdict.acceptedBlindSpots = accepted
+        return verdict
     }
 }
 

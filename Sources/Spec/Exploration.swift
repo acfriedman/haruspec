@@ -121,6 +121,11 @@ enum SpecDefaults {
     static let maxTimerRounds = 16
     /// Seam cassettes per ordering when no `Budget(runs:)` is declared.
     static let variantCount = 64
+    /// How many more probes a red replay walks after its first failing case, collecting every
+    /// failing one (`FailingCases`). Bounded, so a red costs a fixed slice of the sweep rather than
+    /// all of it; wide enough that the first case — often the degenerate golden — is not the only
+    /// one the report can choose from.
+    static let redProbeWindow = 64
     /// Where counting valid orderings gives up and reports a lower bound. A denominator is worth a few
     /// milliseconds, not a factorial walk.
     static let orderingCountLimit = 100_000
