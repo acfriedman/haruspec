@@ -131,7 +131,7 @@ public extension Spec {
     /// Records the golden template — the declared order under live seams, the template every variation
     /// is derived from — and resolves the explored surface plus the qualification measured off it.
     private func goldenSurface() async -> GoldenSurface<S> {
-        let recording = Cassette()
+        let recording = Cassette(recordingPreferring: goldenReadings)
         let goldenTrace = await capture(make: makeSystem, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
         let plan = explorationPlan(golden: golden)

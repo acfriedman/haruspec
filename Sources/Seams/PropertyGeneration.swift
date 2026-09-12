@@ -53,174 +53,23 @@ public struct SplitMix64: RandomNumberGenerator {
     }
 }
 
-/// The generation domain for one seam's readings: a numeric range, or a declared set of values.
-/// Structured/corpus domains (schema-aware network payloads, recorded-value distributions) are a
-/// later refinement.
-public enum SeamDomain: Sendable {
-    case int(ClosedRange<Int64>)
-    case double(ClosedRange<Double>)
-    /// Uniform choice from a declared set — the categorical axis, for inputs whose interesting
-    /// values are named rather than ranged (a promo code that is sometimes valid, a status string,
-    /// an enum's raw values). Prefer the `oneOf` sugar below, which rejects an empty set.
-    case anyOf([CanonicalValue])
-    /// A decade-stratified span — the domain for a value *nothing* was declared about, so the
-    /// interesting magnitudes are unknown and every decade is a hypothesis. Boundary values ladder
-    /// the magnitude transitions (`0, ±1, ±9/10/11, ±99/100/101, …`) where off-by-one and
-    /// digit-rollover bugs live, and random fill is log-uniform — a decade first, then a value
-    /// within it — so small values arrive as often as large ones (uniform over a wide span almost
-    /// never draws the smalls, which is where code actually branches). Distinct from `.int` on
-    /// purpose: an authored range is a declared judgment about which values matter, and it keeps
-    /// its author's edge schedule.
-    case intMagnitudes(ClosedRange<Int64>)
-    /// The floating-point counterpart: decades extend *below* one (`±0.001 …`) because fractional
-    /// magnitudes — rates, factors — are where doubles branch.
-    case doubleMagnitudes(ClosedRange<Double>)
-
-    func sample(using rng: inout SplitMix64) -> CanonicalValue {
-        switch self {
-        case let .int(range): .int(Int64.random(in: range, using: &rng))
-        case let .double(range): .double(Double.random(in: range, using: &rng))
-        case let .anyOf(values):
-            // Non-empty by construction via `oneOf`; a hand-built empty set has nothing to vary.
-            values.isEmpty ? .null : values[Int(UInt64.random(in: 0 ..< UInt64(values.count), using: &rng))]
-        case let .intMagnitudes(range):
-            .int(Self.logUniform(in: range, using: &rng))
-        case let .doubleMagnitudes(range):
-            .double(Self.logUniform(in: range, using: &rng))
-        }
-    }
-
-    /// Log-uniform integer draw: decade first (0–9 counts as the first), then uniform within it,
-    /// sign uniform where the range admits one, clamped into the range.
-    private static func logUniform(in range: ClosedRange<Int64>, using rng: inout SplitMix64) -> Int64 {
-        let limit = Swift.max(range.upperBound, -range.lowerBound)
-        var decadeFloors: [Int64] = [0]
-        var floor: Int64 = 10
-        while floor <= limit {
-            decadeFloors.append(floor)
-            guard floor <= limit / 10 else { break }
-            floor *= 10
-        }
-        let chosen = decadeFloors[Int(UInt64.random(in: 0 ..< UInt64(decadeFloors.count), using: &rng))]
-        let ceiling = Swift.min(chosen == 0 ? 9 : chosen * 10 - 1, limit)
-        var value = Int64.random(in: chosen ... Swift.max(chosen, ceiling), using: &rng)
-        if range.lowerBound < 0, Bool.random(using: &rng) {
-            value = -value
-        }
-        return Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
-    }
-
-    /// Log-uniform double draw over `smallestMagnitude … span`, sign uniform where admitted. Zero
-    /// arrives via the boundary schedule, not the fill.
-    private static func logUniform(in range: ClosedRange<Double>, using rng: inout SplitMix64) -> Double {
-        let limit = Swift.max(range.upperBound, -range.lowerBound)
-        let exponent = Double.random(
-            in: log10(SeamDomain.smallestDoubleMagnitude) ... log10(Swift.max(limit, 1)),
-            using: &rng
-        )
-        var value = pow(10, exponent)
-        if range.lowerBound < 0, Bool.random(using: &rng) {
-            value = -value
-        }
-        return Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
-    }
-
-    /// Where the fractional decade ladder bottoms out: per-mille scale, below which differences
-    /// stop being distinguishable through the tolerance layer anyway.
-    static let smallestDoubleMagnitude = 0.001
-}
-
-public extension SeamDomain {
-    /// The values worth trying *first*, in priority order — bugs cluster at the ends of a domain, and
-    /// uniform sampling reaches them only by luck: over `.int(0 ... 20)`, 64 draws find a given edge
-    /// 95% of the time but 5 draws find it 21% of the time, and a `.double` range never lands on its
-    /// bounds at all. Enumerating them makes edge coverage a property of the design rather than of the
-    /// budget, so trimming a budget drops random middles instead of the ends.
-    ///
-    /// A categorical domain is *all* edges: the author named every value because each one is
-    /// interesting.
-    var boundaryValues: [CanonicalValue] {
-        switch self {
-        case let .int(range):
-            var values: [Int64] = [range.lowerBound, range.upperBound]
-            if range.contains(0) {
-                values.append(0)
-            }
-            // One step inside each end: off-by-one lives next to the boundary, not on it.
-            values.append(contentsOf: [range.lowerBound + 1, range.upperBound - 1].filter(range.contains))
-            return orderedUnique(values.map(CanonicalValue.int))
-        case let .double(range):
-            var values: [Double] = [range.lowerBound, range.upperBound]
-            if range.contains(0) {
-                values.append(0)
-            }
-            return orderedUnique(values.map(CanonicalValue.double))
-        case let .anyOf(values):
-            return orderedUnique(values)
-        case let .intMagnitudes(range):
-            // Zero and ±1 first (the guard-clause cluster), then each decade rollover with one step
-            // either side, ascending — so a trimmed budget drops the large magnitudes, not the small.
-            var ladder: [Int64] = [0, 1, -1]
-            var boundary: Int64 = 10
-            let limit = Swift.max(range.upperBound, -range.lowerBound)
-            while boundary <= limit {
-                ladder += [boundary - 1, boundary, boundary + 1]
-                ladder += [-(boundary - 1), -boundary, -(boundary + 1)]
-                guard boundary <= limit / 10 else { break }
-                boundary *= 10
-            }
-            ladder += [range.lowerBound, range.upperBound]
-            return orderedUnique(ladder.filter(range.contains).map(CanonicalValue.int))
-        case let .doubleMagnitudes(range):
-            // Every power of ten in span, both signs, fractional decades included.
-            var ladder: [Double] = [0]
-            var magnitude = SeamDomain.smallestDoubleMagnitude
-            let limit = Swift.max(range.upperBound, -range.lowerBound)
-            while magnitude <= limit {
-                ladder += [magnitude, -magnitude]
-                magnitude *= 10
-            }
-            ladder += [range.lowerBound, range.upperBound]
-            return orderedUnique(ladder.filter(range.contains).map(CanonicalValue.double))
-        }
-    }
-
-    private func orderedUnique(_ values: [CanonicalValue]) -> [CanonicalValue] {
-        var seen = Set<String>()
-        return values.filter { seen.insert($0.canonicalString).inserted }
-    }
-
-    /// Varies over a named set. Empty traps at construction rather than silently varying nothing —
-    /// a seam declared with no values would report domain coverage it never had.
-    static func oneOf(_ values: [String]) -> SeamDomain {
-        precondition(!values.isEmpty, "oneOf needs at least one value to vary over")
-        return .anyOf(values.map(CanonicalValue.string))
-    }
-
-    static func oneOf(_ values: String...) -> SeamDomain {
-        oneOf(values)
-    }
-
-    static func oneOf(_ values: [Int64]) -> SeamDomain {
-        precondition(!values.isEmpty, "oneOf needs at least one value to vary over")
-        return .anyOf(values.map(CanonicalValue.int))
-    }
-
-    static func oneOf(_ values: Int64...) -> SeamDomain {
-        oneOf(values)
-    }
-}
-
-/// The built-in, dependency-free generator: **boundary values first, then uniform sampling** over a
-/// declared per-seam `SeamDomain`, seeded by SplitMix64. A seam with no declared domain replays its
-/// recorded value unchanged, so the generated surface is exactly the declared seams. This is the
+/// The built-in, dependency-free generator: **edges and middles interleaved, then uniform sampling**
+/// over a declared per-seam `SeamDomain`, seeded by SplitMix64. A seam with no declared domain replays
+/// its recorded value unchanged, so the generated surface is exactly the declared seams. This is the
 /// default `SeamValueGenerator`; swapping in a library-backed one is a one-type change.
 ///
-/// The boundary pass is one-factor-at-a-time: each scheduled variant pins *one* seam to *one* of its
-/// edges and leaves every other seam on its recorded value, so a divergence names the seam that caused
-/// it instead of arriving as a vector of simultaneous extremes. The schedule is round-robin across
-/// seams (every seam's first edge before any seam's second), which is what makes a truncated budget
-/// still cover every seam.
+/// Two streams share the variant budget, alternating from the first variant, so any prefix of the
+/// schedule holds both kinds:
+///
+///  - **Edge pins**, one factor at a time: each pins *one* seam to *one* of its edges and leaves every
+///    other seam on its recorded value, so a divergence names the seam that caused it instead of
+///    arriving as a vector of simultaneous extremes. Round-robin across seams (every seam's first
+///    edge before any seam's second), which is what makes a truncated budget still cover every seam.
+///  - **Combined variants**, every declared seam at once: first every seam at its low end, then every
+///    seam at its high end, then the messy middle — each seam at one of its interior values, cycling
+///    a categorical seam through its names — and, once those are spent, uniform samples. This is the
+///    only place two seams' values meet, which a tiered schedule (all edges, *then* a random tail)
+///    never reached once the edge schedule alone outgrew the budget.
 ///
 /// A "factor" is finer than a column: a seam read once per op occurrence has a whole track of
 /// readings, and pinning the whole track flattens it — three `add`s in one sequence take the same sku,
@@ -230,15 +79,16 @@ public extension SeamDomain {
 /// track (the *aggregate* edge — still the case that finds a total overflow) and once at a single
 /// reading, with the position rotating so repeated edges sweep different slots. The two spans are
 /// interleaved rather than tiered, so a budget too small for the whole schedule still gets both
-/// flavors of the seams it reaches — consistent with edges-before-middles, at the cost of a shorter
-/// random tail.
+/// flavors of the seams it reaches.
 public struct DomainSeamGenerator: SeamValueGenerator {
     public var domains: [String: SeamDomain]
     private var rng: SplitMix64
-    /// The edges variants claim, in order.
-    private let schedule: [Pin]
-    /// What this variant pins, or `nil` once the schedule is spent and generation goes random.
-    private var pinned: Pin?
+    /// The edge pins variants claim, in order — the one-factor stream.
+    private let edges: [Pin]
+    /// The finite head of the combined stream; past it, combined variants are uniform samples.
+    private let combined: [Combined]
+    /// What this variant is.
+    private var slot: Slot = .random
 
     /// One scheduled boundary variant: a seam held at one of its edges, over its whole track or at a
     /// single reading of it.
@@ -249,15 +99,30 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         let position: Int?
     }
 
+    /// One scheduled combined variant — every declared seam moved at once.
+    private enum Combined {
+        case lowEdges
+        case highEdges
+        /// Every seam at its `interiorValues[index % count]`.
+        case interior(Int)
+    }
+
+    private enum Slot {
+        case edge(Pin)
+        case combined(Combined)
+        case random
+    }
+
     /// `golden` is the template's own tracks — the convenience `generatedVariants(count:varying:seed:)`
     /// supplies them. They give the schedule two things it cannot otherwise know: how many readings each
     /// seam has, and what each already holds. Omitted, every seam is assumed to be read once and the
-    /// schedule is exactly the whole-track pass it always was.
+    /// edge schedule is exactly the whole-track pass it always was.
     public init(domains: [String: SeamDomain], seed: UInt64, golden: [String: [CanonicalValue]] = [:]) {
         self.domains = domains
         rng = SplitMix64(seed: seed)
-        schedule = Self.boundarySchedule(domains, golden: golden)
-        pinned = schedule.first
+        edges = Self.boundarySchedule(domains, golden: golden)
+        combined = Self.combinedSchedule(domains, golden: golden)
+        slot = Self.slot(forVariant: 0, edges: edges, combined: combined)
     }
 
     /// Round-robin over sorted seams — sorted so the schedule doesn't ride on dictionary order, which
@@ -273,6 +138,47 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         for index in 0 ..< (perSeam.map(\.count).max() ?? 0) {
             for seam in perSeam where index < seam.count {
                 schedule.append(seam[index])
+            }
+        }
+        return schedule
+    }
+
+    /// The combined stream's finite head: the two all-edges vectors, then one interior vector per
+    /// interior rung of the widest domain. A vector the golden already holds is dropped (it would
+    /// replay the golden itself), and with a single declared seam the all-edges vectors are its own
+    /// aggregate pins again, so only the true middles are kept.
+    private static func combinedSchedule(
+        _ domains: [String: SeamDomain],
+        golden: [String: [CanonicalValue]]
+    ) -> [Combined] {
+        guard !domains.isEmpty else {
+            return []
+        }
+        func heldByGolden(_ value: (SeamDomain) -> CanonicalValue) -> Bool {
+            domains.allSatisfy { seam, domain in
+                let track = golden[seam] ?? []
+                return !track.isEmpty && track.allSatisfy { $0.canonicalString == value(domain).canonicalString }
+            }
+        }
+        var schedule: [Combined] = []
+        if domains.count > 1 {
+            if !heldByGolden({ $0.extremes.low }) {
+                schedule.append(.lowEdges)
+            }
+            if !heldByGolden({ $0.extremes.high }) {
+                schedule.append(.highEdges)
+            }
+        }
+        let rungs = domains.values.map(\.interiorValues.count).max() ?? 0
+        for index in 0 ..< rungs {
+            let single = domains.count == 1 ? domains.values.first : nil
+            // One seam: an interior value that is also an edge is a scheduled pin already.
+            if let single, let value = single.interior(at: index),
+               single.boundaryValues.contains(where: { $0.canonicalString == value.canonicalString }) {
+                continue
+            }
+            if !heldByGolden({ $0.interior(at: index) ?? .null }) {
+                schedule.append(.interior(index))
             }
         }
         return schedule
@@ -327,27 +233,74 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         return pins
     }
 
+    /// Which stream variant `index` draws from. Even variants are edge pins and odd ones combined,
+    /// until the pins run out; from there every variant is combined, and the combined stream itself
+    /// goes random once its scheduled head is spent.
+    private static func slot(forVariant index: Int, edges: [Pin], combined: [Combined]) -> Slot {
+        let interleaved = 2 * edges.count
+        if index < interleaved {
+            if index.isMultiple(of: 2) {
+                return .edge(edges[index / 2])
+            }
+            let position = index / 2
+            return position < combined.count ? .combined(combined[position]) : .random
+        }
+        let position = edges.count + (index - interleaved)
+        return position < combined.count ? .combined(combined[position]) : .random
+    }
+
     public var variedSeams: Set<String> {
         Set(domains.keys)
     }
 
-    /// How many boundary-edge variants the schedule holds. A budget below this drops the tail of the
-    /// schedule (`beginVariant` goes random past it) — exposing the count is what lets a verdict
-    /// report "boundary edges N of M" instead of silently reading as edge-complete.
+    /// How many boundary-edge variants the schedule holds. A budget below twice this leaves part of
+    /// the schedule unrun (`beginVariant` interleaves combined variants between pins) — exposing the
+    /// count is what lets a verdict report "boundary edges N of M" instead of silently reading as
+    /// edge-complete.
     public var scheduledBoundaryEdges: Int {
-        schedule.count
+        edges.count
+    }
+
+    /// How many edge pins a budget of `variants` runs: every other slot until the schedule is spent.
+    public func boundaryEdgesCovered(within variants: Int) -> Int {
+        Swift.min(edges.count, Swift.max(0, (variants + 1) / 2))
+    }
+
+    /// How many variants of `variants` move every declared seam at once — all-edges vectors, interior
+    /// rungs, and uniform samples together: the budget's share that reaches a pairing of two seams'
+    /// values.
+    public func combinedVariantsCovered(within variants: Int) -> Int {
+        Swift.max(0, variants) - boundaryEdgesCovered(within: variants)
     }
 
     public mutating func beginVariant(_ index: Int) {
-        pinned = index < schedule.count ? schedule[index] : nil
+        slot = Self.slot(forVariant: index, edges: edges, combined: combined)
     }
 
     public mutating func generate(seam: String, at position: Int, like recorded: CanonicalValue) -> CanonicalValue {
         guard let domain = domains[seam] else { return recorded } // undeclared seam → keep golden
-        guard let pinned else { return domain.sample(using: &rng) }
-        guard pinned.seam == seam else { return recorded } // one factor at a time
-        guard let pinnedPosition = pinned.position else { return pinned.value } // the aggregate edge
-        return pinnedPosition == position ? pinned.value : recorded
+        switch slot {
+        case .random:
+            return domain.sample(using: &rng)
+        case let .edge(pinned):
+            guard pinned.seam == seam else { return recorded } // one factor at a time
+            guard let pinnedPosition = pinned.position else { return pinned.value } // the aggregate edge
+            return pinnedPosition == position ? pinned.value : recorded
+        case .combined(.lowEdges):
+            return domain.extremes.low
+        case .combined(.highEdges):
+            return domain.extremes.high
+        case let .combined(.interior(index)):
+            return domain.interior(at: index) ?? recorded
+        }
+    }
+}
+
+private extension SeamDomain {
+    /// The interior rung a combined variant reads, cycling a domain with fewer rungs than the widest.
+    func interior(at index: Int) -> CanonicalValue? {
+        let values = interiorValues
+        return values.isEmpty ? nil : values[index % values.count]
     }
 }
 

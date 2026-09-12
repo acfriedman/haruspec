@@ -131,10 +131,14 @@ final class QualificationTests: XCTestCase {
             }
         let verdict = await spec.verify(against: makeRefactor)
 
+        // Five variants: three edge pins and two combined, interleaved — the budget is shared, so a
+        // truncated schedule drops edges *and* says how much of it paired the seams instead.
         XCTAssertEqual(verdict.exploration.boundaryEdgesScheduled, 8)
-        XCTAssertEqual(verdict.exploration.boundaryEdgesCovered, 5)
+        XCTAssertEqual(verdict.exploration.boundaryEdgesCovered, 3)
+        XCTAssertEqual(verdict.exploration.combinedVariantsCovered, 2)
         XCTAssertTrue(
-            verdict.markdownReport().contains("boundary edges 5 of 8 scheduled (3 dropped — budget)"),
+            verdict.markdownReport()
+                .contains("boundary edges 3 of 8 scheduled (5 dropped — budget) · 2 combined (every seam at once)"),
             verdict.markdownReport()
         )
     }

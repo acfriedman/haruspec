@@ -108,11 +108,57 @@ final class BoundaryGenerationTests: XCTestCase {
 
     // MARK: - The schedule
 
-    func testTheFirstVariantsAreTheEdgesInOrder() {
+    func testEdgesAndMiddlesInterleaveFromTheFirstVariant() {
+        // Even variants are the edge pins in order; odd ones are the interior rungs (the midpoint,
+        // then the quartiles), so any prefix of the budget holds both an edge and a middle.
         var generator = DomainSeamGenerator(domains: ["qty": .int(0 ... 20)], seed: 1)
-        let variants = golden(["qty": 7]).generatedVariants(count: 4, using: &generator)
+        let variants = golden(["qty": 7]).generatedVariants(count: 8, using: &generator)
 
-        XCTAssertEqual(values(variants, "qty"), [[0, 0], [20, 20], [1, 1], [19, 19]])
+        XCTAssertEqual(
+            values(variants, "qty"),
+            [[0, 0], [10, 10], [20, 20], [5, 5], [1, 1], [15, 15], [19, 19], [11, 15]]
+        )
+    }
+
+    func testTheCombinedStreamPairsSeamsAtTheirEndsThenTheirMiddles() {
+        // Where two seams' values meet: every seam low, every seam high, then every seam at the same
+        // interior rung — the pairings a one-factor schedule never reached.
+        var generator = DomainSeamGenerator(domains: ["a": .int(0 ... 9), "b": .int(0 ... 9)], seed: 1)
+        let variants = golden(["a": 5, "b": 5]).generatedVariants(count: 8, using: &generator)
+        let combined = stride(from: 1, to: variants.count, by: 2).map { variants[$0] }
+
+        XCTAssertEqual(values(combined, "a").map(\.first), [0, 9, 4, 2])
+        XCTAssertEqual(values(combined, "b").map(\.first), [0, 9, 4, 2])
+    }
+
+    func testACategoricalSeamCyclesItsNamesThroughTheCombinedStream() {
+        let domains: [String: SeamDomain] = ["code": .oneOf("A", "B", "C"), "qty": .int(0 ... 100)]
+        let template = CassetteData(tracks: ["code": [.string("A")], "qty": [.int(50)]])
+        let variants = template.generatedVariants(count: 8, varying: domains, seed: 1)
+        func reading(_ variant: CassetteData, _ seam: String) -> String {
+            (variant.tracks[seam] ?? []).map(\.canonicalString).joined()
+        }
+        let combined = stride(from: 1, to: variants.count, by: 2).map { variants[$0] }
+            .map { "\(reading($0, "code"))/\(reading($0, "qty"))" }
+
+        // (A, 50) is the golden itself, so the first interior rung is dropped; the names then cycle
+        // against the remaining rungs.
+        XCTAssertEqual(combined, ["\"A\"/0", "\"C\"/100", "\"B\"/25", "\"C\"/75"])
+    }
+
+    func testInteriorValuesAreTheMiddlesNotTheEdges() {
+        XCTAssertEqual(SeamDomain.int(1 ... 20).interiorValues, [10, 5, 16])
+        XCTAssertEqual(SeamDomain.int(0 ... 1).interiorValues, [], "no interior between two edges")
+        XCTAssertEqual(
+            SeamDomain.intMagnitudes(-10000 ... 10000).interiorValues,
+            [5, 50, 500, 5000, -5, -50, -500, -5000]
+        )
+        XCTAssertEqual(SeamDomain.oneOf("SAVE10", "NOPE").interiorValues, ["SAVE10", "NOPE"])
+        let doubles = SeamDomain.doubleMagnitudes(0 ... 10).interiorValues.compactMap(\.numericValue)
+        XCTAssertEqual(doubles.count, 4)
+        for (actual, expected) in zip(doubles, [0.005, 0.05, 0.5, 5]) {
+            XCTAssertEqual(actual, expected, accuracy: 1e-12)
+        }
     }
 
     func testEverySeamGetsAnEdgeBeforeAnySeamGetsASecond() {
@@ -121,11 +167,12 @@ final class BoundaryGenerationTests: XCTestCase {
             domains: ["a": .int(0 ... 9), "b": .int(0 ... 9), "c": .int(0 ... 9)],
             seed: 1
         )
-        let variants = golden(["a": 5, "b": 5, "c": 5]).generatedVariants(count: 3, using: &generator)
+        let variants = golden(["a": 5, "b": 5, "c": 5]).generatedVariants(count: 5, using: &generator)
+        let pins = stride(from: 0, to: variants.count, by: 2).map { variants[$0] }
 
-        XCTAssertEqual(values(variants, "a").map(\.first), [0, 5, 5])
-        XCTAssertEqual(values(variants, "b").map(\.first), [5, 0, 5])
-        XCTAssertEqual(values(variants, "c").map(\.first), [5, 5, 0])
+        XCTAssertEqual(values(pins, "a").map(\.first), [0, 5, 5])
+        XCTAssertEqual(values(pins, "b").map(\.first), [5, 0, 5])
+        XCTAssertEqual(values(pins, "c").map(\.first), [5, 5, 0])
     }
 
     func testAScheduledVariantMovesOneSeamAndLeavesTheRestRecorded() {

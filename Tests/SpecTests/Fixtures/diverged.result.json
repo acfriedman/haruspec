@@ -14,6 +14,7 @@
   "exploration" : {
     "boundaryEdgesCovered" : 8,
     "boundaryEdgesScheduled" : 8,
+    "combinedVariantsCovered" : 47,
     "orderingsAreExact" : true,
     "orderingsAvailable" : 7,
     "orderingsExplored" : 7,
@@ -105,7 +106,7 @@
     },
     "verdict" : "diverged"
   },
-  "schemaVersion" : 4,
+  "schemaVersion" : 5,
   "stability" : {
     "outcomes" : [
       {

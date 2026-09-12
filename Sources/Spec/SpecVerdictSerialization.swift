@@ -37,8 +37,9 @@ public extension SpecVerdict {
     /// Version 3 added the diff's `unobservedIntent`: which declared intent matched nothing, which
     /// the continuous gate fails on and an earlier artifact never measured. Version 4 carries a
     /// value mismatch structurally (`field`, `baselineValue`, `candidateValue`), so a precise
-    /// declaration compares values instead of parsing them out of `detail`.
-    static let supportedSchemaVersion = 4
+    /// declaration compares values instead of parsing them out of `detail`. Version 5 added the
+    /// exploration's `combinedVariantsCovered`: how much of the seam budget moved every seam at once.
+    static let supportedSchemaVersion = 5
 
     static func canonicalEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
