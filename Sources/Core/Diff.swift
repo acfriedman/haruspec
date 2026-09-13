@@ -52,9 +52,8 @@ public struct Divergence: Codable, Sendable, Equatable {
     /// The declarations (by DSL spelling) that named this divergence's kind and label but whose
     /// modifier rejected it — a `.once(per:)` that saw two, an `.increases()` that saw a drop.
     ///
-    /// Empty for an intended divergence and for a collateral one no declaration was about. A
-    /// non-empty list is the author's own tripwire firing: the report names the declaration
-    /// instead of offering a wider one.
+    /// Empty for an intended divergence and for a collateral one no declaration was about; a
+    /// non-empty list is the author's own tripwire firing, which the report names instead of offering a wider line.
     public var rejectedBy: [String]
 
     /// A divergence gates the verdict iff it is neither advisory nor a declared, intended change.
