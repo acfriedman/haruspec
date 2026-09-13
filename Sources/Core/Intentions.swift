@@ -167,6 +167,7 @@ public struct Moves: Intention {
     let labels: [String]
     let origin: DomainName
     let destination: DomainName
+    var scope: OpScope?
 
     /// Moves these events — `Moves("Inventory.reserve", "CartDidChange", from: …, to: …)`. At least
     /// one label, by construction: breadth is never the default.
@@ -184,9 +185,16 @@ public struct Moves: Intention {
         self.destination = destination
     }
 
+    /// Only under the declared op `op` — `Moves(…).only(in: "checkout")`.
+    public func only(in op: String) -> Moves {
+        var narrowed = self
+        narrowed.scope = .only(in: op)
+        return narrowed
+    }
+
     public func apply(to intent: inout Intent) {
         intent.expectedDomainMigrations.append(
-            Intent.DomainMove(labels: labels, from: origin, to: destination)
+            Intent.DomainMove(labels: labels, from: origin, to: destination, scope: scope)
         )
     }
 }
@@ -236,61 +244,35 @@ public struct Awaits: Intention {
 /// The port deliberately reorders an event whose order is compared — `reordered`, by label. The
 /// canonical case is an observed property's write under `MutationOrderPolicy.gating`: a port that
 /// computes its state in a different order names the writes it moves, and only those.
+///
+/// Say which way it moved and the declaration becomes a tripwire for every other move:
+/// `Reorders("Archive.archive", before: "CartDidChange")` holds only for an event that now sits
+/// before the anchor and sat after it in the baseline (within the same op, when known).
 public struct Reorders: Intention {
     let labels: [String]
+    let position: Position?
 
     /// At least one label, by construction — a blanket reorder excuse would pre-excuse every future
     /// ordering change on the subject.
     public init(_ first: String, _ rest: String...) {
         labels = [first] + rest
+        position = nil
+    }
+
+    /// The events now sit before `anchor`, having sat after it.
+    public init(_ first: String, _ rest: String..., before anchor: String) {
+        labels = [first] + rest
+        position = .before(anchor)
+    }
+
+    /// The events now sit after `anchor`, having sat before it.
+    public init(_ first: String, _ rest: String..., after anchor: String) {
+        labels = [first] + rest
+        position = .after(anchor)
     }
 
     public func apply(to intent: inout Intent) {
-        intent.expectedReorders.append(contentsOf: labels)
-    }
-}
-
-/// The change emits an event the baseline never had — a declared feature, not an accident.
-///
-/// Narrow it to the probes it belongs in: `Emits("Inventory.reserve").when("add.quantity", is: 1)`.
-public struct Emits: Intention {
-    var declaration: Intent.EventChange
-
-    public init(_ label: String) {
-        declaration = Intent.EventChange(label)
-    }
-
-    /// Only in a probe whose recorded reads of `seam` all returned `value`.
-    public func when(_ seam: String, is value: CanonicalValue) -> Emits {
-        var narrowed = self
-        narrowed.declaration.conditions.append(InputCondition(seam: seam, is: value))
-        return narrowed
-    }
-
-    public func apply(to intent: inout Intent) {
-        intent.expectedNewEvents.append(declaration)
-    }
-}
-
-/// The change omits an event the baseline produced — a declared removal.
-///
-/// Narrow it to the probes it belongs in: `Omits("Inventory.reserve").when("add.quantity", is: 0)`.
-public struct Omits: Intention {
-    var declaration: Intent.EventChange
-
-    public init(_ label: String) {
-        declaration = Intent.EventChange(label)
-    }
-
-    /// Only in a probe whose recorded reads of `seam` all returned `value`.
-    public func when(_ seam: String, is value: CanonicalValue) -> Omits {
-        var narrowed = self
-        narrowed.declaration.conditions.append(InputCondition(seam: seam, is: value))
-        return narrowed
-    }
-
-    public func apply(to intent: inout Intent) {
-        intent.expectedRemovedEvents.append(declaration)
+        intent.expectedReorders += labels.map { Intent.Reorder($0, position: position) }
     }
 }
 
@@ -311,80 +293,5 @@ public struct Accepts: Intention {
 
     public func apply(to intent: inout Intent) {
         intent.acceptedBlindSpots.append(channel)
-    }
-}
-
-/// The change alters an event's payload — a specific field, or (with no fields named) any of them.
-/// Declaring one field does NOT excuse a change to another field of the same event.
-///
-/// Say *how* it changes and the declaration becomes a tripwire for everything else:
-///
-///     Changes("CheckoutDidComplete", field: "totalCents").to(11363)
-///     Changes("Receipt", field: "discountCents").increases()
-///     Changes("LoyaltyPointsEarned", field: "points").within(1 ... 64)
-///     Changes("Receipt", field: "discountCents").when("applyPromo.code", is: "SAVE10")
-///
-/// One value relation per declaration; a second is a contradiction and traps.
-public struct Changes: Intention {
-    let label: String
-    let fields: [String]
-    var relation: ValueRelation?
-    var conditions: [InputCondition] = []
-
-    public init(_ label: String, field fields: String...) {
-        self.label = label
-        self.fields = fields
-    }
-
-    /// The new value is exactly `value` — a scalar, the only shape the grammar can spell back.
-    public func to(_ value: CanonicalValue) -> Changes {
-        precondition(value.isScalar, "Changes(…).to(_:) takes a scalar, not \(value.canonicalString)")
-        return narrowed(.to(value))
-    }
-
-    /// The value went up.
-    public func increases() -> Changes {
-        narrowed(.increases)
-    }
-
-    /// The value went down.
-    public func decreases() -> Changes {
-        narrowed(.decreases)
-    }
-
-    /// The new value lies in `range`.
-    public func within(_ range: ClosedRange<Int>) -> Changes {
-        narrowed(.within(Double(range.lowerBound) ... Double(range.upperBound)))
-    }
-
-    /// The new value lies in `range`.
-    public func within(_ range: ClosedRange<Double>) -> Changes {
-        narrowed(.within(range))
-    }
-
-    /// Only in a probe whose recorded reads of `seam` all returned `value`.
-    public func when(_ seam: String, is value: CanonicalValue) -> Changes {
-        var narrowed = self
-        narrowed.conditions.append(InputCondition(seam: seam, is: value))
-        return narrowed
-    }
-
-    private func narrowed(_ relation: ValueRelation) -> Changes {
-        precondition(
-            self.relation == nil,
-            "Changes(\"\(label)\") already declares \(self.relation!.dslText); one value relation per declaration"
-        )
-        var narrowed = self
-        narrowed.relation = relation
-        return narrowed
-    }
-
-    public func apply(to intent: inout Intent) {
-        let fields: [String?] = fields.isEmpty ? [nil] : fields
-        for field in fields {
-            intent.expectedValueChanges.append(
-                Intent.ValueChange(label, field: field, relation: relation, when: conditions)
-            )
-        }
     }
 }

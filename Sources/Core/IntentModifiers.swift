@@ -15,6 +15,48 @@ import Foundation
 /// `haruspec diff` over two traces), in which case no input condition can hold.
 public typealias ProbeInputs = [String: [CanonicalValue]]
 
+/// What a probe left behind for a declaration to check beyond the divergence itself: its seam
+/// inputs, both traces as the diff aligned them, and the comparison's other divergences.
+///
+/// `.when` reads the inputs, `.after` / `.before` the traces, `.once(per:)` the divergences.
+/// Anything absent fails closed — a modifier that cannot be checked does not hold, and the
+/// divergence stays collateral. Only the op scope (`.only(in:)`) needs none of this: the op rides
+/// on the divergence itself.
+public struct ProbeEvidence: Sendable {
+    public var inputs: ProbeInputs?
+    /// Both sides' events exactly as the diff aligned them — canonicalized under the diff's
+    /// tolerance, so a divergence's `baselineSeq` / `candidateSeq` indexes into them.
+    public var baseline: [TraceEvent]
+    public var candidate: [TraceEvent]
+    /// Every divergence of the comparison being classified, for a cardinality modifier to count
+    /// against. `classified(against:evidence:)` fills it from the diff it classifies.
+    public var divergences: [Divergence]
+
+    /// - Parameter tolerances: the tolerance the diff ran under — the traces are canonicalized with
+    ///   it here so their sequence numbers are the ones the divergences carry.
+    public init(
+        inputs: ProbeInputs? = nil,
+        baseline: Trace? = nil,
+        candidate: Trace? = nil,
+        tolerances: Tolerance = .strict,
+        divergences: [Divergence] = []
+    ) {
+        self.inputs = inputs
+        self.baseline = baseline.map { Canonicalizer.canonicalize($0, spec: tolerances).events } ?? []
+        self.candidate = candidate.map { Canonicalizer.canonicalize($0, spec: tolerances).events } ?? []
+        self.divergences = divergences
+    }
+
+    /// No probe at all: an unconditioned or op-scoped declaration can still hold; nothing else can.
+    public static let none = ProbeEvidence()
+
+    /// The divergences a cardinality check counts over — the comparison's when known, else the
+    /// one being matched (which then trivially counts once).
+    func siblings(of divergence: Divergence) -> [Divergence] {
+        divergences.isEmpty ? [divergence] : divergences
+    }
+}
+
 /// How a declared value change is narrowed: the relation the candidate's value must bear to the
 /// baseline's for the declaration to match. Exactly one per declaration.
 public enum ValueRelation: Sendable, Equatable, Codable {
@@ -70,8 +112,9 @@ public enum ValueRelation: Sendable, Equatable, Codable {
 /// declaration matches only in a probe whose recorded reads of that seam all returned the value.
 ///
 /// "All" rather than "any", because a seam read several times in one probe (`add.quantity` across
-/// three adds) cannot yet be attributed to the one event that diverged; until op identity per event
-/// lands, a mixed probe leaves the divergence collateral rather than absorbing it on a partial match.
+/// three adds) cannot be attributed to the one event that diverged: a read is not an event, so it
+/// carries no op. A mixed probe leaves the divergence collateral rather than absorbing it on a
+/// partial match.
 public struct InputCondition: Sendable, Equatable, Codable {
     public var seam: String
     public var value: CanonicalValue
@@ -89,7 +132,7 @@ public struct InputCondition: Sendable, Equatable, Codable {
     }
 
     var dslText: String {
-        ".when(\"\(seam)\", is: \(value.dslText))"
+        ".when(\(quoted(seam)), is: \(value.dslText))"
     }
 }
 
@@ -102,6 +145,113 @@ extension [InputCondition] {
     var dslText: String {
         map(\.dslText).joined()
     }
+}
+
+/// Which declared op a declaration is scoped to, by the label the spec's ordering gives the op.
+///
+/// `.only(in: "checkout")`: the divergence was recorded under that op. `.once(per: "add")`: under
+/// that op, and the only one of its kind and label in that *application* of the op — a second one
+/// in the same `add` is the tripwire, and leaves both collateral. Either fails closed for a
+/// divergence that carries no op (an end-state snapshot; a golden recorded before ops were stamped).
+public enum OpScope: Sendable, Equatable, Codable {
+    case only(in: String)
+    case once(per: String)
+
+    var op: String {
+        switch self {
+        case let .only(op), let .once(op): op
+        }
+    }
+
+    func holds(for divergence: Divergence, among siblings: [Divergence]) -> Bool {
+        guard let op = divergence.op, op.label == self.op else {
+            return false
+        }
+        switch self {
+        case .only:
+            return true
+        case .once:
+            let alike = siblings.filter {
+                $0.kind == divergence.kind && $0.label == divergence.label && $0.field == divergence.field && $0
+                    .op == op
+            }
+            return alike.count == 1
+        }
+    }
+
+    var dslText: String {
+        switch self {
+        case let .only(op): ".only(in: \(quoted(op)))"
+        case let .once(op): ".once(per: \(quoted(op)))"
+        }
+    }
+}
+
+/// Where a declared event sits relative to another, by label — `.after("CartDidChange")`: some
+/// event with that label precedes it.
+///
+/// Within the same application of the same op when the event carries one; anywhere in the trace
+/// when it does not. Checked on the side the event exists on: the candidate for `Emits`, the baseline for `Omits`.
+/// `Reorders(_, before:)` checks both — the event now sits before the anchor in the candidate and
+/// sat after it in the baseline, so a move in any other direction stays collateral.
+public enum Position: Sendable, Equatable, Codable {
+    case after(String)
+    case before(String)
+
+    var anchor: String {
+        switch self {
+        case let .after(anchor), let .before(anchor): anchor
+        }
+    }
+
+    /// The same anchor, the other way round — what the baseline must show for a directed reorder.
+    var inverted: Position {
+        switch self {
+        case let .after(anchor): .before(anchor)
+        case let .before(anchor): .after(anchor)
+        }
+    }
+
+    /// Whether the event at `seq` in `events` sits as declared relative to some anchor-labeled event.
+    func holds(at seq: Int?, in events: [TraceEvent]) -> Bool {
+        guard let seq, let event = events.first(where: { $0.seq == seq }) else {
+            return false
+        }
+        return events.contains { other in
+            other.label == anchor
+                && (event.op == nil || other.op == event.op)
+                && (isAfter ? other.seq < seq : other.seq > seq)
+        }
+    }
+
+    private var isAfter: Bool {
+        if case .after = self {
+            true
+        } else {
+            false
+        }
+    }
+
+    /// The chained spelling — `.after("CartDidChange")`.
+    var dslText: String {
+        switch self {
+        case let .after(anchor): ".after(\(quoted(anchor)))"
+        case let .before(anchor): ".before(\(quoted(anchor)))"
+        }
+    }
+
+    /// The argument spelling `Reorders` uses — `before: "CartDidChange"`.
+    var argumentText: String {
+        switch self {
+        case let .after(anchor): "after: \(quoted(anchor))"
+        case let .before(anchor): "before: \(quoted(anchor))"
+        }
+    }
+}
+
+/// A string as every declaration spells one: double-quoted, verbatim.
+func quoted(_ text: String) -> String {
+    "\"\(text)\""
 }
 
 extension CanonicalValue {
@@ -140,7 +290,7 @@ extension CanonicalValue {
         case let .bool(bool): bool ? "true" : "false"
         case let .int(int): String(int)
         case let .double(double): Self.dslNumber(double)
-        case let .string(string): "\"\(string)\""
+        case let .string(string): quoted(string)
         case .array, .object:
             preconditionFailure("a modifier literal must be a scalar, not \(canonicalString)")
         }

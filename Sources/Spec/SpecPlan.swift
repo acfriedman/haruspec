@@ -55,7 +55,10 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// and the variant schedule interleaved combined variants with edge pins: a version-7 plan's
     /// surface is every edge measured against a degenerate default, with no probe where two seams'
     /// values meet — it replays faithfully but explores the wrong shape, so it is re-recorded.
-    public static let supportedSchemaVersion = 8
+    /// Bumped to 9 when events began carrying their declared op (`OpIdentity`): a version-8 golden
+    /// has no op on any event, so an op-scoped declaration (`.only(in:)`, `.once(per:)`) could
+    /// never hold against it and every such intent would read as unobserved.
+    public static let supportedSchemaVersion = 9
 
     public var schemaVersion: Int
     public var specName: String
@@ -261,13 +264,20 @@ public extension Spec {
                 order: probe.ordering.compactMap { surface.opsByLabel[$0] },
                 cassette: replay
             )
+            let evidence = ProbeEvidence(
+                inputs: probe.cassette.tracks,
+                baseline: probe.golden,
+                candidate: current,
+                tolerances: effectiveTolerances
+            )
             let diff = BehavioralDiff.compare(
                 baseline: probe.golden,
                 candidate: current,
                 tolerances: effectiveTolerances
             )
-            .classified(against: intent, inputs: probe.cassette.tracks)
-            sweep.observe(diff, ordering: probe.ordering, inputs: probe.cassette)
+            .classified(against: intent, evidence: evidence)
+            let run = ProbeComparison(diff: diff, candidateReplay: replay, evidence: evidence)
+            sweep.observe(run, ordering: probe.ordering, inputs: probe.cassette)
             replays.append(replay)
             if representative == nil {
                 representative = diff

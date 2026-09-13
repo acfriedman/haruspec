@@ -247,9 +247,10 @@ public enum DeferredTimers {
         enum CombineSeam {
             static func rebinding(_ action: @escaping () -> Void, for recorder: TraceRecorder) -> () -> Void {
                 let cause = recorder.enclosingCallSeq()
+                let op = TraceContext.activeOp
                 return {
                     DispatchSeam.markingQueueEntry {
-                        TraceContext.withThreadRecorder(recorder, spawnedBy: cause) { action() }
+                        TraceContext.withThreadRecorder(recorder, spawnedBy: cause, op: op) { action() }
                     }
                     DispatchSeam.finishForSwift()
                 }

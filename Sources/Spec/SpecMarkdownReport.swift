@@ -168,7 +168,7 @@ public extension SpecVerdict {
             }
             lines.append(
                 "| `\(tableCell(observation.declaration))` "
-                    + "| `\(tableCell(observation.divergence.label))` "
+                    + "| `\(tableCell(observation.divergence.label))`\(opCell(observation.divergence)) "
                     + "| \(tableCell(observation.divergence.detail)) "
                     + "| \(tableCell(inputs.joined(separator: " · "))) |"
             )
@@ -312,13 +312,18 @@ public extension SpecVerdict {
 
     // MARK: - Rendering helpers
 
+    /// ` in checkout (op 7)` after a Where cell's label, or nothing for an event under no op.
+    private func opCell(_ divergence: Divergence) -> String {
+        divergence.op.map { " in \(tableCell($0.description))" } ?? ""
+    }
+
     private func divergenceTable(_ divergences: [Divergence]) -> String {
         var lines = ["| Kind | Where | Detail |", "|---|---|---|"]
         for divergence in divergences.prefix(divergenceRowCap) {
             let advisory = divergence.isAdvisory ? " (advisory)" : ""
             lines.append(
                 "| `\(divergence.kind.rawValue)`\(advisory) "
-                    + "| `\(tableCell(divergence.label))` "
+                    + "| `\(tableCell(divergence.label))`\(opCell(divergence)) "
                     + "| \(tableCell(divergence.detail)) |"
             )
         }

@@ -21,6 +21,1883 @@
     "outOfOrderExplored" : 0,
     "variantsPerOrdering" : 55
   },
+  "failingCases" : {
+    "probes" : [
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 1798,
+            "candidateSeq" : 11,
+            "candidateValue" : 1799,
+            "classification" : "collateral",
+            "detail" : "total: baseline=1798 candidate=1799",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 1798,
+            "candidateSeq" : 13,
+            "candidateValue" : 1799,
+            "classification" : "collateral",
+            "detail" : "value: baseline=1798 candidate=1799",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              1,
+              1
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 9890,
+            "candidateSeq" : 11,
+            "candidateValue" : 9891,
+            "classification" : "collateral",
+            "detail" : "total: baseline=9890 candidate=9891",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 9890,
+            "candidateSeq" : 13,
+            "candidateValue" : 9891,
+            "classification" : "collateral",
+            "detail" : "value: baseline=9890 candidate=9891",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              1,
+              10
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 28771,
+            "candidateSeq" : 11,
+            "candidateValue" : 28772,
+            "classification" : "collateral",
+            "detail" : "total: baseline=28771 candidate=28772",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 28771,
+            "candidateSeq" : 13,
+            "candidateValue" : 28772,
+            "classification" : "collateral",
+            "detail" : "value: baseline=28771 candidate=28772",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              16,
+              16
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 20679,
+            "candidateSeq" : 11,
+            "candidateValue" : 20680,
+            "classification" : "collateral",
+            "detail" : "total: baseline=20679 candidate=20680",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 20679,
+            "candidateSeq" : 13,
+            "candidateValue" : 20680,
+            "classification" : "collateral",
+            "detail" : "value: baseline=20679 candidate=20680",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              20,
+              3
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 3596,
+            "candidateSeq" : 11,
+            "candidateValue" : 3597,
+            "classification" : "collateral",
+            "detail" : "total: baseline=3596 candidate=3597",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 3596,
+            "candidateSeq" : 13,
+            "candidateValue" : 3597,
+            "classification" : "collateral",
+            "detail" : "value: baseline=3596 candidate=3597",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              2,
+              2
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 9890,
+            "candidateSeq" : 11,
+            "candidateValue" : 9891,
+            "classification" : "collateral",
+            "detail" : "total: baseline=9890 candidate=9891",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 9890,
+            "candidateSeq" : 13,
+            "candidateValue" : 9891,
+            "classification" : "collateral",
+            "detail" : "value: baseline=9890 candidate=9891",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              7,
+              4
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 10789,
+            "candidateSeq" : 11,
+            "candidateValue" : 10790,
+            "classification" : "collateral",
+            "detail" : "total: baseline=10789 candidate=10790",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 10789,
+            "candidateSeq" : 13,
+            "candidateValue" : 10790,
+            "classification" : "collateral",
+            "detail" : "value: baseline=10789 candidate=10790",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              2,
+              10
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 18881,
+            "candidateSeq" : 11,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "total: baseline=18881 candidate=18882",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 18881,
+            "candidateSeq" : 13,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "value: baseline=18881 candidate=18882",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              16,
+              5
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 18881,
+            "candidateSeq" : 11,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "total: baseline=18881 candidate=18882",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 18881,
+            "candidateSeq" : 13,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "value: baseline=18881 candidate=18882",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              11,
+              10
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 18881,
+            "candidateSeq" : 11,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "total: baseline=18881 candidate=18882",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 18881,
+            "candidateSeq" : 13,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "value: baseline=18881 candidate=18882",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              16,
+              5
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 31468,
+            "candidateSeq" : 11,
+            "candidateValue" : 31469,
+            "classification" : "collateral",
+            "detail" : "total: baseline=31468 candidate=31469",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 31468,
+            "candidateSeq" : 13,
+            "candidateValue" : 31469,
+            "classification" : "collateral",
+            "detail" : "value: baseline=31468 candidate=31469",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              17,
+              18
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 29670,
+            "candidateSeq" : 11,
+            "candidateValue" : 29671,
+            "classification" : "collateral",
+            "detail" : "total: baseline=29670 candidate=29671",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 29670,
+            "candidateSeq" : 13,
+            "candidateValue" : 29671,
+            "classification" : "collateral",
+            "detail" : "value: baseline=29670 candidate=29671",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              14,
+              19
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 22477,
+            "candidateSeq" : 11,
+            "candidateValue" : 22478,
+            "classification" : "collateral",
+            "detail" : "total: baseline=22477 candidate=22478",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 22477,
+            "candidateSeq" : 13,
+            "candidateValue" : 22478,
+            "classification" : "collateral",
+            "detail" : "value: baseline=22477 candidate=22478",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              7,
+              18
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 18881,
+            "candidateSeq" : 11,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "total: baseline=18881 candidate=18882",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 18881,
+            "candidateSeq" : 13,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "value: baseline=18881 candidate=18882",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              12,
+              9
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 13486,
+            "candidateSeq" : 11,
+            "candidateValue" : 13487,
+            "classification" : "collateral",
+            "detail" : "total: baseline=13486 candidate=13487",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 13486,
+            "candidateSeq" : 13,
+            "candidateValue" : 13487,
+            "classification" : "collateral",
+            "detail" : "value: baseline=13486 candidate=13487",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              9,
+              6
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 12587,
+            "candidateSeq" : 11,
+            "candidateValue" : 12588,
+            "classification" : "collateral",
+            "detail" : "total: baseline=12587 candidate=12588",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 12587,
+            "candidateSeq" : 13,
+            "candidateValue" : 12588,
+            "classification" : "collateral",
+            "detail" : "value: baseline=12587 candidate=12588",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              5,
+              9
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 2697,
+            "candidateSeq" : 11,
+            "candidateValue" : 2698,
+            "classification" : "collateral",
+            "detail" : "total: baseline=2697 candidate=2698",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 2697,
+            "candidateSeq" : 13,
+            "candidateValue" : 2698,
+            "classification" : "collateral",
+            "detail" : "value: baseline=2697 candidate=2698",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              2,
+              1
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 21578,
+            "candidateSeq" : 11,
+            "candidateValue" : 21579,
+            "classification" : "collateral",
+            "detail" : "total: baseline=21578 candidate=21579",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 21578,
+            "candidateSeq" : 13,
+            "candidateValue" : 21579,
+            "classification" : "collateral",
+            "detail" : "value: baseline=21578 candidate=21579",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              19,
+              5
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 18881,
+            "candidateSeq" : 11,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "total: baseline=18881 candidate=18882",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 18881,
+            "candidateSeq" : 13,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "value: baseline=18881 candidate=18882",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              3,
+              18
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 18881,
+            "candidateSeq" : 11,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "total: baseline=18881 candidate=18882",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 18881,
+            "candidateSeq" : 13,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "value: baseline=18881 candidate=18882",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              18,
+              3
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 30569,
+            "candidateSeq" : 11,
+            "candidateValue" : 30570,
+            "classification" : "collateral",
+            "detail" : "total: baseline=30569 candidate=30570",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 30569,
+            "candidateSeq" : 13,
+            "candidateValue" : 30570,
+            "classification" : "collateral",
+            "detail" : "value: baseline=30569 candidate=30570",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              15,
+              19
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 10789,
+            "candidateSeq" : 11,
+            "candidateValue" : 10790,
+            "classification" : "collateral",
+            "detail" : "total: baseline=10789 candidate=10790",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 10789,
+            "candidateSeq" : 13,
+            "candidateValue" : 10790,
+            "classification" : "collateral",
+            "detail" : "value: baseline=10789 candidate=10790",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              7,
+              5
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 19780,
+            "candidateSeq" : 11,
+            "candidateValue" : 19781,
+            "classification" : "collateral",
+            "detail" : "total: baseline=19780 candidate=19781",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 19780,
+            "candidateSeq" : 13,
+            "candidateValue" : 19781,
+            "classification" : "collateral",
+            "detail" : "value: baseline=19780 candidate=19781",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              18,
+              4
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 10789,
+            "candidateSeq" : 11,
+            "candidateValue" : 10790,
+            "classification" : "collateral",
+            "detail" : "total: baseline=10789 candidate=10790",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 10789,
+            "candidateSeq" : 13,
+            "candidateValue" : 10790,
+            "classification" : "collateral",
+            "detail" : "value: baseline=10789 candidate=10790",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              6,
+              6
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 13486,
+            "candidateSeq" : 11,
+            "candidateValue" : 13487,
+            "classification" : "collateral",
+            "detail" : "total: baseline=13486 candidate=13487",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 13486,
+            "candidateSeq" : 13,
+            "candidateValue" : 13487,
+            "classification" : "collateral",
+            "detail" : "value: baseline=13486 candidate=13487",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              11,
+              4
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 28771,
+            "candidateSeq" : 11,
+            "candidateValue" : 28772,
+            "classification" : "collateral",
+            "detail" : "total: baseline=28771 candidate=28772",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 28771,
+            "candidateSeq" : 13,
+            "candidateValue" : 28772,
+            "classification" : "collateral",
+            "detail" : "value: baseline=28771 candidate=28772",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              13,
+              19
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 19780,
+            "candidateSeq" : 11,
+            "candidateValue" : 19781,
+            "classification" : "collateral",
+            "detail" : "total: baseline=19780 candidate=19781",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 19780,
+            "candidateSeq" : 13,
+            "candidateValue" : 19781,
+            "classification" : "collateral",
+            "detail" : "value: baseline=19780 candidate=19781",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              18,
+              4
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 29670,
+            "candidateSeq" : 11,
+            "candidateValue" : 29671,
+            "classification" : "collateral",
+            "detail" : "total: baseline=29670 candidate=29671",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 29670,
+            "candidateSeq" : 13,
+            "candidateValue" : 29671,
+            "classification" : "collateral",
+            "detail" : "value: baseline=29670 candidate=29671",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              16,
+              17
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 18881,
+            "candidateSeq" : 11,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "total: baseline=18881 candidate=18882",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 18881,
+            "candidateSeq" : 13,
+            "candidateValue" : 18882,
+            "classification" : "collateral",
+            "detail" : "value: baseline=18881 candidate=18882",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              9,
+              12
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 9890,
+            "candidateSeq" : 11,
+            "candidateValue" : 9891,
+            "classification" : "collateral",
+            "detail" : "total: baseline=9890 candidate=9891",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 9890,
+            "candidateSeq" : 13,
+            "candidateValue" : 9891,
+            "classification" : "collateral",
+            "detail" : "value: baseline=9890 candidate=9891",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              6,
+              5
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 11688,
+            "candidateSeq" : 11,
+            "candidateValue" : 11689,
+            "classification" : "collateral",
+            "detail" : "total: baseline=11688 candidate=11689",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 11688,
+            "candidateSeq" : 13,
+            "candidateValue" : 11689,
+            "classification" : "collateral",
+            "detail" : "value: baseline=11688 candidate=11689",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              6,
+              7
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 13486,
+            "candidateSeq" : 11,
+            "candidateValue" : 13487,
+            "classification" : "collateral",
+            "detail" : "total: baseline=13486 candidate=13487",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 13486,
+            "candidateSeq" : 13,
+            "candidateValue" : 13487,
+            "classification" : "collateral",
+            "detail" : "value: baseline=13486 candidate=13487",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              12,
+              3
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 12587,
+            "candidateSeq" : 11,
+            "candidateValue" : 12588,
+            "classification" : "collateral",
+            "detail" : "total: baseline=12587 candidate=12588",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 12587,
+            "candidateSeq" : 13,
+            "candidateValue" : 12588,
+            "classification" : "collateral",
+            "detail" : "value: baseline=12587 candidate=12588",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              11,
+              3
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 9890,
+            "candidateSeq" : 11,
+            "candidateValue" : 9891,
+            "classification" : "collateral",
+            "detail" : "total: baseline=9890 candidate=9891",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 9890,
+            "candidateSeq" : 13,
+            "candidateValue" : 9891,
+            "classification" : "collateral",
+            "detail" : "value: baseline=9890 candidate=9891",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              10,
+              1
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 12587,
+            "candidateSeq" : 11,
+            "candidateValue" : 12588,
+            "classification" : "collateral",
+            "detail" : "total: baseline=12587 candidate=12588",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 12587,
+            "candidateSeq" : 13,
+            "candidateValue" : 12588,
+            "classification" : "collateral",
+            "detail" : "value: baseline=12587 candidate=12588",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              11,
+              3
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "addCoffee",
+          "promo",
+          "promo",
+          "checkout"
+        ]
+      },
+      {
+        "divergences" : [
+          {
+            "baselineSeq" : 11,
+            "baselineValue" : 1798,
+            "candidateSeq" : 11,
+            "candidateValue" : 1799,
+            "classification" : "collateral",
+            "detail" : "total: baseline=1798 candidate=1799",
+            "field" : "total",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "CheckoutCompleted",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          },
+          {
+            "baselineSeq" : 13,
+            "baselineValue" : 1798,
+            "candidateSeq" : 13,
+            "candidateValue" : 1799,
+            "classification" : "collateral",
+            "detail" : "value: baseline=1798 candidate=1799",
+            "field" : "value",
+            "isAdvisory" : false,
+            "kind" : "valueMismatch",
+            "label" : "PromoCart.checkout",
+            "op" : {
+              "label" : "checkout",
+              "position" : 4
+            }
+          }
+        ],
+        "inputs" : {
+          "schemaVersion" : 1,
+          "tracks" : {
+            "coffeeQty" : [
+              1,
+              1
+            ]
+          }
+        },
+        "ordering" : [
+          "addCoffee",
+          "promo",
+          "addCoffee",
+          "promo",
+          "checkout"
+        ]
+      }
+    ],
+    "walkedAfterFirst" : 64
+  },
   "failingOrder" : [
     "addCoffee",
     "addCoffee",
@@ -87,7 +1964,11 @@
           "field" : "total",
           "isAdvisory" : false,
           "kind" : "valueMismatch",
-          "label" : "CheckoutCompleted"
+          "label" : "CheckoutCompleted",
+          "op" : {
+            "label" : "checkout",
+            "position" : 4
+          }
         },
         {
           "baselineSeq" : 13,
@@ -99,7 +1980,11 @@
           "field" : "value",
           "isAdvisory" : false,
           "kind" : "valueMismatch",
-          "label" : "PromoCart.checkout"
+          "label" : "PromoCart.checkout",
+          "op" : {
+            "label" : "checkout",
+            "position" : 4
+          }
         }
       ],
       "unobservedIntent" : [
@@ -109,7 +1994,7 @@
     },
     "verdict" : "diverged"
   },
-  "schemaVersion" : 6,
+  "schemaVersion" : 7,
   "stability" : {
     "outcomes" : [
       {

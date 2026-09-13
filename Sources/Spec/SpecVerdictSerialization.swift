@@ -41,7 +41,9 @@ public extension SpecVerdict {
     /// exploration's `combinedVariantsCovered`: how much of the seam budget moved every seam at once.
     /// Version 6 added `failingCases` (every failing case a red walked after its first, the reported
     /// one being the richest) and `intentObservations` (where each declaration was first observed).
-    static let supportedSchemaVersion = 6
+    /// Version 7 stamps every divergence with the declared op it was recorded under (`op`), which
+    /// an op-scoped declaration matches and a report names.
+    static let supportedSchemaVersion = 7
 
     static func canonicalEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()

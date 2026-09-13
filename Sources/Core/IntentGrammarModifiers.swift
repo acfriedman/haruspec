@@ -1,14 +1,17 @@
 import Foundation
 
 // The modifier half of the grammar: the chained `.modifier(…)` calls that narrow a declaration
-// (`ValueRelation`, `InputCondition`) and the scalar literals they take. Kept beside the
-// declaration parser so the two halves share its tokens; split out so each reads on its own.
+// (`ValueRelation`, `InputCondition`, `OpScope`, `Position`) and the scalar literals they take.
+// Kept beside the declaration parser so the two halves share its tokens; split out so each reads
+// on its own.
 
 extension DeclarationParser {
     /// The modifiers chained onto one declaration, accumulated in order of appearance.
     struct Modifiers {
         var relation: ValueRelation?
         var conditions: [InputCondition] = []
+        var scope: OpScope?
+        var position: Position?
     }
 
     /// One chained `.modifier(…)` — the `.` is already consumed. Each modifier has one spelling, and
@@ -26,6 +29,15 @@ extension DeclarationParser {
             )
         }
         try expect("(")
+        if try !valueModifier(name, into: &modifiers), try !placementModifier(name, into: &modifiers) {
+            preconditionFailure("allowedModifiers admitted an unhandled modifier \(name)")
+        }
+        try expect(")")
+    }
+
+    /// The modifiers about the value and the probe — `.to`, `.increases`, `.decreases`, `.within`,
+    /// `.when`; `false` when `name` is none of them.
+    private mutating func valueModifier(_ name: String, into modifiers: inout Modifiers) throws -> Bool {
         switch name {
         case "to":
             try relate(.to(value()), into: &modifiers)
@@ -47,9 +59,29 @@ extension DeclarationParser {
             try expectLabel("is")
             try modifiers.conditions.append(InputCondition(seam: seam, is: value()))
         default:
-            preconditionFailure("allowedModifiers admitted an unhandled modifier \(name)")
+            return false
         }
-        try expect(")")
+        return true
+    }
+
+    /// The modifiers about where the event was recorded — `.only(in:)`, `.once(per:)`, `.after`,
+    /// `.before`; `false` when `name` is none of them.
+    private mutating func placementModifier(_ name: String, into modifiers: inout Modifiers) throws -> Bool {
+        switch name {
+        case "only":
+            try expectLabel("in")
+            try scope(.only(in: string()), into: &modifiers)
+        case "once":
+            try expectLabel("per")
+            try scope(.once(per: string()), into: &modifiers)
+        case "after":
+            try place(.after(string()), into: &modifiers)
+        case "before":
+            try place(.before(string()), into: &modifiers)
+        default:
+            return false
+        }
+        return true
     }
 
     /// One value relation per declaration — a second is a contradiction, refused with both named.
@@ -61,6 +93,29 @@ extension DeclarationParser {
             )
         }
         modifiers.relation = relation
+    }
+
+    /// One op scope per declaration — `.once(per:)` already says which op, so a second scope
+    /// either repeats it or contradicts it.
+    func scope(_ scope: OpScope, into modifiers: inout Modifiers) throws {
+        if let existing = modifiers.scope {
+            throw error(
+                "\(scope.dslText) contradicts \(existing.dslText)",
+                hint: "one op scope per declaration — say .only(in:) or .once(per:), not two"
+            )
+        }
+        modifiers.scope = scope
+    }
+
+    /// One position per declaration.
+    func place(_ position: Position, into modifiers: inout Modifiers) throws {
+        if let existing = modifiers.position {
+            throw error(
+                "\(position.dslText) contradicts \(existing.dslText)",
+                hint: "one position per declaration — say .after(_:) or .before(_:), not two"
+            )
+        }
+        modifiers.position = position
     }
 
     // MARK: - Literals

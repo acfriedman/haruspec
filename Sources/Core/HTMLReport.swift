@@ -216,8 +216,9 @@ public enum HTML {
     private static func locationChips(_ divergence: Divergence) -> String {
         let baselineChip = divergence.baselineSeq.map { "<span class=\"pos base\">baseline #\($0)</span>" } ?? ""
         let candidateChip = divergence.candidateSeq.map { "<span class=\"pos cand\">candidate #\($0)</span>" } ?? ""
-        guard !baselineChip.isEmpty || !candidateChip.isEmpty else { return "" }
-        return "<span class=\"loc\">\(baselineChip)\(candidateChip)</span>"
+        let opChip = divergence.op.map { "<span class=\"pos\">in \(esc($0.description))</span>" } ?? ""
+        guard !baselineChip.isEmpty || !candidateChip.isEmpty || !opChip.isEmpty else { return "" }
+        return "<span class=\"loc\">\(baselineChip)\(candidateChip)\(opChip)</span>"
     }
 
     /// intended (declared feature behavior) / collateral (gating, suspected regression) / advisory —
