@@ -130,20 +130,29 @@ public enum DispatchSeam {
     /// rather than through the block. Keyed by enqueue order per recorder: dispatch delivers a serial
     /// queue's blocks in the order they were enqueued, and a concurrent queue's causes are
     /// interchangeable only in the sense that any of them is a true edge from the same call.
-    private nonisolated(unsafe) static var stashedCauses: [ObjectIdentifier: [Int?]] = [:]
-
-    static func stashSpawnCause(_ cause: Int?, for recorder: TraceRecorder) {
-        lock.lock(); defer { lock.unlock() }
-        stashedCauses[ObjectIdentifier(recorder), default: []].append(cause)
+    struct EnqueueContext {
+        /// The traced call that enqueued the block — its happens-before cause.
+        let cause: Int?
+        /// The declared op the enqueue ran under — what the block's events are attributed to.
+        let op: OpIdentity?
     }
 
-    static func takeSpawnCause(for recorder: TraceRecorder) -> Int? {
+    private nonisolated(unsafe) static var stashedContexts: [ObjectIdentifier: [EnqueueContext]] = [:]
+
+    static func stashEnqueueContext(_ context: EnqueueContext, for recorder: TraceRecorder) {
+        lock.lock(); defer { lock.unlock() }
+        stashedContexts[ObjectIdentifier(recorder), default: []].append(context)
+    }
+
+    static func takeEnqueueContext(for recorder: TraceRecorder) -> EnqueueContext {
         lock.lock(); defer { lock.unlock() }
         let key = ObjectIdentifier(recorder)
-        guard var queued = stashedCauses[key], queued.isEmpty == false else { return nil }
-        let cause = queued.removeFirst()
-        stashedCauses[key] = queued
-        return cause
+        guard var queued = stashedContexts[key], queued.isEmpty == false else {
+            return EnqueueContext(cause: nil, op: nil)
+        }
+        let context = queued.removeFirst()
+        stashedContexts[key] = queued
+        return context
     }
 
     /// Internal accessors the Swift-side overloads reach; the C entry points use `acquire`/`finish`.
@@ -190,8 +199,12 @@ public enum DispatchSeam {
 @_cdecl("haruspec_context_acquire")
 public func haruspecContextAcquire() -> UnsafeMutableRawPointer? {
     guard let recorder = DispatchSeam.acquire() else { return nil }
-    // The cause is read here, at the enqueue, and stashed against the recorder for the block to claim.
-    DispatchSeam.stashSpawnCause(recorder.enclosingCallSeq(), for: recorder)
+    // The cause and the op are read here, at the enqueue, and stashed against the recorder for the
+    // block to claim.
+    DispatchSeam.stashEnqueueContext(
+        DispatchSeam.EnqueueContext(cause: recorder.enclosingCallSeq(), op: TraceContext.activeOp),
+        for: recorder
+    )
     return Unmanaged.passRetained(recorder).toOpaque()
 }
 
@@ -203,9 +216,9 @@ public func haruspecContextRun(
     _ block: @convention(block) () -> Void
 ) {
     let recorder = Unmanaged<TraceRecorder>.fromOpaque(context).takeUnretainedValue()
-    let cause = DispatchSeam.takeSpawnCause(for: recorder)
+    let enqueue = DispatchSeam.takeEnqueueContext(for: recorder)
     DispatchSeam.markingQueueEntry {
-        TraceContext.withThreadRecorder(recorder, spawnedBy: cause) { block() }
+        TraceContext.withThreadRecorder(recorder, spawnedBy: enqueue.cause, op: enqueue.op) { block() }
     }
 }
 

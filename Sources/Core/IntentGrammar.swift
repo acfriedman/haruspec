@@ -160,12 +160,14 @@ struct DeclarationParser {
     enum Head {
         case event(WritableKeyPath<Intent, [Intent.EventChange]>, label: String)
         case value(label: String, fields: [String])
+        case move(Intent.DomainMove)
         case unmodifiable(String)
 
         var allowedModifiers: [String] {
             switch self {
-            case .event: ["when"]
-            case .value: ["to", "increases", "decreases", "within", "when"]
+            case .event: ["when", "only", "once", "after", "before"]
+            case .value: ["to", "increases", "decreases", "within", "when", "only"]
+            case .move: ["only"]
             case .unmodifiable: []
             }
         }
@@ -182,14 +184,26 @@ struct DeclarationParser {
         }
         switch head {
         case let .event(list, label):
-            intent[keyPath: list].append(Intent.EventChange(label, when: modifiers.conditions))
+            intent[keyPath: list].append(Intent.EventChange(
+                label,
+                when: modifiers.conditions,
+                scope: modifiers.scope,
+                position: modifiers.position
+            ))
         case let .value(label, fields):
             let fields: [String?] = fields.isEmpty ? [nil] : fields
             for field in fields {
-                intent.expectedValueChanges.append(
-                    Intent.ValueChange(label, field: field, relation: modifiers.relation, when: modifiers.conditions)
-                )
+                intent.expectedValueChanges.append(Intent.ValueChange(
+                    label,
+                    field: field,
+                    relation: modifiers.relation,
+                    when: modifiers.conditions,
+                    scope: modifiers.scope
+                ))
             }
+        case var .move(move):
+            move.scope = modifiers.scope
+            intent.expectedDomainMigrations.append(move)
         case .unmodifiable:
             break
         }
@@ -213,7 +227,7 @@ struct DeclarationParser {
         case "Omits":
             return try .event(\.expectedRemovedEvents, label: string())
         case "Reorders":
-            try intent.expectedReorders.append(contentsOf: strings())
+            try intent.expectedReorders.append(contentsOf: reorders())
         case "Changes":
             let label = try string()
             var fields: [String] = []
@@ -226,7 +240,7 @@ struct DeclarationParser {
             try expectLabel("orderingOf")
             try intent.expectedOrderingRelaxations.append(domain())
         case "Moves":
-            try intent.expectedDomainMigrations.append(move())
+            return try .move(move())
         default:
             throw error(
                 "\"\(name)\" is not a declaration",
@@ -236,70 +250,6 @@ struct DeclarationParser {
             )
         }
         return .unmodifiable(name)
-    }
-
-    /// `Moves("a", "b", from: X, to: Y)` or `Moves(everythingFrom: X, to: Y)`.
-    mutating func move() throws -> Intent.DomainMove {
-        skipSpaces()
-        if peek() != "\"" {
-            try expectLabel("everythingFrom")
-            let origin = try domain()
-            try expect(",")
-            try expectLabel("to")
-            return try Intent.DomainMove(from: origin, to: domain())
-        }
-        var labels = try [string()]
-        while consume(",") {
-            skipSpaces()
-            if peek() == "\"" {
-                try labels.append(string())
-            } else {
-                try expectLabel("from")
-                let origin = try domain()
-                try expect(",")
-                try expectLabel("to")
-                return try Intent.DomainMove(labels: labels, from: origin, to: domain())
-            }
-        }
-        throw error(
-            "Moves needs its domains",
-            hint: "Moves(\"Label\", from: .main, to: .ambient) — or Moves(everythingFrom:to:) "
-                + "for the explicit wholesale form"
-        )
-    }
-
-    /// `.main`, `.ambient`, `.queue("label")`, `.actor("Type")` — or `.actor(Type.self)`, so a
-    /// declaration pasted from Swift parses unchanged.
-    mutating func domain() throws -> DomainName {
-        try expect(".")
-        let name = try identifier(expected: "a domain")
-        switch name {
-        case "main": return .main
-        case "ambient": return .ambient
-        case "queue":
-            try expect("(")
-            let label = try string()
-            try expect(")")
-            return .queue(label)
-        case "actor":
-            try expect("(")
-            let type: String
-            skipSpaces()
-            if peek() == "\"" {
-                type = try string()
-            } else {
-                type = try identifier(expected: "an actor type")
-                try expect(".")
-                try expectLabel("self", colon: false)
-            }
-            try expect(")")
-            return .actor(type)
-        default:
-            throw error(
-                "\".\(name)\" is not a domain",
-                hint: "domains are .main, .ambient, .queue(\"label\"), and .actor(\"Type\")"
-            )
-        }
     }
 
     // MARK: - Tokens

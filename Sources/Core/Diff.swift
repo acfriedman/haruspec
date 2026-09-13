@@ -38,6 +38,11 @@ public struct Divergence: Codable, Sendable, Equatable {
     public var field: String?
     public var baselineValue: CanonicalValue?
     public var candidateValue: CanonicalValue?
+    /// The declared op the diverging event was recorded under, which an op-scoped declaration
+    /// (`.only(in:)`, `.once(per:)`) matches against; `nil` when the event carried none.
+    ///
+    /// The candidate's event when there is one (the side the change is on), else the baseline's.
+    public var op: OpIdentity?
     /// True when this divergence is reported but does not fail the verdict (a structural divergence
     /// under `structuralComparison == .advisory`).
     public var isAdvisory: Bool
@@ -61,6 +66,7 @@ public struct Divergence: Codable, Sendable, Equatable {
         field: String? = nil,
         baselineValue: CanonicalValue? = nil,
         candidateValue: CanonicalValue? = nil,
+        op: OpIdentity? = nil,
         isAdvisory: Bool = false,
         classification: DivergenceClass = .collateral
     ) {
@@ -74,6 +80,7 @@ public struct Divergence: Codable, Sendable, Equatable {
         self.field = field
         self.baselineValue = baselineValue
         self.candidateValue = candidateValue
+        self.op = op
         self.isAdvisory = isAdvisory
         self.classification = classification
     }
@@ -191,6 +198,17 @@ public enum BehavioralDiff {
         scratch.divergences.sort { lhs, rhs in
             (lhs.baselineSeq ?? lhs.candidateSeq ?? Int.max, lhs.candidateSeq ?? Int.max)
                 < (rhs.baselineSeq ?? rhs.candidateSeq ?? Int.max, rhs.candidateSeq ?? Int.max)
+        }
+
+        // Stamp each divergence with the op of the event it points at, at the one choke point every
+        // matcher's output passes through: the candidate's event when there is one (the side the
+        // change is on), else the baseline's.
+        let baselineOps = Dictionary(uniqueKeysWithValues: baseline.map { ($0.seq, $0.op) })
+        let candidateOps = Dictionary(uniqueKeysWithValues: candidate.map { ($0.seq, $0.op) })
+        for index in scratch.divergences.indices {
+            let divergence = scratch.divergences[index]
+            scratch.divergences[index].op = divergence.candidateSeq.flatMap { candidateOps[$0] ?? nil }
+                ?? divergence.baselineSeq.flatMap { baselineOps[$0] ?? nil }
         }
 
         // Only gating divergences decide the verdict (non-advisory, and — after an optional intent

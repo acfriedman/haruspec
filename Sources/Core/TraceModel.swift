@@ -50,6 +50,30 @@ public enum EventTier: String, Codable, Sendable {
     case semantic // observable product behavior (notifications, state, markers) — the durable contract
 }
 
+/// The declared op of a spec's ordering an event was recorded under: its label and its position in
+/// the sequence, so two applications of the same op stay distinguishable.
+///
+/// Bound by the runner around each op it drives and carried into work the op spawns the way the
+/// recorder itself is (task-local through Swift concurrency, thread-local through the GCD seam). So
+/// it is the *runner's* op, not anything the subject declares — honest for both sides of a diff by
+/// construction. An event recorded under no op — an end-state snapshot, or work that reached the
+/// recorder without its enqueue's context — carries none.
+public struct OpIdentity: Codable, Sendable, Hashable, CustomStringConvertible {
+    public var label: String
+    /// Zero-based index in the ordering the probe ran.
+    public var position: Int
+
+    public init(label: String, position: Int) {
+        self.label = label
+        self.position = position
+    }
+
+    /// `add (op 4)` — the label and the op's one-based place in the ordering.
+    public var description: String {
+        "\(label) (op \(position + 1))"
+    }
+}
+
 /// The **isolation context** an event was recorded on — run-stable and nominal.
 ///
 /// Not a thread. An OS thread is the wrong unit under Swift concurrency: one cooperative-pool thread
@@ -187,6 +211,9 @@ public struct TraceEvent: Sendable, Equatable {
     /// is both more meaningful and more stable than "what happened to be recorded a moment before".
     public var spawnedBy: Int?
 
+    /// The declared op this event was recorded under (see `OpIdentity`), or `nil` outside any op.
+    public var op: OpIdentity?
+
     public init(
         seq: Int,
         kind: EventKind,
@@ -197,7 +224,8 @@ public struct TraceEvent: Sendable, Equatable {
         durationTicks: Int64? = nil,
         depth: Int = 0,
         tier: EventTier = .structural,
-        spawnedBy: Int? = nil
+        spawnedBy: Int? = nil,
+        op: OpIdentity? = nil
     ) {
         self.seq = seq
         self.kind = kind
@@ -209,12 +237,13 @@ public struct TraceEvent: Sendable, Equatable {
         self.depth = depth
         self.tier = tier
         self.spawnedBy = spawnedBy
+        self.op = op
     }
 }
 
 extension TraceEvent: Codable {
     enum CodingKeys: String, CodingKey {
-        case seq, kind, label, domain, subject, payload, durationTicks, depth, tier, spawnedBy
+        case seq, kind, label, domain, subject, payload, durationTicks, depth, tier, spawnedBy, op
     }
 
     public init(from decoder: Decoder) throws {
@@ -229,6 +258,7 @@ extension TraceEvent: Codable {
         depth = try container.decodeIfPresent(Int.self, forKey: .depth) ?? 0
         tier = try container.decodeIfPresent(EventTier.self, forKey: .tier) ?? .structural
         spawnedBy = try container.decodeIfPresent(Int.self, forKey: .spawnedBy)
+        op = try container.decodeIfPresent(OpIdentity.self, forKey: .op)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -245,6 +275,7 @@ extension TraceEvent: Codable {
             try container.encode(tier, forKey: .tier)
         } // omit the default for clean JSON
         try container.encodeIfPresent(spawnedBy, forKey: .spawnedBy)
+        try container.encodeIfPresent(op, forKey: .op)
     }
 }
 

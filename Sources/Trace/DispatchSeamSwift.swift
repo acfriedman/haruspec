@@ -129,12 +129,16 @@ public extension DispatchSeam {
         _ operation: @escaping @Sendable () async -> Void
     ) -> @Sendable () async -> Void {
         guard let recorder = acquireForSwift() else { return operation }
-        // Read at the enqueue: this is the only moment both ends of the edge are in hand.
+        // Read at the enqueue: this is the only moment both ends of the edge are in hand — and the
+        // only moment the enqueueing op is.
         let cause = recorder.enclosingCallSeq()
+        let op = TraceContext.activeOp
         return {
             await TraceContext.$current.withValue(recorder) {
-                await TraceContext.$pendingSpawnCause.withValue(TraceContext.SpawnCause(cause)) {
-                    await operation()
+                await TraceContext.$currentOp.withValue(op) {
+                    await TraceContext.$pendingSpawnCause.withValue(TraceContext.SpawnCause(cause)) {
+                        await operation()
+                    }
                 }
             }
             finishForSwift()
@@ -147,9 +151,10 @@ public extension DispatchSeam {
     ) -> @Sendable () -> Void {
         guard let recorder = acquireForSwift() else { return work }
         let cause = recorder.enclosingCallSeq()
+        let op = TraceContext.activeOp
         return {
             markingQueueEntry(serial: serial) {
-                TraceContext.withThreadRecorder(recorder, spawnedBy: cause) { work() }
+                TraceContext.withThreadRecorder(recorder, spawnedBy: cause, op: op) { work() }
             }
             finishForSwift()
         }

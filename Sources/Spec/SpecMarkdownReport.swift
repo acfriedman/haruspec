@@ -316,9 +316,10 @@ public extension SpecVerdict {
         var lines = ["| Kind | Where | Detail |", "|---|---|---|"]
         for divergence in divergences.prefix(divergenceRowCap) {
             let advisory = divergence.isAdvisory ? " (advisory)" : ""
+            let op = divergence.op.map { " in \(tableCell($0.description))" } ?? ""
             lines.append(
                 "| `\(divergence.kind.rawValue)`\(advisory) "
-                    + "| `\(tableCell(divergence.label))` "
+                    + "| `\(tableCell(divergence.label))`\(op) "
                     + "| \(tableCell(divergence.detail)) |"
             )
         }

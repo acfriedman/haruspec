@@ -295,7 +295,8 @@ public final class TraceRecorder: @unchecked Sendable {
             payload: payload,
             depth: depth,
             tier: tier,
-            spawnedBy: TraceContext.consumePendingSpawnCause()
+            spawnedBy: TraceContext.consumePendingSpawnCause(),
+            op: TraceContext.activeOp
         ))
     }
 
@@ -315,7 +316,8 @@ public final class TraceRecorder: @unchecked Sendable {
             subject: symbolicIDLocked(subject),
             durationTicks: durationTicks,
             depth: depth,
-            spawnedBy: TraceContext.consumePendingSpawnCause()
+            spawnedBy: TraceContext.consumePendingSpawnCause(),
+            op: TraceContext.activeOp
         ))
     }
 

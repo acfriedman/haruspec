@@ -37,3 +37,7 @@ identifier_name:
     - Budget
     # The intent modifier's one spelling: `Changes(…).to(11363)` reads as the sentence it is.
     - to
+    # The spec's own noun for a declared operation (`Op<S>`, `op:<label>` boundaries, `OpIdentity`).
+    - op
+    # The argument label of `.only(in: "checkout")`, mirrored on `OpScope.only(in:)`.
+    - in

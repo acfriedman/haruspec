@@ -6,7 +6,7 @@ import Foundation
 
 extension Intent.EventChange: Codable {
     enum CodingKeys: String, CodingKey {
-        case label, conditions
+        case label, conditions, scope, position
     }
 
     /// A bare label decodes from a plain string — the unconditioned form's natural JSON.
@@ -18,25 +18,31 @@ extension Intent.EventChange: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         try self.init(
             container.decode(String.self, forKey: .label),
-            when: container.decodeIfPresent([InputCondition].self, forKey: .conditions) ?? []
+            when: container.decodeIfPresent([InputCondition].self, forKey: .conditions) ?? [],
+            scope: container.decodeIfPresent(OpScope.self, forKey: .scope),
+            position: container.decodeIfPresent(Position.self, forKey: .position)
         )
     }
 
     public func encode(to encoder: Encoder) throws {
-        if conditions.isEmpty {
+        if isBare {
             var container = encoder.singleValueContainer()
             try container.encode(label)
         } else {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(label, forKey: .label)
-            try container.encode(conditions, forKey: .conditions)
+            if !conditions.isEmpty {
+                try container.encode(conditions, forKey: .conditions)
+            }
+            try container.encodeIfPresent(scope, forKey: .scope)
+            try container.encodeIfPresent(position, forKey: .position)
         }
     }
 }
 
 extension Intent.ValueChange: Codable {
     enum CodingKeys: String, CodingKey {
-        case label, field, relation, conditions
+        case label, field, relation, conditions, scope
     }
 
     /// Only the label is required — a bare `{"label": "Receipt"}` is the wholesale form.
@@ -46,7 +52,8 @@ extension Intent.ValueChange: Codable {
             container.decode(String.self, forKey: .label),
             field: container.decodeIfPresent(String.self, forKey: .field),
             relation: container.decodeIfPresent(ValueRelation.self, forKey: .relation),
-            when: container.decodeIfPresent([InputCondition].self, forKey: .conditions) ?? []
+            when: container.decodeIfPresent([InputCondition].self, forKey: .conditions) ?? [],
+            scope: container.decodeIfPresent(OpScope.self, forKey: .scope)
         )
     }
 
@@ -57,6 +64,37 @@ extension Intent.ValueChange: Codable {
         try container.encodeIfPresent(relation, forKey: .relation)
         if !conditions.isEmpty {
             try container.encode(conditions, forKey: .conditions)
+        }
+        try container.encodeIfPresent(scope, forKey: .scope)
+    }
+}
+
+extension Intent.Reorder: Codable {
+    enum CodingKeys: String, CodingKey {
+        case label, position
+    }
+
+    /// A bare label decodes from a plain string — the undirected form's natural JSON.
+    public init(from decoder: Decoder) throws {
+        if let label = try? decoder.singleValueContainer().decode(String.self) {
+            self.init(label)
+            return
+        }
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            container.decode(String.self, forKey: .label),
+            position: container.decodeIfPresent(Position.self, forKey: .position)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        if let position {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(label, forKey: .label)
+            try container.encode(position, forKey: .position)
+        } else {
+            var container = encoder.singleValueContainer()
+            try container.encode(label)
         }
     }
 }
@@ -83,7 +121,7 @@ extension Intent: Codable {
         expectedOrderingAdditions = try container
             .decodeIfPresent([String].self, forKey: .expectedOrderingAdditions) ?? []
         expectedReorders = try container
-            .decodeIfPresent([String].self, forKey: .expectedReorders) ?? []
+            .decodeIfPresent([Reorder].self, forKey: .expectedReorders) ?? []
         expectedDomainMigrations = try container
             .decodeIfPresent([DomainMove].self, forKey: .expectedDomainMigrations) ?? []
         acceptedBlindSpots = try container

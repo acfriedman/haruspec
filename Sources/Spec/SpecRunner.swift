@@ -3,6 +3,15 @@ import HaruspecCore
 import HaruspecSeams
 import HaruspecTrace
 
+/// One differential run: the classified diff, the candidate's replay cassette (so the verdict can
+/// carry the coverage it was measured over), and the probe's evidence (so the sweep can re-match
+/// declarations against what the probe left behind).
+struct ProbeComparison {
+    var diff: TraceDiff
+    let candidateReplay: Cassette
+    let evidence: ProbeEvidence
+}
+
 /// The golden template and everything resolved off it (see `goldenSurface()`).
 private struct GoldenSurface<S> {
     let golden: CassetteData
@@ -45,7 +54,7 @@ public extension Spec {
                     cassette: cassette,
                     declaring: intent
                 )
-                sweep.observe(run.diff, ordering: order.map(\.label), inputs: cassette)
+                sweep.observe(run, ordering: order.map(\.label), inputs: cassette)
                 guard run.diff.isEquivalent else {
                     return await divergedLiveVerdict(
                         run: DivergedRun(
@@ -69,7 +78,7 @@ public extension Spec {
             cassette: golden,
             declaring: intent
         )
-        sweep.observe(representative.diff, ordering: operations.map(\.label), inputs: golden)
+        sweep.observe(representative, ordering: operations.map(\.label), inputs: golden)
         representative.diff = sweep.settle(representative.diff)
         let coverage = plannedCoverage(replay: representative.candidateReplay, domainHeld: true, plan: plan)
         return SpecVerdict(
@@ -181,10 +190,14 @@ public extension Spec {
         // answers before it may compare write timelines.
         recorder.declareMutationCapture((system as? MutationCapturing)?.mutationCapture ?? .none)
         // Task-locals are inherited across `await`, so binding once around the whole loop still
-        // reaches an operation that suspends — which is what lets an op drive an actor.
+        // reaches an operation that suspends — which is what lets an op drive an actor. The op
+        // identity is bound per operation, so every event — and every block or task the op spawns,
+        // which the seams carry it into — is attributed to the declared op that caused it.
         await TraceContext.$current.withValue(recorder) {
-            for operation in order {
-                await operation.action(system, context)
+            for (position, operation) in order.enumerated() {
+                await TraceContext.$currentOp.withValue(OpIdentity(label: operation.label, position: position)) {
+                    await operation.action(system, context)
+                }
             }
         }
         // Drain *after* the window, not inside it. Work the ops dispatched carries the recorder the
@@ -215,26 +228,31 @@ public extension Spec {
         return recorder.trace()
     }
 
-    /// One differential run, keeping the candidate's replay cassette so the verdict can carry the
-    /// coverage it was measured over. The diff is already intent-classified: with a declared intent the
-    /// loop must not stop on an intended-only divergence set, so classification lives here, not at exits.
+    /// One differential run. The diff is already intent-classified: with a declared intent the loop
+    /// must not stop on an intended-only divergence set, so classification lives here, not at exits.
     private func compare(
         make: (SeamContext) -> S,
         candidate: (SeamContext) -> S,
         order: [Op<S>],
         cassette: CassetteData,
         declaring intent: Intent
-    ) async -> (diff: TraceDiff, candidateReplay: Cassette) {
+    ) async -> ProbeComparison {
         let baseline = await capture(make: make, order: order, cassette: Cassette(replaying: cassette))
         let replay = Cassette(replaying: cassette)
         let candidateTrace = await capture(make: candidate, order: order, cassette: replay)
+        let evidence = ProbeEvidence(
+            inputs: cassette.tracks,
+            baseline: baseline,
+            candidate: candidateTrace,
+            tolerances: effectiveTolerances
+        )
         let diff = BehavioralDiff.compare(
             baseline: baseline,
             candidate: candidateTrace,
             tolerances: effectiveTolerances
         )
-        .classified(against: intent, inputs: cassette.tracks)
-        return (diff, replay)
+        .classified(against: intent, evidence: evidence)
+        return ProbeComparison(diff: diff, candidateReplay: replay, evidence: evidence)
     }
 
     private func diverges(

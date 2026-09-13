@@ -82,14 +82,19 @@ extension Spec {
             self.intent = intent
         }
 
-        mutating func observe(_ diff: TraceDiff, ordering: [String], inputs: CassetteData) {
+        /// The run's evidence is what the declarations re-match against, so the observation names the
+        /// declaration that actually absorbed each divergence.
+        mutating func observe(_ run: ProbeComparison, ordering: [String], inputs: CassetteData) {
+            let diff = run.diff
             unobservedAcross = unobservedAcross
                 .map { $0.intersection(diff.unobservedIntent) } ?? Set(diff.unobservedIntent)
             if intendedRepresentative == nil, diff.intendedCount > 0 {
                 intendedRepresentative = diff
             }
+            var evidence = run.evidence
+            evidence.divergences = diff.divergences
             for divergence in diff.divergences where divergence.classification == .intended {
-                for declaration in intent.declarationsMatching(divergence, inputs: inputs.tracks)
+                for declaration in intent.declarationsMatching(divergence, evidence: evidence)
                     where !observations.contains(where: { $0.declaration == declaration }) {
                     observations.append(IntentObservation(
                         declaration: declaration,

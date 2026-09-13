@@ -125,7 +125,7 @@ final class CombineSeamTests: XCTestCase {
     func testACancellableTimerRecordsTheDeclaredStrideNotAClockDifference() {
         let recorder = TraceRecorder(name: "timer-data", clock: ManualClock())
         let scheduler = TracedScheduler(wrapping: SlippingClockScheduler())
-        TraceContext.withThreadRecorder(recorder, spawnedBy: nil) {
+        TraceContext.withThreadRecorder(recorder, spawnedBy: nil, op: nil) {
             let base = scheduler.now
             _ = scheduler.schedule(
                 after: base.advanced(by: .milliseconds(300)),

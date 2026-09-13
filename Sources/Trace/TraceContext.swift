@@ -35,20 +35,43 @@ public enum TraceContext {
 
     private static let spawnKey = "com.haruspec.trace.spawnedBy"
 
+    /// The declared op the runner is driving (`OpIdentity`), bound around each op of a capture.
+    ///
+    /// Rides the same two bindings as the recorder: this task-local through Swift concurrency, and
+    /// the thread-local `withThreadRecorder` sets for a block the GCD seam carried across a hop.
+    @TaskLocal public static var currentOp: OpIdentity?
+
+    private static let opKey = "com.haruspec.trace.op"
+
+    /// The op in effect for an event recorded now — what every recording site stamps on its event.
+    public static var activeOp: OpIdentity? {
+        currentOp ?? Thread.current.threadDictionary[opKey] as? OpIdentity
+    }
+
     /// Binds `recorder` for the duration of `body` on *this thread only*, restoring whatever was there.
     /// Used by the GCD seam around each wrapped block.
     ///
     /// `spawnedBy` is the call that enqueued this work, carried from the enqueue site so the first
     /// event recorded inside claims it as its cause. Program order carries the rest of the block.
-    static func withThreadRecorder<T>(_ recorder: TraceRecorder, spawnedBy: Int?, _ body: () -> T) -> T {
+    /// `op` is the declared op the enqueue ran under, so the block's events are attributed to the
+    /// op that caused them rather than to whichever op the runner has moved on to.
+    static func withThreadRecorder<T>(
+        _ recorder: TraceRecorder,
+        spawnedBy: Int?,
+        op: OpIdentity?,
+        _ body: () -> T
+    ) -> T {
         let dictionary = Thread.current.threadDictionary
         let previousRecorder = dictionary[threadKey]
         let previousSpawn = dictionary[spawnKey]
+        let previousOp = dictionary[opKey]
         dictionary[threadKey] = recorder
         dictionary[spawnKey] = spawnedBy
+        dictionary[opKey] = op
         defer {
             dictionary[threadKey] = previousRecorder
             dictionary[spawnKey] = previousSpawn
+            dictionary[opKey] = previousOp
         }
         return body()
     }
