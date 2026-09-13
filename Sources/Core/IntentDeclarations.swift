@@ -10,6 +10,11 @@ import Foundation
 /// about a dead declaration names exactly the line to delete.
 struct IntentDeclaration: Sendable {
     let text: String
+    /// Whether the declaration is *about* this divergence — its kind, label, field, and the op it
+    /// is scoped to — before the modifiers that say what to expect there have their say.
+    ///
+    /// A head that matches while `matches` does not is a rejection: the author's own tripwire.
+    let headMatches: @Sendable (Divergence) -> Bool
     let matches: @Sendable (Divergence, ProbeEvidence) -> Bool
 }
 
@@ -31,8 +36,11 @@ extension Intent {
         // position modifier is checked where the event is.
         for event in expectedNewEvents {
             let text = "Emits(\(quoted(event.label)))\(event.modifiersText)"
-            atoms.append(IntentDeclaration(text: text) { divergence, evidence in
-                divergence.kind == .unexpectedEvent && divergence.label == event.label
+            let head: @Sendable (Divergence) -> Bool = {
+                $0.kind == .unexpectedEvent && $0.label == event.label && event.scope.isAbout($0)
+            }
+            atoms.append(IntentDeclaration(text: text, headMatches: head) { divergence, evidence in
+                head(divergence)
                     && event.modifiersHold(
                         for: divergence,
                         at: divergence.candidateSeq,
@@ -43,8 +51,11 @@ extension Intent {
         }
         for event in expectedRemovedEvents {
             let text = "Omits(\(quoted(event.label)))\(event.modifiersText)"
-            atoms.append(IntentDeclaration(text: text) { divergence, evidence in
-                divergence.kind == .missingEvent && divergence.label == event.label
+            let head: @Sendable (Divergence) -> Bool = {
+                $0.kind == .missingEvent && $0.label == event.label && event.scope.isAbout($0)
+            }
+            atoms.append(IntentDeclaration(text: text, headMatches: head) { divergence, evidence in
+                head(divergence)
                     && event.modifiersHold(
                         for: divergence,
                         at: divergence.baselineSeq,
@@ -58,10 +69,14 @@ extension Intent {
             ($0.label, $0.field ?? "") < ($1.label, $1.field ?? "")
         }
         for change in valueChanges {
-            atoms.append(IntentDeclaration(text: change.dslText) { divergence, evidence in
+            let head: @Sendable (Divergence) -> Bool = { divergence in
                 divergence.kind == .valueMismatch
                     && divergence.label == change.label
                     && change.field.map { Self.fieldMatches($0, divergence.field) } ?? true
+                    && change.scope.isAbout(divergence)
+            }
+            atoms.append(IntentDeclaration(text: change.dslText, headMatches: head) { divergence, evidence in
+                head(divergence)
                     && change.relation.map {
                         $0.holds(baseline: divergence.baselineValue, candidate: divergence.candidateValue)
                     } ?? true
@@ -70,25 +85,29 @@ extension Intent {
             })
         }
         for domain in expectedOrderingRelaxations {
-            atoms.append(IntentDeclaration(text: "Relaxes(orderingOf: \(domain.dslText))") { divergence, _ in
-                divergence.kind == .orderingRelaxed && domain.matches(divergence.fromDomain)
-            })
+            let head: @Sendable (Divergence) -> Bool = {
+                $0.kind == .orderingRelaxed && domain.matches($0.fromDomain)
+            }
+            let text = "Relaxes(orderingOf: \(domain.dslText))"
+            atoms.append(IntentDeclaration(text: text, headMatches: head) { divergence, _ in head(divergence) })
         }
         for label in expectedOrderingLosses {
-            atoms.append(IntentDeclaration(text: "Drops(synchronizationOf: \(quoted(label)))") { divergence, _ in
-                divergence.kind == .orderingLost && divergence.label == label
-            })
+            let head: @Sendable (Divergence) -> Bool = { $0.kind == .orderingLost && $0.label == label }
+            let text = "Drops(synchronizationOf: \(quoted(label)))"
+            atoms.append(IntentDeclaration(text: text, headMatches: head) { divergence, _ in head(divergence) })
         }
         for label in expectedOrderingAdditions {
-            atoms.append(IntentDeclaration(text: "Awaits(\(quoted(label)))") { divergence, _ in
-                divergence.kind == .orderingAdded && divergence.label == label
+            let head: @Sendable (Divergence) -> Bool = { $0.kind == .orderingAdded && $0.label == label }
+            atoms.append(IntentDeclaration(text: "Awaits(\(quoted(label)))", headMatches: head) { divergence, _ in
+                head(divergence)
             })
         }
         // A directed reorder is proved from both sides: the event sits on the declared side of the
         // anchor in the candidate and sat on the other side of it in the baseline.
         for reorder in expectedReorders {
-            atoms.append(IntentDeclaration(text: reorder.dslText) { divergence, evidence in
-                divergence.kind == .reordered && divergence.label == reorder.label
+            let head: @Sendable (Divergence) -> Bool = { $0.kind == .reordered && $0.label == reorder.label }
+            atoms.append(IntentDeclaration(text: reorder.dslText, headMatches: head) { divergence, evidence in
+                head(divergence)
                     && reorder.position.map {
                         $0.holds(at: divergence.candidateSeq, in: evidence.candidate)
                             && $0.inverted.holds(at: divergence.baselineSeq, in: evidence.baseline)
@@ -96,9 +115,13 @@ extension Intent {
             })
         }
         for move in expectedDomainMigrations {
-            atoms.append(IntentDeclaration(text: move.dslText) { divergence, evidence in
+            let head: @Sendable (Divergence) -> Bool = { divergence in
                 divergence.kind == .domainMigration
                     && move.matches(label: divergence.label, from: divergence.fromDomain, to: divergence.toDomain)
+                    && move.scope.isAbout(divergence)
+            }
+            atoms.append(IntentDeclaration(text: move.dslText, headMatches: head) { divergence, evidence in
+                head(divergence)
                     && move.scope.map { $0.holds(for: divergence, among: evidence.siblings(of: divergence)) } ?? true
             })
         }

@@ -154,6 +154,12 @@ final class OpScopedIntentTests: XCTestCase {
             classified.divergences.filter { $0.classification == .intended }.map(\.op),
             [add0]
         )
+        // The author's own tripwire fired: both rejected rows name the declaration that rejected them.
+        XCTAssertEqual(
+            classified.divergences.filter(\.isGating).map(\.rejectedBy),
+            [[#"Emits("RewardsDidUpdate").once(per: "add")"#], [#"Emits("RewardsDidUpdate").once(per: "add")"#]]
+        )
+        XCTAssertTrue(classified.divergences.filter { $0.classification == .intended }.allSatisfy(\.rejectedBy.isEmpty))
     }
 
     func testOncePerIsAlsoAScope() {

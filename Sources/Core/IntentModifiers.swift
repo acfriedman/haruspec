@@ -187,6 +187,17 @@ public enum OpScope: Sendable, Equatable, Codable {
     }
 }
 
+extension OpScope? {
+    /// Whether a declaration with this scope is *about* `divergence` at all: scoped to the op it
+    /// was recorded under, or unscoped.
+    ///
+    /// The scope names where the declaration applies; only the modifiers that say what to expect
+    /// there (`.once`'s count, a relation, a position, an input) can reject.
+    func isAbout(_ divergence: Divergence) -> Bool {
+        map { $0.op == divergence.op?.label } ?? true
+    }
+}
+
 /// Where a declared event sits relative to another, by label — `.after("CartDidChange")`: some
 /// event with that label precedes it.
 ///

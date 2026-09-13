@@ -49,6 +49,12 @@ public struct Divergence: Codable, Sendable, Equatable {
     /// Whether the change *declared* this divergence. Defaults to `.collateral`; the intent classifier
     /// promotes declared ones to `.intended`. Parity mode leaves everything `.collateral`.
     public var classification: DivergenceClass
+    /// The declarations (by DSL spelling) that named this divergence's kind and label but whose
+    /// modifier rejected it — a `.once(per:)` that saw two, an `.increases()` that saw a drop.
+    ///
+    /// Empty for an intended divergence and for a collateral one no declaration was about; a
+    /// non-empty list is the author's own tripwire firing, which the report names instead of offering a wider line.
+    public var rejectedBy: [String]
 
     /// A divergence gates the verdict iff it is neither advisory nor a declared, intended change.
     public var isGating: Bool {
@@ -68,7 +74,8 @@ public struct Divergence: Codable, Sendable, Equatable {
         candidateValue: CanonicalValue? = nil,
         op: OpIdentity? = nil,
         isAdvisory: Bool = false,
-        classification: DivergenceClass = .collateral
+        classification: DivergenceClass = .collateral,
+        rejectedBy: [String] = []
     ) {
         self.kind = kind
         self.label = label
@@ -83,6 +90,7 @@ public struct Divergence: Codable, Sendable, Equatable {
         self.op = op
         self.isAdvisory = isAdvisory
         self.classification = classification
+        self.rejectedBy = rejectedBy
     }
 }
 

@@ -33,10 +33,13 @@ public extension Divergence {
     /// numeric and moving the same way → `.increases()` / `.decreases()`; every case numeric →
     /// `.within(min ... max)` over the new values; otherwise the bare field. Other kinds have one
     /// spelling, offered once. Every kind is scoped `.only(in:)` when all its cases share an op.
+    ///
+    /// A divergence a declaration already rejected (`rejectedBy`) gets no offer: the only line that
+    /// would absorb it is wider than the one the author wrote, and that is theirs to choose.
     static func suggestedDeclarations(across divergences: [Divergence]) -> [String] {
         var order: [String] = []
         var groups: [String: [Divergence]] = [:]
-        for divergence in divergences where divergence.isGating {
+        for divergence in divergences where divergence.isGating && divergence.rejectedBy.isEmpty {
             let key = "\(divergence.kind.rawValue)|\(divergence.label)|\(divergence.field ?? "")"
             if groups[key] == nil {
                 order.append(key)

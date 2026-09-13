@@ -126,6 +126,78 @@ final class OpScopedIntentSpellingTests: XCTestCase {
         )
     }
 
+    // MARK: - Rejections
+
+    /// A declaration about the divergence whose modifier said no is recorded on it, and the offer
+    /// leaves that divergence out — the report names the tripwire instead of proposing to loosen it.
+    func testARejectedDivergenceNamesItsDeclarationAndGetsNoOffer() {
+        let intent = Intent {
+            Changes("Receipt", field: "total").increases()
+            Emits("RewardsDidUpdate").only(in: "add")
+        }
+        let dropped = Divergence(
+            kind: .valueMismatch,
+            label: "Receipt",
+            baselineSeq: 0,
+            candidateSeq: 0,
+            detail: "",
+            field: "total",
+            baselineValue: 100,
+            candidateValue: 90,
+            op: checkout
+        )
+        let elsewhere = Divergence(
+            kind: .unexpectedEvent,
+            label: "RewardsDidUpdate",
+            baselineSeq: nil,
+            candidateSeq: 1,
+            detail: "",
+            op: checkout
+        )
+        let unrelated = Divergence(
+            kind: .unexpectedEvent,
+            label: "Analytics.track",
+            baselineSeq: nil,
+            candidateSeq: 2,
+            detail: "",
+            op: checkout
+        )
+        let diff = TraceDiff(
+            verdict: .diverged,
+            baselineName: "b",
+            candidateName: "c",
+            divergences: [dropped, elsewhere, unrelated]
+        )
+        let classified = diff.classified(against: intent)
+
+        XCTAssertEqual(classified.divergences.map(\.rejectedBy), [
+            [#"Changes("Receipt", field: "total").increases()"#],
+            [],
+            []
+        ], "a declaration scoped to another op was never about the event under this one")
+        XCTAssertEqual(
+            Divergence.suggestedDeclarations(across: classified.divergences),
+            [#"Emits("RewardsDidUpdate").only(in: "checkout")"#, #"Emits("Analytics.track").only(in: "checkout")"#],
+            "the rejected value change gets no offer; the out-of-scope event and the undeclared one do"
+        )
+    }
+
+    func testRejectionsRoundTripThroughJSONAndAnEmptyListIsNotWritten() throws {
+        let rejected = Divergence(
+            kind: .unexpectedEvent,
+            label: "X",
+            baselineSeq: nil,
+            candidateSeq: 1,
+            detail: "",
+            rejectedBy: [#"Emits("X").only(in: "add")"#]
+        )
+        let plain = Divergence(kind: .unexpectedEvent, label: "Y", baselineSeq: nil, candidateSeq: 2, detail: "")
+        let data = try JSONEncoder().encode([rejected, plain])
+        XCTAssertEqual(try JSONDecoder().decode([Divergence].self, from: data), [rejected, plain])
+        let json = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertEqual(json.components(separatedBy: "rejectedBy").count - 1, 1)
+    }
+
     // MARK: - Merging
 
     func testMergingKeepsScopedFormsDistinct() {
