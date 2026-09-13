@@ -11,9 +11,9 @@ import Foundation
 struct IntentDeclaration: Sendable {
     let text: String
     /// Whether the declaration is *about* this divergence — its kind, label, field, and the op it
-    /// is scoped to — before the modifiers that say what to expect there (a relation, a count, a
-    /// position, an input) have their say. A head that matches while `matches` does not is a
-    /// rejection: the author's own tripwire.
+    /// is scoped to — before the modifiers that say what to expect there have their say.
+    ///
+    /// A head that matches while `matches` does not is a rejection: the author's own tripwire.
     let headMatches: @Sendable (Divergence) -> Bool
     let matches: @Sendable (Divergence, ProbeEvidence) -> Bool
 }
