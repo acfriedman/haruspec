@@ -115,6 +115,8 @@ public extension PlanSweep {
     /// names the declared specs — adds births and orphans from the catalog-vs-plans gap.
     ///
     /// - Parameters:
+    ///   - plans: Every committed plan keyed by its spec name; each lands in exactly one of the
+    ///     sweep's buckets (fresh, stale, or unreadable).
     ///   - census: Spec names the app's catalog declares; `nil` means no census ran, so births
     ///     and orphans cannot be judged and `censusAdvised` reports whether that matters.
     ///   - testSources: Repo-relative prefix under which spec declarations live. Without a

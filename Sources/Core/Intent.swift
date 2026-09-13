@@ -233,12 +233,25 @@ public struct Intent: Sendable, Equatable {
     /// The empty spec: nothing was declared, so every divergence stays collateral. This is parity mode.
     public static let none = Intent()
 
-    /// Does this spec declare `divergence` as an intended change, given what its probe left behind?
+    /// Returns whether this spec declares `divergence` as an intended change. A declared divergence
+    /// is reclassified as intended, so it discloses on the report instead of gating the verdict.
+    /// - Parameters:
+    ///   - divergence: One divergence of the comparison being classified.
+    ///   - evidence: What the probe left behind (seam inputs, both aligned event streams, the
+    ///     sibling divergences) for value, position, and cardinality modifiers to test; `.none`
+    ///     when the caller has no probe context, which lets only unmodified declarations match.
+    /// - Returns: `true` when some declaration's head matches and every modifier on it holds.
     public func declares(_ divergence: Divergence, evidence: ProbeEvidence = .none) -> Bool {
         declarations.contains { $0.matches(divergence, evidence) }
     }
 
-    /// `declares(_:evidence:)` with only the probe's seam inputs in hand.
+    /// Returns whether this spec declares `divergence` as an intended change, judging by the probe's
+    /// seam inputs alone. Callers that never see the aligned event streams need not build a `ProbeEvidence`.
+    /// - Parameters:
+    ///   - divergence: One divergence of the comparison being classified.
+    ///   - inputs: The seam inputs the probe ran with; `nil` means none were recorded, so
+    ///     `.when(_:is:)` conditions cannot hold.
+    /// - Returns: `true` when some declaration matches under that evidence alone.
     public func declares(_ divergence: Divergence, inputs: ProbeInputs?) -> Bool {
         declares(divergence, evidence: ProbeEvidence(inputs: inputs))
     }

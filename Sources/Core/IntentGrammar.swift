@@ -106,8 +106,16 @@ public enum IntentGrammar {
         intents[spec] = try intent(parsing: lines.joined(separator: "\n"), lineOffset: blockStart)
     }
 
-    /// Parses declaration lines (one per line; blank lines and `//` comments allowed) into an
-    /// `Intent`. `lineOffset` shifts error line numbers to the enclosing document's.
+    /// Parses declaration lines, one declaration per line, into an `Intent`. It is the text half of
+    /// the DSL, so a PR body round-trips to the same intent the Swift spelling builds.
+    /// - Parameters:
+    ///   - text: The block body; blank lines and `//` comments are skipped, every other line is one
+    ///     declaration.
+    ///   - lineOffset: Added to every reported line number so errors point into the enclosing
+    ///     document; zero for a standalone block.
+    /// - Returns: The intent all lines declare together, in declaration order.
+    /// - Throws: `IntentGrammarError` naming the line, its text, and a hint when a line does not
+    ///   parse or a modifier contradicts its declaration.
     public static func intent(parsing text: String, lineOffset: Int = 0) throws -> Intent {
         var intent = Intent()
         for (offset, line) in text.components(separatedBy: "\n").enumerated() {

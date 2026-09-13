@@ -20,8 +20,8 @@ public indirect enum CanonicalValue: Sendable, Equatable {
 // MARK: - Rendering
 
 public extension CanonicalValue {
-    /// A stable, key-sorted textual form. Used for human-readable diff messages and as an
-    /// exact-equality fallback. Not intended to be re-parsed — `Codable` handles serialization.
+    /// A stable, key-sorted textual form of the value. It exists for human-readable diff messages
+    /// and as an exact-equality fallback, never for re-parsing; `Codable` handles serialization.
     var canonicalString: String {
         switch self {
         case .null: return "null"
