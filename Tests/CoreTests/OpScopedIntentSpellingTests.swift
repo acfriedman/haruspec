@@ -129,8 +129,7 @@ final class OpScopedIntentSpellingTests: XCTestCase {
     // MARK: - Rejections
 
     /// A declaration about the divergence whose modifier said no is recorded on it, and the offer
-    /// leaves that divergence out: the only absorbing line is wider than the author's, so the
-    /// report names the tripwire instead of proposing to loosen it.
+    /// leaves that divergence out — the report names the tripwire instead of proposing to loosen it.
     func testARejectedDivergenceNamesItsDeclarationAndGetsNoOffer() {
         let intent = Intent {
             Changes("Receipt", field: "total").increases()
