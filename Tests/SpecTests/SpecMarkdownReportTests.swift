@@ -240,6 +240,31 @@ final class SpecMarkdownReportTests: XCTestCase {
         XCTAssertFalse(intent.declarationTexts.isEmpty)
     }
 
+    /// The author's own tripwire: a declaration that names the change but rejects what happened is
+    /// named as such, and the offer does not propose the wider line that would absorb it.
+    func testARejectingDeclarationIsNamedInsteadOfWidened() async {
+        let plan = await cart(system: makeGood).record()
+        let declared = Intent {
+            Emits("LoyaltyPointsEarned")
+            Changes("CheckoutCompleted", field: "total").to(-1)
+        }
+        let verdict = await cart(system: makeLoyaltyRoundBug).verify(replaying: plan, declaring: declared)
+        XCTAssertEqual(verdict.verdict, .diverged)
+        let rejected = verdict.diff.divergences.filter { $0.label == "CheckoutCompleted" && $0.isGating }
+        XCTAssertFalse(rejected.isEmpty)
+        XCTAssertTrue(rejected
+            .allSatisfy { $0.rejectedBy == [#"Changes("CheckoutCompleted", field: "total").to(-1)"#] })
+
+        let markdown = verdict.markdownReport()
+        XCTAssertTrue(markdown.contains("**Declared, but not as observed**"), markdown)
+        XCTAssertTrue(markdown.contains(#"`Changes("CheckoutCompleted", field: "total").to(-1)` rejected"#), markdown)
+        let offer = markdown.components(separatedBy: "```haruspec-intent").dropFirst().joined()
+        XCTAssertFalse(
+            offer.contains(#"Changes("CheckoutCompleted""#),
+            "no wider line is offered for the rejected rows: \(offer)"
+        )
+    }
+
     func testAnUnobservedDeclarationLeadsTheReport() async throws {
         let plan = await cart(system: makeGood).record()
         let verdict = await cart(system: makeRefactor)

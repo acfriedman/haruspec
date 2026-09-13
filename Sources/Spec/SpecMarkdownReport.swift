@@ -133,8 +133,45 @@ public extension SpecVerdict {
         }
         sections.append(contentsOf: failingCasesSection)
         sections.append(contentsOf: observationsSection)
-        sections.append(contentsOf: declarationOffer(for: failingCases?.gatingDivergences ?? gating))
+        let allGating = failingCases?.gatingDivergences ?? gating
+        sections.append(contentsOf: rejectedDeclarationsSection(for: allGating))
+        sections.append(contentsOf: declarationOffer(for: allGating))
         return sections
+    }
+
+    /// The author's own tripwires that fired: each declaration that named a gating divergence's
+    /// kind and label but rejected it, with how many divergences it rejected and the first one.
+    ///
+    /// Rendered before the offer, which leaves these divergences out — the only line that would
+    /// absorb them is wider than the one the author wrote, so the choice is theirs, not the report's.
+    private func rejectedDeclarationsSection(for gating: [Divergence]) -> [String] {
+        var order: [String] = []
+        var rejected: [String: [Divergence]] = [:]
+        for divergence in gating {
+            for declaration in divergence.rejectedBy {
+                if rejected[declaration] == nil {
+                    order.append(declaration)
+                }
+                rejected[declaration, default: []].append(divergence)
+            }
+        }
+        guard !order.isEmpty else {
+            return []
+        }
+        let lines = order.map { declaration -> String in
+            let cases = rejected[declaration] ?? []
+            let first = cases[0]
+            let count = cases.count == 1 ? "1 divergence" : "\(cases.count) divergences"
+            return "- `\(tableCell(declaration))` rejected \(count) — "
+                + "`\(tableCell(first.label))`\(opCell(first)): \(tableCell(first.detail))"
+        }
+        return ["""
+        **Declared, but not as observed** — these declarations name the change, but their modifier \
+        rejected what actually happened. That is the tripwire doing its job: fix the code, or widen \
+        the declaration on purpose. No wider line is offered for these.
+
+        \(lines.joined(separator: "\n"))
+        """]
     }
 
     /// How many failing cases the red rests on: the reported one is the most informative of them,

@@ -317,6 +317,9 @@ public extension TraceDiff {
     /// traces for `.after` / `.before`; without it no such declaration can match. The comparison's
     /// own divergences are supplied here, for `.once(per:)` to count against.
     ///
+    /// A collateral divergence some declaration was about but rejected keeps that declaration's
+    /// spelling in `rejectedBy`.
+    ///
     /// Also records `unobservedIntent`: the declarations that matched nothing *in this comparison*.
     /// For a single diff that is the finished fact; a sweep that compares many probes intersects the
     /// per-probe sets (a declaration is observed if any probe matched it) and overwrites the
@@ -328,13 +331,20 @@ public extension TraceDiff {
         var observed = Set<String>()
         let declarations = intent.declarations
         for index in result.divergences.indices {
+            let divergence = result.divergences[index]
             var matched = false
-            for declaration in declarations where declaration.matches(result.divergences[index], evidence) {
+            for declaration in declarations where declaration.matches(divergence, evidence) {
                 observed.insert(declaration.text)
                 matched = true
             }
             if matched {
                 result.divergences[index].classification = .intended
+            } else {
+                // A declaration about this divergence whose modifier said no: the author's own
+                // tripwire, named so the report can say which line fired rather than offer a wider one.
+                result.divergences[index].rejectedBy = declarations
+                    .filter { $0.headMatches(divergence) }
+                    .map(\.text)
             }
         }
         result.unobservedIntent = declarations.map(\.text).filter { !observed.contains($0) }

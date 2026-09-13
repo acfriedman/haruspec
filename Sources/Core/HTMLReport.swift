@@ -178,6 +178,8 @@ public enum HTML {
             valueDiff(field: field, baseline: baseline.canonicalString, candidate: candidate.canonicalString)
         } else {
             "<div class=\"detail\">\(esc(divergence.detail))</div>"
+                + (divergence.rejectedBy.isEmpty ? "" : "<div class=\"detail\">rejected by "
+                    + divergence.rejectedBy.map { "<code>\(esc($0))</code>" }.joined(separator: ", ") + "</div>")
         }
 
         return """

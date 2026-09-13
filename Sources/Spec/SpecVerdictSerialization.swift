@@ -42,8 +42,10 @@ public extension SpecVerdict {
     /// Version 6 added `failingCases` (every failing case a red walked after its first, the reported
     /// one being the richest) and `intentObservations` (where each declaration was first observed).
     /// Version 7 stamps every divergence with the declared op it was recorded under (`op`), which
-    /// an op-scoped declaration matches and a report names.
-    static let supportedSchemaVersion = 7
+    /// an op-scoped declaration matches and a report names. Version 8 records on a collateral
+    /// divergence which declarations rejected it (`rejectedBy`), so the report names the author's
+    /// own tripwire instead of offering a wider line.
+    static let supportedSchemaVersion = 8
 
     static func canonicalEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
