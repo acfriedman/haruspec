@@ -10,8 +10,10 @@ import Foundation
 /// about a dead declaration names exactly the line to delete.
 struct IntentDeclaration: Sendable {
     let text: String
-    /// Whether the declaration is *about* this divergence — its kind, label, and field — before
-    /// any modifier has its say. A head that matches while `matches` does not is a rejection.
+    /// Whether the declaration is *about* this divergence — its kind, label, field, and the op it
+    /// is scoped to — before the modifiers that say what to expect there (a relation, a count, a
+    /// position, an input) have their say. A head that matches while `matches` does not is a
+    /// rejection: the author's own tripwire.
     let headMatches: @Sendable (Divergence) -> Bool
     let matches: @Sendable (Divergence, ProbeEvidence) -> Bool
 }
@@ -34,7 +36,9 @@ extension Intent {
         // position modifier is checked where the event is.
         for event in expectedNewEvents {
             let text = "Emits(\(quoted(event.label)))\(event.modifiersText)"
-            let head: @Sendable (Divergence) -> Bool = { $0.kind == .unexpectedEvent && $0.label == event.label }
+            let head: @Sendable (Divergence) -> Bool = {
+                $0.kind == .unexpectedEvent && $0.label == event.label && event.scope.isAbout($0)
+            }
             atoms.append(IntentDeclaration(text: text, headMatches: head) { divergence, evidence in
                 head(divergence)
                     && event.modifiersHold(
@@ -47,7 +51,9 @@ extension Intent {
         }
         for event in expectedRemovedEvents {
             let text = "Omits(\(quoted(event.label)))\(event.modifiersText)"
-            let head: @Sendable (Divergence) -> Bool = { $0.kind == .missingEvent && $0.label == event.label }
+            let head: @Sendable (Divergence) -> Bool = {
+                $0.kind == .missingEvent && $0.label == event.label && event.scope.isAbout($0)
+            }
             atoms.append(IntentDeclaration(text: text, headMatches: head) { divergence, evidence in
                 head(divergence)
                     && event.modifiersHold(
@@ -67,6 +73,7 @@ extension Intent {
                 divergence.kind == .valueMismatch
                     && divergence.label == change.label
                     && change.field.map { Self.fieldMatches($0, divergence.field) } ?? true
+                    && change.scope.isAbout(divergence)
             }
             atoms.append(IntentDeclaration(text: change.dslText, headMatches: head) { divergence, evidence in
                 head(divergence)
@@ -111,6 +118,7 @@ extension Intent {
             let head: @Sendable (Divergence) -> Bool = { divergence in
                 divergence.kind == .domainMigration
                     && move.matches(label: divergence.label, from: divergence.fromDomain, to: divergence.toDomain)
+                    && move.scope.isAbout(divergence)
             }
             atoms.append(IntentDeclaration(text: move.dslText, headMatches: head) { divergence, evidence in
                 head(divergence)

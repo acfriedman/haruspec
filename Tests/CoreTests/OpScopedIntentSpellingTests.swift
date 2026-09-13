@@ -172,13 +172,13 @@ final class OpScopedIntentSpellingTests: XCTestCase {
 
         XCTAssertEqual(classified.divergences.map(\.rejectedBy), [
             [#"Changes("Receipt", field: "total").increases()"#],
-            [#"Emits("RewardsDidUpdate").only(in: "add")"#],
+            [],
             []
-        ])
+        ], "a declaration scoped to another op was never about the event under this one")
         XCTAssertEqual(
             Divergence.suggestedDeclarations(across: classified.divergences),
-            [#"Emits("Analytics.track").only(in: "checkout")"#],
-            "only the divergence nobody declared gets an offer"
+            [#"Emits("RewardsDidUpdate").only(in: "checkout")"#, #"Emits("Analytics.track").only(in: "checkout")"#],
+            "the rejected value change gets no offer; the out-of-scope event and the undeclared one do"
         )
     }
 
