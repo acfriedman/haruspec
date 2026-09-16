@@ -192,8 +192,14 @@ public struct SpecCatalog {
         try verdict.check(in: String(migrationCase.prefix { $0 != "/" }))
     }
 
-    /// The continuous twin of `check(migrationCase:)`: run the side the environment selects, print
-    /// the verdict, and throw unless it held.
+    /// Runs the continuous side of `spec` the environment selects, prints the verdict, and throws
+    /// unless it held. The continuous twin of ``check(migrationCase:)``.
+    ///
+    /// - Parameters:
+    ///   - spec: The spec's name.
+    ///   - environment: Where the side selection is read from; the process environment by default.
+    /// - Throws: `CheckFailure` when `spec` is not declared or the selected side did not hold, carrying
+    ///   the summary the console printed.
     public func checkContinuous(
         spec: String,
         environment: [String: String] = ProcessInfo.processInfo.environment

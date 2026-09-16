@@ -94,17 +94,18 @@ public struct Divergence: Codable, Sendable, Equatable {
     }
 }
 
-/// The oracle's verdict: does the new behavior trace match the old within declared tolerances?
+/// The oracle's verdict on whether the candidate's behavior trace matches the baseline's within the
+/// declared tolerances. It carries every divergence found, so a failing verdict is its own report.
 public struct TraceDiff: Codable, Sendable, Equatable {
-    /// Four-tier by design (see `VerificationResult`): a pure trace comparison only ever *produces*
-    /// `.equivalent` / `.diverged` — `BehavioralDiff.compare` never emits `.cannotVerify`, because a
-    /// diff has no notion of coverage. `.cannotVerify` is the *resolved* verdict a `VerificationResult`
-    /// reaches when isolation was incomplete, so it downgrades an untrustworthy EQUIVALENT rather than
-    /// emit a false pass. `.unstable` is likewise resolved, one layer further out: identical replays
-    /// that disagree (`Spec.verify(replaying:)` runs the plan more than once) prove an unmodeled
-    /// nondeterministic axis, and neither of the disagreeing verdicts can be stood behind — a flapping
-    /// red presented as red would be a coin flip wearing a verdict. The cases live here so every layer
-    /// speaks one verdict vocabulary.
+    /// The four verdict tiers, kept in one place so every layer speaks one vocabulary. A pure trace
+    /// comparison only ever produces `.equivalent` or `.diverged`; `.cannotVerify` and `.unstable`
+    /// are resolved further out, where coverage and repeated replays are known.
+    ///
+    /// `.cannotVerify` is what a `VerificationResult` reaches when isolation was incomplete: it
+    /// downgrades an untrustworthy EQUIVALENT rather than emit a false pass. `.unstable` is one layer
+    /// further out: identical replays that disagree (``Spec/verify(replaying:)`` runs the plan more than
+    /// once) prove an unmodeled nondeterministic axis, and neither disagreeing verdict can be stood
+    /// behind — a flapping red presented as red would be a coin flip wearing a verdict.
     public enum Verdict: String, Codable, Sendable { case equivalent, diverged, cannotVerify, unstable }
 
     public var verdict: Verdict
@@ -326,8 +327,16 @@ public enum BehavioralDiff {
         var detail: String
     }
 
-    /// Structural, tolerance-aware value comparison. Returns one mismatch per differing leaf path.
-    /// Internal rather than private: the projection's multiset matching uses it as its predicate.
+    /// Returns one mismatch per leaf path at which two canonical values differ beyond the tolerance.
+    /// Internal rather than private because the projection's multiset matching uses it as its predicate.
+    ///
+    /// - Parameters:
+    ///   - baseline: The recorded value.
+    ///   - candidate: The value compared against it.
+    ///   - path: The dotted route to `baseline` from the payload root.
+    ///   - spec: The tolerance in force.
+    /// - Returns: The mismatches, each at a path beneath `path`; empty when the values are equivalent,
+    ///   with numbers within `spec.numericEpsilon` counting as equal.
     static func valueDivergences(
         _ baseline: CanonicalValue,
         _ candidate: CanonicalValue,

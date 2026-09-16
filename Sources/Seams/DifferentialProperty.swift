@@ -1,11 +1,14 @@
 import Foundation
 import HaruspecCore
 
-/// A differential property over a golden cassette: run a baseline and a candidate "session" against the
-/// *same* generated cassette and diff them. The property is `baseline(x) ≡ candidate(x)` for every
-/// generated seam-vector `x`. Because both branches exist, the baseline *is* the oracle — a divergence
-/// on a generated input is a path-dependent difference the single golden cassette never exercised.
+/// A differential property over a golden cassette: baseline and candidate run against the *same*
+/// generated cassette and their traces are diffed. Because both branches exist, the baseline *is* the
+/// oracle, and a divergence on a generated input is a path-dependent difference the single golden
+/// cassette never exercised.
+///
+/// The property is `baseline(x) ≡ candidate(x)` for every generated seam vector `x`.
 public struct DifferentialProperty {
+    /// Which side of the differential a run is for.
     public enum Branch: Sendable { case baseline, candidate }
 
     /// The golden cassette: the seam skeleton + a domain sample. Its tracks are the generation template.

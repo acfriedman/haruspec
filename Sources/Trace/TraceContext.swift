@@ -113,9 +113,17 @@ public enum TraceContext {
 /// Explicit, ambient-aware hooks for the few things a body macro can't infer from a signature:
 /// timing regions and temporal markers. Each is a no-op when no capture is active.
 public enum Haruspec {
-    /// Measures a region as a signpost interval, recording to the ambient recorder if present.
-    /// `isolation` is forwarded rather than defaulted again inside, so the domain resolves to the
-    /// *app's* call site — defaulting it here would resolve every interval to this file's context.
+    /// Measures `body` as a signpost interval on the ambient recorder, or just runs it when no capture
+    /// is active. `isolation` is taken at the caller so the interval's domain resolves to the *app's*
+    /// call site, not this file's.
+    ///
+    /// - Parameters:
+    ///   - label: The interval's event label.
+    ///   - subject: The instance the region belongs to; `nil` for none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
+    ///   - body: The region to measure.
+    /// - Returns: Whatever `body` returned.
+    /// - Throws: Whatever `body` threw; a region that throws records no interval.
     @discardableResult
     public static func interval<T>(
         _ label: String,

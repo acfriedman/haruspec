@@ -95,9 +95,9 @@ public struct Coverage: Codable, Sendable, Equatable {
         declared.isEmpty ? nil : Double(exercised.count) / Double(declared.count)
     }
 
-    /// The fraction of the declared surface exercised over a value *domain* (property gen), not merely at
-    /// a single point — `nil` when the surface is unknown. A single cassette reports 0 here; property-based
-    /// breadth raises it. Distinct from `fraction`, which is boundary/isolation coverage.
+    /// The fraction of the declared surface exercised over a generated value domain rather than at a
+    /// single recorded point, or `nil` when the surface is unknown. A single cassette reports 0 here
+    /// and property-based breadth raises it, while `fraction` stays the boundary/isolation number.
     public var domainFraction: Double? {
         declared.isEmpty ? nil : Double(domainExercised.count) / Double(declared.count)
     }
@@ -122,14 +122,16 @@ public struct Coverage: Codable, Sendable, Equatable {
         gaps.filter { $0.reason == .bypassedChannel || $0.reason == .unauditableSource }
     }
 
-    /// Can an `EQUIVALENT` diff be *trusted* over this coverage? Only when the surface is known, no
-    /// boundary fell back to live, and nothing the audit ran over left the captured surface. v1 hard
-    /// rule: unrecorded reach downgrades to `CANNOT-VERIFY`; a low but gap-free fraction is reported,
-    /// not gated. An unknown surface (no registry) is never trusted.
+    /// Whether an `EQUIVALENT` diff can be trusted over this coverage: the surface is known, no
+    /// boundary fell back to live, no declared domain went unmatched, and the audit found no blind
+    /// spot. Any such gap downgrades the verdict to `CANNOT-VERIFY`, whereas a low but gap-free
+    /// fraction is reported, not gated.
     public var trustsEquivalent: Bool {
         !declared.isEmpty && unrecordedReach.isEmpty && unmatchedDomains.isEmpty && blindSpots.isEmpty
     }
 
+    /// Creates the coverage of an unknown surface: nothing declared, exercised, or gapped. It never
+    /// trusts an `EQUIVALENT` verdict, since an empty `declared` is how the model spells "no registry".
     public init() {
         declared = []
         exercised = []

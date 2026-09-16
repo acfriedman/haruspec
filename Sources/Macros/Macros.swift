@@ -10,15 +10,19 @@
 
 import HaruspecTrace
 
-/// Instruments every instance method of a class (or actor) with entry/exit trace capture.
+/// Instruments every instance method of a class (or actor) with entry/exit trace capture. The
+/// generated bodies record to the ambient ``TraceContext/current``, so the type needs no recorder
+/// property and is inert outside a capture window.
 ///
-/// Pass a stable label to decouple the trace from the concrete type name — useful when the same
-/// logical type is captured before/after a rename, or across variants:
+/// - Parameters:
+///   - typeLabel: The stable label its events carry, as `"<typeLabel>.<method>"`; `nil` uses the
+///     type's own name. Pass one to keep a trace comparable across a rename or between variants.
+///   - timing: `true` also records a signpost interval for *every* method; for per-method timing
+///     use `@Timed` instead.
+///
+/// A labeled variant reads:
 ///
 ///     @Traced("CartService") final class CartServiceV2 { ... }
-///
-/// With no argument the type's own name is used. Pass `timing: true` to also record a signpost
-/// interval for *every* method; for per-method timing use `@Timed` instead.
 ///
 /// **Safe on code that ships.** The instrumentation is emitted inside `#if DEBUG`; a release build
 /// keeps each method's own statements verbatim — no shim, no recorder lookup, nothing to strip. So
@@ -75,15 +79,14 @@ public macro Traced(_ typeLabel: String? = nil, timing: Bool = false) =
 public macro TracedDouble(label: String, as generatedName: String? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedDoubleMacro")
 
-/// Instruments a single method with entry/exit trace capture. Normally applied automatically by
-/// `@Traced`; usable directly for selective instrumentation. The argument is the stable type label
-/// used to build the event name `"<typeLabel>.<method>"`. Pass `timed: true` to also record the
-/// method's duration as a signpost interval.
+/// Instruments a single method with entry/exit trace capture. `@Traced` applies it to every method
+/// automatically; apply it by hand for selective instrumentation.
 ///
-/// `declaredBy` names the concrete type the method belongs to, which the *label* deliberately doesn't:
-/// with it and the expansion's own file, the body registers a `TraceOrigin` when it runs, so a verdict
-/// can say which sources its covered labels came from. `@Traced` fills it in; a hand-written
-/// `@TracedMethod` may leave it off and lose only the type half of that line.
+/// - Parameters:
+///   - typeLabel: The stable type label the event name is built from, as `"<typeLabel>.<method>"`.
+///   - timed: `true` also records the method's duration as a signpost interval.
+///   - declaredBy: The concrete type the method belongs to, which the *label* deliberately does not
+///     name; `nil` records the method's origin without its type. `@Traced` fills it in.
 @attached(body)
 public macro TracedMethod(_ typeLabel: String, timed: Bool = false, declaredBy: String? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "TracedMethodMacro")

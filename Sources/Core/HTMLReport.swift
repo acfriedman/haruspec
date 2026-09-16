@@ -223,8 +223,14 @@ public enum HTML {
         return "<span class=\"loc\">\(baselineChip)\(candidateChip)\(opChip)</span>"
     }
 
-    /// intended (declared feature behavior) / collateral (gating, suspected regression) / advisory —
-    /// mirrors the `(intended)` / `(collateral)` / `(advisory)` tags in `bodyLines()`.
+    /// Returns the badge for a divergence's classification, mirroring the `(intended)` /
+    /// `(collateral)` / `(advisory)` tags ``bodyLines()`` prints.
+    ///
+    /// - Parameters:
+    ///   - divergence: The divergence being rendered.
+    ///   - intentInPlay: Whether any intent was declared for the comparison.
+    /// - Returns: A `<span class="badge …">` element, or an empty string for a collateral divergence
+    ///   with no declared intent to contrast it against.
     private static func classificationBadge(_ divergence: Divergence, intentInPlay: Bool) -> String {
         if divergence.classification == .intended {
             return "<span class=\"badge intended\">intended</span>"

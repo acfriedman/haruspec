@@ -1,7 +1,9 @@
 import Foundation
 
 public extension TraceDiff {
-    /// A compact, human-readable rendering of the verdict — what the CLI and CI logs print.
+    /// Returns the compact, human-readable rendering of the verdict that the CLI and CI logs print.
+    ///
+    /// - Returns: The banner line followed by the body lines, newline-joined, with no trailing newline.
     func report() -> String {
         ([bannerLine] + bodyLines()).joined(separator: "\n")
     }

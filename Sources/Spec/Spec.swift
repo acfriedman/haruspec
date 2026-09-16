@@ -380,7 +380,11 @@ public struct Spec<S> {
     // inherently isolated; pointing this at a process-wide center under a *parallel* test runner can let a
     // sibling capture's posts leak in (prefer injecting the context center, or serialize the suite).
 
-    /// Declared acceptable deltas.
+    /// Returns a copy of the spec whose captures are diffed under `spec` instead of strict parity.
+    ///
+    /// - Parameter spec: The deltas the diff accepts.
+    /// - Returns: The spec with `spec` as its whole tolerance, any earlier one replaced; the receiver
+    ///   is unchanged.
     public func tolerate(_ spec: Tolerance) -> Spec<S> {
         var copy = self; copy.tolerances = spec; return copy
     }

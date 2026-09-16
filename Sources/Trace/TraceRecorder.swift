@@ -61,7 +61,14 @@ public final class TraceRecorder: @unchecked Sendable {
         origins?.note(TraceOrigin(label: label, symbol: symbol, source: source))
     }
 
-    /// Records a function/method entry. Increments call-nesting depth.
+    /// Records a function or method entry and deepens call nesting by one. Every `call` expects a
+    /// matching `ret`; the pairing is what turns the flat event list back into a call tree.
+    ///
+    /// - Parameters:
+    ///   - label: The event label, as `"<type>.<method>"`.
+    ///   - subject: The instance the call was made on; `nil` for a static or free function.
+    ///   - args: The arguments, canonicalized and keyed by internal parameter name; `nil` records none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
     public func call(
         _ label: String,
         subject: AnyObject? = nil,
@@ -73,7 +80,14 @@ public final class TraceRecorder: @unchecked Sendable {
         depth += 1
     }
 
-    /// Records a function/method return. Decrements call-nesting depth first.
+    /// Records a function or method return and shallows call nesting by one, never below zero. The
+    /// counterpart of `call`; an unmatched return is tolerated rather than trapped.
+    ///
+    /// - Parameters:
+    ///   - label: The event label, matching the `call` it closes.
+    ///   - subject: The instance the call was made on; `nil` for a static or free function.
+    ///   - value: The return value, canonicalized; `nil` for `Void` or a value not recorded.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
     public func ret(
         _ label: String,
         subject: AnyObject? = nil,
