@@ -17,19 +17,25 @@ public enum SeamDomain: Sendable {
     /// values are named rather than ranged (a promo code that is sometimes valid, a status string,
     /// an enum's raw values). Prefer the `oneOf` sugar below, which rejects an empty set.
     case anyOf([CanonicalValue])
-    /// A decade-stratified span — the domain for a value *nothing* was declared about, so the
-    /// interesting magnitudes are unknown and every decade is a hypothesis. Boundary values ladder
-    /// the magnitude transitions (`0, ±1, ±9/10/11, ±99/100/101, …`) where off-by-one and
-    /// digit-rollover bugs live, and random fill is log-uniform — a decade first, then a value
-    /// within it — so small values arrive as often as large ones (uniform over a wide span almost
-    /// never draws the smalls, which is where code actually branches). Distinct from `.int` on
-    /// purpose: an authored range is a declared judgment about which values matter, and it keeps
-    /// its author's edge schedule.
+    /// A decade-stratified span, the domain for a value *nothing* was declared about, where the
+    /// interesting magnitudes are unknown and every decade is a hypothesis. Distinct from `.int` on
+    /// purpose: an authored range is a declared judgment about which values matter, and it keeps its
+    /// author's edge schedule.
+    ///
+    /// Boundary values ladder the magnitude transitions (`0, ±1, ±9/10/11, ±99/100/101, …`) where
+    /// off-by-one and digit-rollover bugs live, and random fill is log-uniform, a decade first and
+    /// then a value within it, so small values arrive as often as large ones. Uniform over a wide
+    /// span almost never draws the smalls, which is where code actually branches.
     case intMagnitudes(ClosedRange<Int64>)
     /// The floating-point counterpart: decades extend *below* one (`±0.001 …`) because fractional
     /// magnitudes — rates, factors — are where doubles branch.
     case doubleMagnitudes(ClosedRange<Double>)
 
+    /// Draws one reading from the domain.
+    ///
+    /// - Parameter rng: The generator to draw from, advanced by the draw.
+    /// - Returns: A value of the domain's kind, or `.null` for a hand-built empty `.anyOf`, which has
+    ///   nothing to vary.
     func sample(using rng: inout SplitMix64) -> CanonicalValue {
         switch self {
         case let .int(range): .int(Int64.random(in: range, using: &rng))
@@ -44,8 +50,13 @@ public enum SeamDomain: Sendable {
         }
     }
 
-    /// Log-uniform integer draw: decade first (0–9 counts as the first), then uniform within it,
-    /// sign uniform where the range admits one, clamped into the range.
+    /// Returns a log-uniform integer draw: a decade first, with 0–9 as the first decade, then uniform
+    /// within it, the sign uniform where the range admits one.
+    ///
+    /// - Parameters:
+    ///   - range: The span to draw within; the draw is clamped into it.
+    ///   - rng: The generator to draw from, advanced by the draw.
+    /// - Returns: A value in `range`.
     private static func logUniform(in range: ClosedRange<Int64>, using rng: inout SplitMix64) -> Int64 {
         let limit = Swift.max(range.upperBound, -range.lowerBound)
         var decadeFloors: [Int64] = [0]
@@ -64,8 +75,14 @@ public enum SeamDomain: Sendable {
         return Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
     }
 
-    /// Log-uniform double draw over `smallestMagnitude … span`, sign uniform where admitted. Zero
-    /// arrives via the boundary schedule, not the fill.
+    /// Returns a log-uniform double draw between ``smallestDoubleMagnitude`` and the span's largest
+    /// magnitude, the sign uniform where the range admits one. Zero arrives via the boundary
+    /// schedule, not the fill.
+    ///
+    /// - Parameters:
+    ///   - range: The span to draw within; the draw is clamped into it.
+    ///   - rng: The generator to draw from, advanced by the draw.
+    /// - Returns: A value in `range`.
     private static func logUniform(in range: ClosedRange<Double>, using rng: inout SplitMix64) -> Double {
         let limit = Swift.max(range.upperBound, -range.lowerBound)
         let exponent = Double.random(
@@ -210,22 +227,44 @@ public extension SeamDomain {
         }
     }
 
-    /// Varies over a named set. Empty traps at construction rather than silently varying nothing —
-    /// a seam declared with no values would report domain coverage it never had.
+    /// Returns the domain varying over a named set of strings. An empty set traps at construction
+    /// rather than silently varying nothing, since a seam declared with no values would report
+    /// domain coverage it never had.
+    ///
+    /// - Parameter values: The strings to choose among; first and last are the domain's ends.
+    /// - Returns: An `.anyOf` over `values`, in the order given.
+    /// - Precondition: `values` is non-empty.
     static func oneOf(_ values: [String]) -> SeamDomain {
         precondition(!values.isEmpty, "oneOf needs at least one value to vary over")
         return .anyOf(values.map(CanonicalValue.string))
     }
 
+    /// The variadic spelling of the string set, so `.oneOf("SAVE10", "NOPE")` reads as the list it is.
+    ///
+    /// - Parameter values: The strings to choose among, at least one.
+    /// - Returns: An `.anyOf` over `values`, in the order given.
+    /// - Precondition: At least one value is given.
     static func oneOf(_ values: String...) -> SeamDomain {
         oneOf(values)
     }
 
+    /// Returns the domain varying over a named set of integers. An empty set traps at construction
+    /// rather than silently varying nothing, since a seam declared with no values would report
+    /// domain coverage it never had.
+    ///
+    /// - Parameter values: The integers to choose among; first and last are the domain's ends.
+    /// - Returns: An `.anyOf` over `values`, in the order given.
+    /// - Precondition: `values` is non-empty.
     static func oneOf(_ values: [Int64]) -> SeamDomain {
         precondition(!values.isEmpty, "oneOf needs at least one value to vary over")
         return .anyOf(values.map(CanonicalValue.int))
     }
 
+    /// The variadic spelling of the integer set, so `.oneOf(0, 1, 99)` reads as the list it is.
+    ///
+    /// - Parameter values: The integers to choose among, at least one.
+    /// - Returns: An `.anyOf` over `values`, in the order given.
+    /// - Precondition: At least one value is given.
     static func oneOf(_ values: Int64...) -> SeamDomain {
         oneOf(values)
     }
