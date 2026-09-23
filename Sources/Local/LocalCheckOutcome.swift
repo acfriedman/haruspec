@@ -10,6 +10,9 @@ public struct LocalCheckOutcome: Sendable {
         /// The replay produced a verdict, written to `artifact`; `otherFailures` is the log of a test
         /// run in which tests outside this verdict also failed, such as a campaign suite.
         case verdict(SpecVerdict, artifact: URL, otherFailures: URL?)
+        /// The change touches none of the files the spec's recording at `recordedAt` executed, so it
+        /// was not replayed.
+        case untouched(recordedAt: String)
         /// The merge base does not declare the spec, so there is nothing to compare it with yet.
         case noBaseline
         /// Recording or replaying failed before a verdict existed; `log` holds the build output.
@@ -36,8 +39,12 @@ public struct LocalCheckOutcome: Sendable {
     public let uncommitted: Bool
     /// One entry per checked spec, in check order.
     public let entries: [Entry]
-    /// Specs the intent doc declares that this check did not replay — a typo or a stale section.
+    /// Specs the intent doc declares that this check did not replay — untouched, a typo, or stale.
     public let undeclaredIntent: [String]
+    /// Replayed specs whose suite did not name itself, so the whole test target ran for them.
+    public let wholeTargetSpecs: [String]
+    /// Changed source files no spec's recording worked in, so no verdict speaks for them.
+    public let uncoveredChanges: [String]
     /// Repo-relative paths that differ from the merge base, which scope the report.
     public let changedFiles: [String]
     /// The repository root the verdicts' origins resolve against.
@@ -50,13 +57,13 @@ public struct LocalCheckOutcome: Sendable {
     /// The process exit code: the worst across specs, using the CLI's codes — 0 equivalent,
     /// 3 diverged, 4 cannot verify, 5 unstable, 6 declared intent not observed, 1 no verdict.
     ///
-    /// A spec with no baseline at the merge base does not fail the check.
+    /// A spec the change does not touch, or with no baseline at the merge base, does not fail the check.
     public var exitCode: Int32 {
         entries.map { entry -> Int32 in
             switch entry.result {
             case let .verdict(verdict, _, _):
                 Self.exitCode(for: verdict)
-            case .noBaseline:
+            case .untouched, .noBaseline:
                 0
             case .failed:
                 1
@@ -97,6 +104,17 @@ public struct LocalCheckOutcome: Sendable {
             sections.append(ContinuousReport(entries: verdicts, changed: Set(changedFiles)).text())
         }
         sections.append(contentsOf: missingVerdictLines)
+        sections.append(contentsOf: untouchedSection)
+        if !uncoveredChanges.isEmpty {
+            let shown = uncoveredChanges.prefix(10).map { "- \($0)" }
+            let more = uncoveredChanges.count > 10 ? ["- … and \(uncoveredChanges.count - 10) more"] : []
+            sections.append((["── Changed, but no spec exercises it — behavior here is unchecked ──"] + shown + more)
+                .joined(separator: "\n"))
+        }
+        sections.append(contentsOf: wholeTargetSpecs.map { spec in
+            "ℹ︎ \(spec): its suite does not name itself, so the whole test target ran for it — "
+                + "pass `in: Self.self` to `checkContinuous` to run only its suite"
+        })
         sections.append(contentsOf: offers)
         sections.append("run: \(runDirectory.path)")
         return sections.joined(separator: "\n\n")
@@ -137,6 +155,8 @@ public struct LocalCheckOutcome: Sendable {
     private var missingVerdictLines: [String] {
         entries.compactMap { entry in
             switch entry.result {
+            case .untouched:
+                nil
             case let .verdict(_, _, otherFailures):
                 otherFailures.map { log in
                     "⚠︎ \(entry.spec): other tests failed in the same run (not part of this verdict — "
@@ -149,6 +169,24 @@ public struct LocalCheckOutcome: Sendable {
                 "✗ \(entry.spec): NO VERDICT — \(reason)" + (log.map { "\n  log: \($0.path)" } ?? "")
             }
         }
+    }
+
+    /// The specs outside this change's slice, in one block, or nothing when every spec replayed.
+    private var untouchedSection: [String] {
+        let untouched = entries.compactMap { entry -> String? in
+            guard case let .untouched(recordedAt) = entry.result else {
+                return nil
+            }
+            let source = recordedAt == baseSHA ? "" : " (coverage recorded at \(recordedAt.prefix(7)))"
+            return "- \(entry.spec)\(source)"
+        }
+        guard !untouched.isEmpty else {
+            return []
+        }
+        let lead = entries.count == untouched.count
+            ? "── Nothing to replay: the change touches no file a spec's recording executed ──"
+            : "── Not replayed: untouched by this change ──"
+        return [([lead] + untouched + ["(`haruspec check --all` replays them anyway)"]).joined(separator: "\n")]
     }
 
     /// For every red spec with offered declarations: the command that declares them.

@@ -6,11 +6,28 @@ import HaruspecLocal
 // intent subcommands edit the branch's intent doc under `.haruspec/intent/`. The logic lives in
 // HaruspecLocal, shared with the MCP server; this file parses flags and prints.
 
+/// Opts the repository in: writes the launcher and, when missing, a detected configuration.
+///
+/// - Parameter rest: The arguments after `init`: optionally `--root <dir>`.
+func runInit(_ rest: [String]) -> Never {
+    let (flags, _) = parse(rest)
+    do {
+        try LocalSetup.initialize(at: rootURL(flags)).forEach { print($0) }
+        exit(ExitCode.success.rawValue)
+    } catch let error as LocalCheckError {
+        fail(error.description, code: .runtime)
+    } catch {
+        fail("init failed: \(error)", code: .runtime)
+    }
+}
+
 /// Runs the local check and exits with its worst verdict code.
 ///
-/// - Parameter rest: The arguments after `check`: `--base`, `--spec`, `--intent`, `--root`.
+/// - Parameter rest: The arguments after `check`: `--base`, `--spec`, `--intent`, `--root`, `--all`.
 func runCheck(_ rest: [String]) -> Never {
-    let (flags, positionals) = parse(rest)
+    // Stripped before parsing: `--all` is boolean, and the parser would read the next word as its value.
+    let all = rest.contains("--all")
+    let (flags, positionals) = parse(rest.filter { $0 != "--all" })
     guard positionals.isEmpty else {
         fail("check takes no positional arguments\n\n\(usage)", code: .usage)
     }
@@ -21,7 +38,8 @@ func runCheck(_ rest: [String]) -> Never {
         let options = LocalCheck.Options(
             base: nonEmpty(flags["base"]),
             specs: nonEmpty(flags["spec"]).map { $0.split(separator: ",").map(String.init) },
-            intentDocument: nonEmpty(flags["intent"]).map { URL(fileURLWithPath: $0) }
+            intentDocument: nonEmpty(flags["intent"]).map { URL(fileURLWithPath: $0) },
+            all: all
         )
         let outcome = try check.run(options)
         print(outcome.report())

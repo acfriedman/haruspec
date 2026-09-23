@@ -27,7 +27,8 @@ extension MCPServer {
                     "properties": [
                         "root": rootProperty,
                         "base": ["type": "string", "description": "The branch to compare with"],
-                        "specs": ["type": "array", "items": ["type": "string"], "description": "Only these specs"]
+                        "specs": ["type": "array", "items": ["type": "string"], "description": "Only these specs"],
+                        "all": ["type": "boolean", "description": "Replay specs the change does not touch too"]
                     ]
                 ],
                 "annotations": ["readOnlyHint": false, "idempotentHint": true]
@@ -75,7 +76,11 @@ extension MCPServer {
             let check = try LocalCheck.at(root(args)) { line in
                 FileHandle.standardError.write(Data((line + "\n").utf8))
             }
-            let options = LocalCheck.Options(base: args["base"] as? String, specs: args["specs"] as? [String])
+            let options = LocalCheck.Options(
+                base: args["base"] as? String,
+                specs: args["specs"] as? [String],
+                all: args["all"] as? Bool ?? false
+            )
             let outcome = try check.run(options)
             let specs = outcome.entries.map { entry -> [String: Any] in
                 switch entry.result {
@@ -86,6 +91,8 @@ extension MCPServer {
                      "artifact": artifact.path,
                      "offeredDeclarations": verdict.offeredDeclarations,
                      "otherTestFailuresLog": otherFailures?.path ?? ""]
+                case let .untouched(recordedAt):
+                    ["spec": entry.spec, "verdict": "untouched", "coverageRecordedAt": recordedAt]
                 case .noBaseline:
                     ["spec": entry.spec, "verdict": "no-baseline"]
                 case let .failed(reason, log):

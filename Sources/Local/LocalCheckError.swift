@@ -18,6 +18,8 @@ public enum LocalCheckError: Error, Equatable, CustomStringConvertible {
     case unmirrorablePackage(String)
     /// The intent doc could not be read or edited as asked.
     case intentDocument(String)
+    /// A checkout does not build for testing; `log` holds the build output.
+    case buildFailed(String, log: String)
 
     public var description: String {
         switch self {
@@ -39,6 +41,8 @@ public enum LocalCheckError: Error, Equatable, CustomStringConvertible {
             reason
         case let .intentDocument(reason):
             reason
+        case let .buildFailed(what, log):
+            "\(what) does not build for testing — see \(log)"
         }
     }
 }

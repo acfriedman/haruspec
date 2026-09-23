@@ -25,6 +25,8 @@ final class LocalCheckOutcomeTests: XCTestCase {
             uncommitted: true,
             entries: entries,
             undeclaredIntent: ["serach"],
+            wholeTargetSpecs: ["search"],
+            uncoveredChanges: ["LegacyApp/App/AppDelegate.m"],
             changedFiles: [],
             repositoryRoot: URL(fileURLWithPath: "/repo"),
             intentDocument: nil,
@@ -66,6 +68,21 @@ final class LocalCheckOutcomeTests: XCTestCase {
         XCTAssertTrue(report.contains("cart: other tests failed in the same run"), report)
         XCTAssertTrue(report.contains("rewards: no baseline"), report)
         XCTAssertTrue(report.contains("search: NO VERDICT — recording the merge base failed"), report)
+        XCTAssertTrue(report.contains("search: its suite does not name itself"), report)
+    }
+
+    func testUntouchedSpecsAreListedAndNeverFail() {
+        let untouched = outcome([
+            .init(spec: "cart", result: .untouched(recordedAt: String(repeating: "a", count: 40))),
+            .init(spec: "search", result: .untouched(recordedAt: String(repeating: "c", count: 40)))
+        ])
+        XCTAssertEqual(untouched.exitCode, 0)
+        let report = untouched.report()
+        XCTAssertTrue(report.contains("Nothing to replay"), report)
+        XCTAssertTrue(report.contains("- cart\n"), "coverage from this base needs no note")
+        XCTAssertTrue(report.contains("- search (coverage recorded at ccccccc)"), report)
+        XCTAssertTrue(report.contains("no spec exercises it"), report)
+        XCTAssertTrue(report.contains("- LegacyApp/App/AppDelegate.m"), report)
     }
 
     func testEvidenceLandsUnderDeclaredSpecsOnly() throws {

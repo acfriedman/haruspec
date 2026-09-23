@@ -14,7 +14,8 @@ import HaruspecTrace
 //   haruspec audit --root <dir> [--verdict <result.json>] [--covering <Sym,Sym>]
 //   haruspec stamp --plan <plan> --recorded-at <sha> --coverage <file>
 //   haruspec sweep --plans <dir> --root <repo> [--census <dir>] [--test-sources <prefix>]
-//   haruspec check [--base <branch>] [--spec <a,b>] [--intent <file>] [--root <dir>]
+//   haruspec init [--root <dir>]
+//   haruspec check [--base <branch>] [--spec <a,b>] [--intent <file>] [--root <dir>] [--all]
 //   haruspec intent save <spec> <declaration>... [--replace] · haruspec intent remove <spec>
 //
 // Exit codes:  0 ok / equivalent · 1 runtime error · 2 usage error · 3 behavioral divergence ·
@@ -319,6 +320,7 @@ case "canonicalize": runCanonicalize(rest)
 case "report": runReport(rest)
 case "audit": runAudit(rest)
 case "check": runCheck(rest)
+case "init": runInit(rest)
 case "intent" where ["save", "remove"].contains(rest.first ?? ""):
     runIntentEdit(rest[0], Array(rest.dropFirst()))
 case "intent": runIntent(rest)

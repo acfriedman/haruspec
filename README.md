@@ -137,26 +137,30 @@ the CI gate.
 
 ## Checking a branch locally
 
-The continuous shape runs on your machine before it ever runs in CI. Opt a repository in with
-`.haruspec/config.json`:
+The continuous shape runs on your machine before it ever runs in CI, for the slice of code your
+change touches. Opt a repository in once, from its root:
 
-```json
-{
-  "project": "MyApp.xcodeproj",
-  "scheme": "MyApp",
-  "destination": "platform=iOS Simulator,name=iPhone 17",
-  "testTarget": "MyAppTests"
-}
+```bash
+mkdir -p .haruspec/bin
+curl -fsSL https://raw.githubusercontent.com/acfriedman/haruspec/main/Scripts/haruspec -o .haruspec/bin/haruspec
+chmod +x .haruspec/bin/haruspec
+.haruspec/bin/haruspec init
 ```
 
-Give each spec a continuous suite in that test target. It stays inert in an ordinary test run:
+(While this repository is private, copy `Scripts/haruspec` from a checkout instead of `curl`.)
+The launcher runs the CLI at exactly the engine version your project already uses, a local
+package or the version `Package.resolved` pins, and builds it once per version. Nothing is
+installed globally. `init` writes `.haruspec/config.json` from your Xcode project; check its
+guesses, then commit both files.
+
+Give each spec a continuous suite that names itself, so a check runs that suite and nothing else:
 
 ```swift
 @Suite("cart.objc-to-swift continuous")
 struct CartContinuousTests {
     @Test(arguments: CartMigrationSpec().continuousModes())
     func continuousRunHolds(_ mode: ContinuousMode) async throws {
-        try await CartMigrationSpec().checkContinuous(mode)
+        try await CartMigrationSpec().checkContinuous(mode, in: Self.self)
     }
 }
 ```
@@ -164,17 +168,20 @@ struct CartContinuousTests {
 Then, on any branch:
 
 ```bash
-haruspec check
+.haruspec/bin/haruspec check
 ```
 
-The check records the merge base's behavior once per base commit, replays it against your working
-tree (uncommitted changes included), and exits with the worst verdict. Nothing is committed and
-CI is untouched: machine output lives in `.haruspec/cache/`, which ignores itself.
+The check records the merge base's behavior once per base commit, noting which files each spec
+exercised beyond what launching the app runs. It then replays only the specs whose files your
+change touches (uncommitted changes included), each through its own suite. Specs outside the
+slice are listed as untouched, and changed source files no spec exercises are listed as
+unchecked. `--all` replays everything. Nothing is committed and CI is untouched: machine output
+lives in `.haruspec/cache/`, which ignores itself.
 
 When a red is the point of your branch, the report ends with the command that declares it:
 
 ```bash
-haruspec intent save cart.objc-to-swift \
+.haruspec/bin/haruspec intent save cart.objc-to-swift \
   'Changes("LoyaltyPointsEarned", field: "points").increases().only(in: "checkout")'
 ```
 

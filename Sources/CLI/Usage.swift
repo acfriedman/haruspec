@@ -13,12 +13,19 @@ USAGE:
       --agent               append a relay guide telling a consuming agent how to report the verdict.
       --html <path>         also write a self-contained visual HTML report to <path>.
 
-  haruspec check [--base <branch>] [--spec <a,b>] [--intent <file>] [--root <dir>]
-      The local continuous check (opt-in: needs .haruspec/config.json). Records the merge base's
-      behavior once per base commit into .haruspec/cache/, replays it against the working tree
-      (uncommitted changes included) under the branch's intent doc, prints the verdicts scoped to
-      the changed files, and exits with the worst verdict code. Each red spec ends with the
-      `haruspec intent save` command that would declare its divergences.
+  haruspec init [--root <dir>]
+      Opt a repository in to the local check: writes .haruspec/bin/haruspec (the launcher, which
+      runs the CLI at exactly the engine version the project uses) and, when missing,
+      .haruspec/config.json detected from the Xcode project. Commit both.
+
+  haruspec check [--base <branch>] [--spec <a,b>] [--intent <file>] [--root <dir>] [--all]
+      The local continuous check (opt-in: needs .haruspec/config.json), for the slice of code your
+      change touches. Records the merge base's behavior once per base commit into .haruspec/cache/,
+      noting the files each spec's recording executed; replays only the specs whose files changed
+      (uncommitted changes included), running only each spec's own suite, under the branch's intent
+      doc; exits with the worst verdict code. Each red spec ends with the `haruspec intent save`
+      command that would declare its divergences.
+      --all                 replay every spec, including those the change does not touch.
       --base <branch>       compare against this branch's merge base (default: config "base", then main).
       --spec <a,b>          check only these specs (default: config "specs", then every declared spec).
       --intent <file>       the intent doc to check under (default: .haruspec/intent/<branch>.md).
