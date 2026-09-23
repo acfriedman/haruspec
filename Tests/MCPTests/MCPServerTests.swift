@@ -77,7 +77,7 @@ final class MCPServerTests: XCTestCase {
         let listReply = send(["jsonrpc": "2.0", "id": 2, "method": "tools/list"])
         let tools = ((listReply?["result"] as? [String: Any])?["tools"] as? [[String: Any]]) ?? []
         let names = Set(tools.compactMap { $0["name"] as? String })
-        XCTAssertEqual(names, ["verify_behavioral_parity", "canonicalize_trace"])
+        XCTAssertEqual(names, ["verify_behavioral_parity", "canonicalize_trace", "check", "save_intent"])
         XCTAssertTrue(
             tools.allSatisfy { ($0["inputSchema"] as? [String: Any]) != nil },
             "every tool must publish a JSON Schema for its inputs"
@@ -158,5 +158,56 @@ final class MCPServerTests: XCTestCase {
 
         let garbled = server.handle("not json at all")
         XCTAssertTrue(garbled?.contains("-32700") ?? false)
+    }
+
+    // MARK: - Local check tools
+
+    /// A scratch git repository on branch `feature/points`; `configured` adds `.haruspec/config.json`.
+    private func scratchRepository(configured: Bool) throws -> URL {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("mcp-local-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: root) }
+        for arguments in [["init", "--quiet", "--initial-branch=feature/points"]] {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            process.arguments = ["git"] + arguments
+            process.currentDirectoryURL = root
+            try process.run()
+            process.waitUntilExit()
+        }
+        if configured {
+            let config = root.appendingPathComponent(".haruspec/config.json")
+            try FileManager.default.createDirectory(
+                at: config.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let json = #"{"project":"A.xcodeproj","scheme":"A","destination":"d","testTarget":"ATests"}"#
+            try Data(json.utf8).write(to: config)
+        }
+        return root
+    }
+
+    func testCheckInARepositoryThatHasNotOptedInTeachesTheConfig() throws {
+        let root = try scratchRepository(configured: false)
+        let result = callTool("check", ["root": root.path])
+
+        XCTAssertEqual(result["isError"] as? Bool, true)
+        XCTAssertTrue(text(of: result).contains("\"testTarget\""), text(of: result))
+    }
+
+    func testSaveIntentWritesTheBranchIntentDoc() throws {
+        let root = try scratchRepository(configured: true)
+        let line = #"Changes("LoyaltyPointsEarned", field: "points").increases()"#
+        let result = callTool("save_intent", ["root": root.path, "spec": "cart", "declarations": [line]])
+
+        XCTAssertEqual(result["isError"] as? Bool, false, text(of: result))
+        let doc = try String(
+            contentsOf: root.appendingPathComponent(".haruspec/intent/feature/points.md"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(doc.contains("```haruspec-intent cart\n\(line)\n```"), doc)
+
+        let refused = callTool("save_intent", ["root": root.path, "spec": "cart", "declarations": ["Changes("]])
+        XCTAssertEqual(refused["isError"] as? Bool, true, "an unparseable line never reaches the doc")
     }
 }

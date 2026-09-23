@@ -39,7 +39,7 @@ public extension SpecVerdict {
 
     // MARK: - Sections
 
-    private var headline: String {
+    var headline: String {
         // On replay both traces carry the spec name; only render an arrow when they differ.
         let subject = diff.baselineName == diff.candidateName
             ? "`\(diff.baselineName)`"
@@ -87,7 +87,7 @@ public extension SpecVerdict {
 
     /// The dead-declaration block: declared intent the whole sweep never observed. Rendered on any
     /// verdict that carries one (the diverged paths clear the claim by construction).
-    private var unobservedIntentSection: [String] {
+    var unobservedIntentSection: [String] {
         let unobserved = diff.unobservedIntent
         guard !unobserved.isEmpty else {
             return []
@@ -133,9 +133,8 @@ public extension SpecVerdict {
         }
         sections.append(contentsOf: failingCasesSection)
         sections.append(contentsOf: observationsSection)
-        let allGating = failingCases?.gatingDivergences ?? gating
-        sections.append(contentsOf: rejectedDeclarationsSection(for: allGating))
-        sections.append(contentsOf: declarationOffer(for: allGating))
+        sections.append(contentsOf: rejectedDeclarationsSection(for: failingCases?.gatingDivergences ?? gating))
+        sections.append(contentsOf: declarationOffer)
         return sections
     }
 
@@ -189,7 +188,7 @@ public extension SpecVerdict {
     /// Per declaration, the divergence it was first seen to absorb and the case that produced it —
     /// so a green-by-declaration verdict shows *what* each declaration excused. The first absorbing
     /// probe alone is not enough: it is often the golden, whose values say nothing.
-    private var observationsSection: [String] {
+    var observationsSection: [String] {
         guard !intentObservations.isEmpty else {
             return []
         }
@@ -218,8 +217,8 @@ public extension SpecVerdict {
     ///
     /// The whole intent-signaling loop in one copy-paste — but offered, never presumed: the
     /// sentence around it says when pasting is the wrong move.
-    private func declarationOffer(for gating: [Divergence]) -> [String] {
-        let suggestions = Divergence.suggestedDeclarations(across: gating)
+    private var declarationOffer: [String] {
+        let suggestions = offeredDeclarations
         guard !suggestions.isEmpty else {
             return []
         }
@@ -338,7 +337,7 @@ public extension SpecVerdict {
     /// The qualification block: what this verdict rests on, one aligned line per axis. Fenced as
     /// text so the sticky comment renders it as the fixed-width block a reader scans, not five
     /// paragraphs of prose.
-    private var qualificationBlock: String {
+    var qualificationBlock: String {
         let entries = qualificationEntries
         let width = (entries.map(\.label.count).max() ?? 0) + 1
         let lines = entries.map { entry in
@@ -354,7 +353,7 @@ public extension SpecVerdict {
         divergence.op.map { " in \(tableCell($0.description))" } ?? ""
     }
 
-    private func divergenceTable(_ divergences: [Divergence]) -> String {
+    func divergenceTable(_ divergences: [Divergence]) -> String {
         var lines = ["| Kind | Where | Detail |", "|---|---|---|"]
         for divergence in divergences.prefix(divergenceRowCap) {
             let advisory = divergence.isAdvisory ? " (advisory)" : ""

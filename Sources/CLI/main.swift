@@ -14,6 +14,8 @@ import HaruspecTrace
 //   haruspec audit --root <dir> [--verdict <result.json>] [--covering <Sym,Sym>]
 //   haruspec stamp --plan <plan> --recorded-at <sha> --coverage <file>
 //   haruspec sweep --plans <dir> --root <repo> [--census <dir>] [--test-sources <prefix>]
+//   haruspec check [--base <branch>] [--spec <a,b>] [--intent <file>] [--root <dir>]
+//   haruspec intent save <spec> <declaration>... [--replace] · haruspec intent remove <spec>
 //
 // Exit codes:  0 ok / equivalent · 1 runtime error · 2 usage error · 3 behavioral divergence ·
 //              4 cannot-verify (the oracle abstained — an uncovered/un-isolable surface) ·
@@ -94,79 +96,6 @@ func loadIntent(_ flags: [String: String]) -> Intent? {
         fail("could not read intent spec at \(path): \(error)", code: .runtime)
     }
 }
-
-let usage = """
-haruspec — the behavioral-oracle engine
-
-USAGE:
-  haruspec diff <baseline.json> <candidate.json> [--tolerance <spec.json>] [--intent <spec.json>]\
- [--agent] [--json] [--html <path>]
-      Diff two captured traces. Exits 3 if they diverge.
-      --intent <spec.json>  extension mode: absorb declared changes, gate only on collateral ones.
-      --agent               append a relay guide telling a consuming agent how to report the verdict.
-      --html <path>         also write a self-contained visual HTML report to <path>.
-
-  haruspec demo [--out <dir>] [--html]
-      Capture the built-in checkout spec (baseline / refactor / regression / feature),
-      write the traces, and print the verdicts — including parity vs. extension mode. Great first run.
-      --html                also write a visual HTML report per verdict into <dir>.
-
-  haruspec canonicalize <trace.json> [--tolerance <spec.json>] [--out <file.json>]
-      Emit the canonical, redacted form of a trace.
-
-  haruspec report <result.json>... [--markdown] [--html <path>] [--agent] [--changed <file> --root <dir>]
-      Render spec verdict artifacts (the result.json a verify(replaying:) run writes) and exit
-      with the worst verdict code — the CI gate reads THIS exit code, not the test runner's.
-      With several artifacts, or --changed, the run renders as one continuous report: verdicts the
-      diff touches in full, a red verdict the diff does NOT touch leads the report, untouched
-      greens collapse to a line each. An unreadable artifact renders as an infrastructure failure
-      (exit 1) instead of hiding the rest.
-      --markdown            GitHub-flavored markdown (PR comment / job summary) instead of text.
-      --html <path>         also write the self-contained visual report to <path> (single artifact only).
-      --agent               append the relay guide telling a consuming agent how to report the verdict
-                            (single artifact only).
-      --changed <file>      newline-separated repo-relative paths (git diff --name-only) to scope by.
-      --root <dir>          the checkout the verdicts' declared origins resolve against.
-
-  haruspec audit --root <dir> [--verdict <result.json>] [--covering <Sym,Sym>]
-      Capture-completeness audit: resolve the covered declarations to source under <dir>, then read
-      that source for effect channels the capture cannot see (NotificationCenter.default, Timer,
-      Combine, KVO, delayed dispatch). Exits 4 if any channel is found OR any declaration's source
-      cannot be located — both mean the verdict cannot claim it saw everything.
-      --verdict <result.json>  audit exactly what that verdict covered (its recorded origins).
-      --covering <Sym,Sym>     audit these declarations by name (Obj-C classes, Swift types).
-
-  haruspec mcp
-      Serve the engine as MCP tools over stdio (verify_behavioral_parity, canonicalize_trace),
-      so agents (Claude Code, Cursor, …) can gate changes on behavioral proof. Register with:
-      { "command": "haruspec", "args": ["mcp"] }
-
-  haruspec intent (--body <file> | --bodies <dir>) --out <dir>
-      Resolve a PR description's declared intent. Extracts every ```haruspec-intent <spec> fenced
-      block from <file>, parses the declarations (the DSL's own spellings — Changes("Search.query"),
-      Changes("Receipt", field: "discountCents").increases(), Moves("L", from: .main, to: .ambient),
-      …; a chained modifier narrows what the declaration absorbs), and writes one <spec>.intent.json per block into
-      <dir> for the replay to pick up via HARUSPEC_INTENT_PATH. A body with no blocks writes
-      nothing: parity mode. Exits 1 on an unparseable block — a declaration nobody can read must
-      fail loudly, never silently become parity.
-      --bodies <dir>        the record-on-merge form: one file per merged PR body, blocks unioned
-                            per spec across bodies (each body still parses alone).
-
-  haruspec stamp --plan <plan.json[.gz]> --recorded-at <sha> --coverage <file>
-      Write the record-on-merge provenance stamp into a plan artifact, in place: the commit the
-      recording built, and the newline-separated repo-relative source files the recording executed
-      (its discovered dependency list). Refuses an empty coverage list — a recording that executed
-      nothing is a broken extraction, not a dependency-free plan.
-
-  haruspec sweep --plans <dir> --root <repo> [--census <dir>] [--test-sources <prefix>]
-      The record-on-merge reconciliation: for each committed plan, diff the repo since its stamped
-      recordedAt and intersect with its covered sources. Prints JSON (stdout) partitioning specs
-      into stale / births / orphaned / unreadable / fresh, with reasons; human lines on stderr.
-      Unstamped or unanswerable plans are stale fail-safe — freshness is a proof, never a default.
-      --census <dir>        a census run's <spec>.census.json markers; enables births/orphaned.
-      --test-sources <p>    repo-relative prefix of spec declarations; without --census, a changed
-                            file under it that no plan covers sets censusAdvised.
-"""
 
 func runDiff(_ rest: [String]) -> Never {
     let (flags, positionals) = parse(rest)
@@ -389,6 +318,9 @@ case "demo": runDemo(rest)
 case "canonicalize": runCanonicalize(rest)
 case "report": runReport(rest)
 case "audit": runAudit(rest)
+case "check": runCheck(rest)
+case "intent" where ["save", "remove"].contains(rest.first ?? ""):
+    runIntentEdit(rest[0], Array(rest.dropFirst()))
 case "intent": runIntent(rest)
 case "stamp": runStamp(rest)
 case "sweep": runSweep(rest)

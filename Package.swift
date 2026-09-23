@@ -18,6 +18,8 @@ import PackageDescription
 ///   HaruspecCoreData    — Core Data capture resources (seamed context + in-memory stack); opt-in import,
 ///                         carried by the umbrella (a second product would double-link the engine).
 ///   Haruspec            — the umbrella: one `import Haruspec` re-exports the whole consumer surface above.
+///   HaruspecLocal       — the local check (`haruspec check`): drives xcodebuild to compare the merge base
+///                         with the working tree, and keeps the per-branch intent doc.
 ///   HaruspecDemo        — a sample application (a checkout module) that exercises the engine end-to-end.
 ///   haruspec            — a thin CLI over the engine (diff / demo / canonicalize).
 ///
@@ -78,7 +80,14 @@ let package = Package(
 
         // The MCP stdio server (`haruspec mcp`) — the tool surface other agents call. A library so the
         // protocol layer is unit-testable; the CLI subcommand is a two-line shell around it.
-        .target(name: "HaruspecMCP", dependencies: ["HaruspecCore"], path: "Sources/MCP"),
+        .target(name: "HaruspecMCP", dependencies: [
+            "HaruspecCore",
+            "HaruspecSpec",
+            "HaruspecLocal"
+        ], path: "Sources/MCP"),
+        // The local check: git, xcodebuild, and the `.haruspec/` directory, over the Spec layer's
+        // continuous harness. Shared by the CLI (`haruspec check`) and the MCP server's tools.
+        .target(name: "HaruspecLocal", dependencies: ["HaruspecCore", "HaruspecSpec"], path: "Sources/Local"),
         // The CLI target is `HaruspecCLI` (its product/binary is `haruspec`): a target literally
         // named `haruspec` would differ only in case from the `Haruspec` umbrella module, which collides
         // at the build-artifact layer on case-insensitive filesystems (macOS/Windows).
@@ -90,7 +99,8 @@ let package = Package(
             "HaruspecDemo",
             "HaruspecMCP",
             "HaruspecSpec",
-            "HaruspecAudit"
+            "HaruspecAudit",
+            "HaruspecLocal"
         ], path: "Sources/CLI"),
 
         // Capture-completeness auditing: resolving what a verdict covered back to the sources an
@@ -184,6 +194,12 @@ let package = Package(
         ]),
 
         .testTarget(name: "HaruspecMCPTests", dependencies: ["HaruspecMCP", "HaruspecCore"], path: "Tests/MCPTests"),
+
+        .testTarget(name: "HaruspecLocalTests", dependencies: [
+            "HaruspecLocal",
+            "HaruspecCore",
+            "HaruspecSpec"
+        ], path: "Tests/LocalTests"),
 
         .testTarget(name: "HaruspecCoreDataTests", dependencies: [
             "HaruspecCore",

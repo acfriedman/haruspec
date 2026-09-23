@@ -135,6 +135,55 @@ refuses to claim coverage it does not have. `UNSTABLE` means replays of the same
 and the run-to-run delta is the diagnostic. Exit codes carry the verdict, so the same command is
 the CI gate.
 
+## Checking a branch locally
+
+The continuous shape runs on your machine before it ever runs in CI. Opt a repository in with
+`.haruspec/config.json`:
+
+```json
+{
+  "project": "MyApp.xcodeproj",
+  "scheme": "MyApp",
+  "destination": "platform=iOS Simulator,name=iPhone 17",
+  "testTarget": "MyAppTests"
+}
+```
+
+Give each spec a continuous suite in that test target. It stays inert in an ordinary test run:
+
+```swift
+@Suite("cart.objc-to-swift continuous")
+struct CartContinuousTests {
+    @Test(arguments: CartMigrationSpec().continuousModes())
+    func continuousRunHolds(_ mode: ContinuousMode) async throws {
+        try await CartMigrationSpec().checkContinuous(mode)
+    }
+}
+```
+
+Then, on any branch:
+
+```bash
+haruspec check
+```
+
+The check records the merge base's behavior once per base commit, replays it against your working
+tree (uncommitted changes included), and exits with the worst verdict. Nothing is committed and
+CI is untouched: machine output lives in `.haruspec/cache/`, which ignores itself.
+
+When a red is the point of your branch, the report ends with the command that declares it:
+
+```bash
+haruspec intent save cart.objc-to-swift \
+  'Changes("LoyaltyPointsEarned", field: "points").increases().only(in: "checkout")'
+```
+
+That writes `.haruspec/intent/<branch>.md`, and the next check replays under it and writes its
+verdict into the file as evidence. The file is in the PR-description format, so attaching it to a
+PR is also how you would declare the same intent to a CI gate. Commit these files or ignore them;
+that is the team's call. Agents get the same two steps as MCP tools (`check`, `save_intent`)
+through `haruspec mcp`.
+
 For a working CI setup (PR replay, sticky comments, record-on-merge), see the
 [example migration repo](https://github.com/acfriedman/example-xcode-migration).
 

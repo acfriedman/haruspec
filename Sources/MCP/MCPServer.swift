@@ -11,10 +11,10 @@ import HaruspecCore
 /// Transport is MCP's stdio framing: newline-delimited JSON-RPC 2.0, one message per line,
 /// responses on stdout, logs on stderr.
 ///
-/// v1 exposes verification of *artifacts* (trace files), wrapping the same path as
-/// `haruspec diff --tolerance --intent --agent`. Recording golden traces is deliberately NOT a tool:
-/// capture runs inside the consumer's test target (`Spec.record(to:)`) — an external process
-/// can verify what a run produced, but it can't faithfully run someone else's app.
+/// Two families of tools: verification of *artifacts* (trace files), wrapping the same path as
+/// `haruspec diff --tolerance --intent --agent`; and the local check (`check`, `save_intent`), which
+/// runs a repository's own test target through its `.haruspec/config.json` — the capture still
+/// happens inside the consumer's tests, and the server only drives them.
 public struct MCPServer {
     let serverName = "haruspec"
     let serverVersion = "0.1.0"
@@ -81,7 +81,9 @@ public struct MCPServer {
             behavior, instead of trusting "it compiles / tests pass". Call verify_behavioral_parity with \
             two captured trace files (golden vs. current) to get a deterministic verdict — EQUIVALENT, or \
             DIVERGED with each divergence localized. Declared tolerances absorb nondeterminism; a declared \
-            intent spec absorbs the deltas a feature *meant* to make, so only collateral changes gate.
+            intent spec absorbs the deltas a feature *meant* to make, so only collateral changes gate. \
+            In a repository with .haruspec/config.json, call check to compare the branch with its merge \
+            base, and save_intent to record a change the user confirms they meant.
             """
         ]
     }
@@ -89,6 +91,10 @@ public struct MCPServer {
     // MARK: - Tool surface
 
     private var toolDefinitions: [[String: Any]] {
+        artifactToolDefinitions + localToolDefinitions
+    }
+
+    private var artifactToolDefinitions: [[String: Any]] {
         [
             [
                 "name": "verify_behavioral_parity",
@@ -155,6 +161,10 @@ public struct MCPServer {
             return verifyBehavioralParity(arguments)
         case "canonicalize_trace":
             return canonicalizeTrace(arguments)
+        case "check":
+            return check(arguments)
+        case "save_intent":
+            return saveIntent(arguments)
         case let other:
             return toolError("unknown tool: \(other ?? "<missing name>")")
         }
