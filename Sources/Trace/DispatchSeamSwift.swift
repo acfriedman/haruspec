@@ -24,7 +24,7 @@ import Foundation
     /// **Debug-only, by construction.** An overload on a Dispatch type enters the resolution set of
     /// every consumer that imports Haruspec, which is a real cost to impose unconditionally — so it
     /// does not exist in a release build at all. That mirrors the C half's build-setting gate and the
-    /// `#if DEBUG` guard `@Traced` already emits: instrumentation is a debug-configuration property
+    /// `#if DEBUG` guard on the Obj-C seam: instrumentation is a debug-configuration property
     /// throughout.
     public extension DispatchQueue {
         func async(execute work: @escaping @Sendable () -> Void) {

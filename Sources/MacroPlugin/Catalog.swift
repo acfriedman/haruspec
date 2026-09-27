@@ -1,9 +1,9 @@
 import SwiftSyntax
 import SwiftSyntaxMacros
 
-// MARK: - @DerivedOps (peer)
+// MARK: - Derived<Protocol> (the op catalog)
 
-/// Derives a spec's op catalog from the boundary protocol: one `DerivedOp` per method requirement,
+/// Emits a spec's op catalog from the boundary protocol: one `DerivedOp` per method requirement,
 /// with the binding written mechanically and each parameter mapped by type heuristic — integers and
 /// floats to engine-default domains, `Bool` to both values, a custom type to its `SeamGenerated`
 /// factory, and `String` (or anything unmappable) left *pending*, to trap at spec construction with
@@ -11,64 +11,47 @@ import SwiftSyntaxMacros
 /// `.operations(derivedFrom:)`.
 ///
 /// Property requirements derive as **observed properties** (`DerivedProperty`) rather than ops:
-/// state is snapshot at the capture boundary and its writes join the diff, not driven as calls.
+/// state is snapshot at the capture boundary, not driven as calls.
 /// Skipped, deliberately: `static`/`class` members (no instance) and generic requirements (no single
 /// binding to write). A skipped requirement that matters becomes an authored `Op` in a plain
-/// `.operations` block.
-public struct DerivedOpsMacro: PeerMacro {
-    public static func expansion(
-        of _: AttributeSyntax,
-        providingPeersOf declaration: some DeclSyntaxProtocol,
-        in _: some MacroExpansionContext
-    ) throws -> [DeclSyntax] {
-        guard let proto = declaration.as(ProtocolDeclSyntax.self) else {
-            throw MacroError("@DerivedOps can only be attached to a protocol")
-        }
+/// `.operations` block. An empty catalog is legitimate: the stamp does not know whether a spec will
+/// ever drive this protocol, and a catalog no spec adopts costs nothing.
+enum CatalogEmitter {
+    /// The generated `Derived<Protocol>` catalog.
+    ///
+    /// - Parameters:
+    ///   - proto: The pasted protocol the catalog drives.
+    ///   - label: The trace label property entries carry, matching what the forwarder records.
+    /// - Returns: The catalog's enum declaration.
+    static func catalog(for proto: ProtocolDeclSyntax, label: String) -> DeclSyntax {
         let protoName = proto.name.text
         let system = "any \(protoName)"
+        let (entries, properties) = derivedEntries(of: proto, labelRoot: label)
 
-        let (entries, properties) = derivedEntries(of: proto)
-        // An all-`var` boundary (a ViewModel: settable input, published outputs) derives an empty
-        // catalog legitimately — properties and the pasted-init system still come from it, and the
-        // spec authors its input writes as ops. Only a protocol deriving *nothing* is refused.
-        guard !entries.isEmpty || !properties.isEmpty else {
-            throw MacroError(
-                "@DerivedOps found no derivable requirement on '\(protoName)' — "
-                    + "it derives instance methods and `var` requirements only"
-            )
-        }
-
-        // With a @TracedForwarder sibling, every build the spec runs is wrapped by it — the baseline
-        // the spec names and the candidate a check hands in alike, so both traces are shaped by the
-        // protocol. With a pasted init requirement as well, construction derives too: the forwarder's
-        // `init(resolving:_:)` builds any conformer from its metatype, so `.system { }` and the
-        // candidate's construction closure both collapse into the catalog.
-        var boundaryEntries: [String] = []
+        // With a pasted init requirement, construction derives: the forwarder's `init(resolving:_:)`
+        // builds any conformer from its metatype, so `.system { }` and the candidate's construction
+        // closure both collapse into the catalog.
+        let forwarder = "Traced\(protoName)"
+        var systemEntry = ""
         let hasPastedInit = proto.memberBlock.members.contains { $0.decl.is(InitializerDeclSyntax.self) }
-        if let forwarder = forwarderName(of: proto) {
-            boundaryEntries.append("""
-                static var derivedWrapper: ((\(system)) -> \(system))? {
-                    { $0 as? \(forwarder) ?? \(forwarder)($0) }
-                }
-            """)
-            // The conformer arrives as a bare `Any.Type`: a spec generic over `any Proto` cannot
-            // spell `any Proto.Type`, so conformance is checked here, naming the line to write.
-            if hasPastedInit {
-                let refusal = "\\(type) does not conform to \(protoName) — declare it: "
-                    + "extension \\(type): \(protoName) {}"
-                boundaryEntries.append("""
-                    static var derivedSystem: ((SeamContext, Any.Type) -> \(system))? {
-                        { context, type in
-                            guard let conformer = type as? any \(protoName).Type else {
-                                preconditionFailure("\(refusal)")
-                            }
-                            return \(forwarder)(resolving: context, conformer)
+        // The conformer arrives as a bare `Any.Type`: a spec generic over `any Proto` cannot spell
+        // `any Proto.Type`, so conformance is checked here, naming the line to write.
+        if hasPastedInit {
+            let refusal = "\\(type) does not conform to \(protoName) — declare it: "
+                + "extension \\(type): \(protoName) {}"
+            systemEntry = """
+
+
+                static var derivedSystem: ((SeamContext, Any.Type) -> \(system))? {
+                    { context, type in
+                        guard let conformer = type as? any \(protoName).Type else {
+                            preconditionFailure("\(refusal)")
                         }
+                        return \(forwarder)(resolving: context, conformer)
                     }
-                """)
-            }
+                }
+            """
         }
-        let systemEntry = boundaryEntries.map { "\n\n\($0)" }.joined()
 
         // `var` requirements derive as observed properties: the spec snapshots each at the capture
         // boundary and scopes the write-timeline diff to exactly these labels.
@@ -96,14 +79,16 @@ public struct DerivedOpsMacro: PeerMacro {
         \(systemEntry)\(propertiesEntry)
         }
         """
-        return [DeclSyntax("\(raw: source)")]
+        return DeclSyntax("\(raw: source)")
     }
 
     /// Walks the requirements once: methods become op entries, `var`s become observed properties.
-    private static func derivedEntries(of proto: ProtocolDeclSyntax) -> (ops: [String], properties: [String]) {
+    private static func derivedEntries(
+        of proto: ProtocolDeclSyntax,
+        labelRoot: String
+    ) -> (ops: [String], properties: [String]) {
         var entries: [String] = []
         var properties: [String] = []
-        let labelRoot = forwarderLabel(of: proto) ?? proto.name.text
         for member in proto.memberBlock.members {
             if let variable = member.decl.as(VariableDeclSyntax.self), !isStaticOrClass(variable.modifiers),
                let binding = variable.bindings.first,
@@ -126,27 +111,6 @@ public struct DerivedOpsMacro: PeerMacro {
             + "label: \(quotedLiteral("\(labelRoot).\(name)"))) { __sut in \(isAsync ? "await " : "")__sut.\(name) }"
     }
 
-    /// The sibling `@TracedForwarder`'s trace label, when the protocol carries one — property labels
-    /// must match what the instrumentation records, and the forwarder's label is that root.
-    private static func forwarderLabel(of proto: ProtocolDeclSyntax) -> String? {
-        for element in proto.attributes {
-            guard let attribute = element.as(AttributeSyntax.self),
-                  attribute.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "TracedForwarder"
-            else { continue }
-            return stringArgument(of: attribute, name: "label")
-        }
-        return nil
-    }
-
-    /// The sibling `@TracedForwarder`'s generated type name, when the protocol carries one — the two
-    /// macros never talk, but both see the same attribute list.
-    private static func forwarderName(of proto: ProtocolDeclSyntax) -> String? {
-        let hasForwarder = proto.attributes.contains { element in
-            element.as(AttributeSyntax.self)?.attributeName.as(IdentifierTypeSyntax.self)?.name.text == "TracedForwarder"
-        }
-        return hasForwarder ? "Traced\(proto.name.text)" : nil
-    }
-
     /// One `DerivedOp(...)` entry: the argument list and the forwarding call, both written from the
     /// signature alone.
     private static func derivedOp(_ function: FunctionDeclSyntax) -> String {
@@ -156,9 +120,11 @@ public struct DerivedOpsMacro: PeerMacro {
             map(parameter, at: position)
         }
 
+        // Parenthesized so a forced cast passed to an IUO parameter (`Product!`) reads as a value,
+        // not as a cast the compiler warns will be treated as optional.
         let call = mapped.enumerated().map { position, argument -> String in
             let external = parameters[parameters.index(parameters.startIndex, offsetBy: position)].firstName.text
-            return external == "_" ? argument.value : "\(external): \(argument.value)"
+            return external == "_" ? "(\(argument.value))" : "\(external): (\(argument.value))"
         }.joined(separator: ", ")
 
         let effects = function.signature.effectSpecifiers
@@ -167,7 +133,15 @@ public struct DerivedOpsMacro: PeerMacro {
         let returnsValue = returnType != nil && returnType != "Void" && returnType != "()"
         // `try?` yields an optional even for Void, so a throwing call is always discarded explicitly.
         let discard = returnsValue || effects?.throwsClause != nil ? "_ = " : ""
-        let invocation = "\(discard)\(prefix)__sut.\(label)(\(call))"
+        // A requirement pinned to a global actor (`@MainActor func display`) is a hop from the op's
+        // own isolation, and Swift 6 refuses to send a non-`Sendable` system across it. The system
+        // is the conformer the spec built for this capture and nothing else holds it, so it is
+        // handed over through an unchecked holder — the same answer the forwarder gives by reading
+        // the conformer off its own `@unchecked Sendable` self.
+        let hops = !function.attributes.isEmpty
+        let receiver = hops ? "__sent.value" : "__sut"
+        let handOver = hops ? "let __sent = UncheckedHandOver(__sut)\n                " : ""
+        let invocation = "\(handOver)\(discard)\(prefix)\(receiver).\(label)(\(call))"
 
         let arguments = mapped.isEmpty
             ? ""

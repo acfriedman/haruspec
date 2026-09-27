@@ -61,7 +61,7 @@ final class ValidationGateTests: XCTestCase {
             "expected a dropped CartDidChange:\n\(diff.report())"
         )
 
-        // Bug #3: checkout over its timing budget (@Timed measures the whole method).
+        // Bug #3: checkout over its timing budget (the timed forwarder measures the whole call).
         XCTAssertTrue(
             diff.divergences.contains { $0.kind == .timingRegression && $0.label == "CartService.checkout" },
             "expected a timing regression:\n\(diff.report())"

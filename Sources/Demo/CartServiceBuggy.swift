@@ -1,6 +1,5 @@
 import Foundation
 import HaruspecCore
-import HaruspecMacros
 import HaruspecTrace
 
 /// A plausible-looking but subtly-wrong "refactor". It compiles, reads fine, and would pass a
@@ -11,7 +10,6 @@ import HaruspecTrace
 ///     receipt's `discountCents` and `totalCents` (a `valueMismatch`).
 ///  2. `removeItem` forgets to post `CartDidChange` → a dropped side effect (a `missingEvent`).
 ///  3. `checkout` recomputes redundantly, blowing its timing budget (a `timingRegression`).
-@Traced("CartService")
 public final class CartServiceBuggy: CartService {
     private let center: NotificationCenter
     private var items: [(sku: String, price: Int, qty: Int)] = []
@@ -37,7 +35,6 @@ public final class CartServiceBuggy: CartService {
         return promoActive
     }
 
-    @Timed
     public func checkout() -> Receipt {
         Haruspec.simulateCost(250) // BUG #3: redundant work — over the +50 tick budget.
         let subtotal = items.reduce(0) { $0 + $1.price * $1.qty }

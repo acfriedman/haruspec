@@ -15,7 +15,6 @@ import XCTest
 
 /// A candidate that posts an *extra*, declared notification — the intended feature delta for the
 /// extension-mode panel — while otherwise matching `GoodCart`.
-@Traced("PromoCart")
 private final class LoyaltyCart: PromoCart {
     private let center: NotificationCenter
     private var subtotal = 0
@@ -45,7 +44,6 @@ private final class LoyaltyCart: PromoCart {
 
 /// A candidate that reads a seam the base build never recorded — replay must fall back to live and the
 /// verdict must abstain rather than trust the (coincidentally identical) trace.
-@Traced("PromoCart")
 private final class GreedySeamCart: PromoCart {
     private let center: NotificationCenter
     private let context: SeamContext

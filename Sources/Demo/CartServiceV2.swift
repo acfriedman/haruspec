@@ -1,15 +1,13 @@
 import Foundation
 import HaruspecCore
-import HaruspecMacros
 import HaruspecTrace
 
 /// A behavior-preserving refactor of the baseline — this stands in for an agent's transform.
 ///
 /// The internals are genuinely restructured (items in a dictionary keyed by SKU plus an
-/// insertion-order list, totals via a reduce), and the concrete type is even renamed. `@Traced` is
-/// given the stable label `"CartService"` so the trace stays comparable across the rename — none of
-/// the restructuring is observable, so the oracle should return EQUIVALENT.
-@Traced("CartService")
+/// insertion-order list, totals via a reduce), and the concrete type is even renamed. The forwarder
+/// records under the stamp's stable label `"CartService"`, so the trace stays comparable across the
+/// rename — none of the restructuring is observable, so the oracle should return EQUIVALENT.
 public final class CartServiceV2: CartService {
     private let center: NotificationCenter
     private var order: [String] = []
@@ -44,7 +42,6 @@ public final class CartServiceV2: CartService {
         return promoActive
     }
 
-    @Timed
     public func checkout() -> Receipt {
         Haruspec.simulateCost(100)
         let subtotal = order.reduce(0) { running, sku in

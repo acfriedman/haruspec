@@ -186,9 +186,8 @@ public struct Intent: Sendable, Equatable {
     /// port of fire-and-forget work is the canonical case: everything after the call now waits.
     public var expectedOrderingAdditions: [String]
 
-    /// Events (by label) the change deliberately reorders — `reordered`. Property writes under
-    /// `MutationOrderPolicy.gating` are the motivating case: a port that computes its state in a
-    /// different order declares the labels it moves, and only those. The DSL spelling is
+    /// Events (by label) the change deliberately reorders — `reordered`. A port that emits its effects
+    /// in a different order declares the labels it moves, and only those. The DSL spelling is
     /// `Reorders(_:)`, directed with `Reorders(_:before:)` / `Reorders(_:after:)`.
     public var expectedReorders: [Reorder]
 

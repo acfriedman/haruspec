@@ -58,7 +58,7 @@ public extension Spec {
     /// baseline is. The report is titled by the type unless `named` says otherwise.
     ///
     /// - Precondition: The spec must derive construction (`derivedFrom:` a catalog whose protocol
-    ///   pastes its `init` and carries a `@TracedForwarder`); otherwise author the build with the
+    ///   pastes its `init` and carries `@Haruspec`); otherwise author the build with the
     ///   closure form. The type must conform to the boundary protocol — a spec generic over
     ///   `any Proto` cannot demand that statically, so a non-conformer traps naming the extension
     ///   to write.
@@ -73,7 +73,7 @@ public extension Spec {
         guard let construct = makeConformer else {
             preconditionFailure(
                 "spec '\(self.name)' derives no construction, so it cannot build \(conformer) — paste the "
-                    + "init into the @TracedForwarder protocol, or author the build: "
+                    + "init into the @Haruspec protocol, or author the build: "
                     + "check(\"\(conformer)\") { context in … }"
             )
         }

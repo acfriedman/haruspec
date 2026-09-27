@@ -1,17 +1,19 @@
 import HaruspecCore
-import HaruspecMacros // `@Traced` — the low-intrusion structural-tier capture
+import HaruspecMacros // `@Haruspec` — the low-intrusion structural-tier capture
 import HaruspecSeams // `SeamDomain` for property-varied op arguments
 import HaruspecSpec
 import HaruspecTrace // the deliberate `Haruspec.marker` in the SUT
 import XCTest
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-// A clean, decoupled system under test. It imports only the featherweight facade (`@Traced` +
-// `Haruspec.marker`) — never the engine, no test scaffolding (no simulateCost). `@Traced` gives the
-// structural tier for free (every call / args / return diffed); the notifications + marker give the
-// durable semantic tier. Both are surface the oracle checks against.
+// A clean, decoupled system under test. It carries no Haruspec attribute and imports only
+// `Haruspec.marker` — never the engine, no test scaffolding (no simulateCost). The stamped
+// `PromoCart` protocol's forwarder gives the structural tier for free (every call / args / return
+// diffed); the notifications + marker give the durable semantic tier. Both are surface the oracle
+// checks against.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
+@Haruspec
 protocol PromoCart: AnyObject {
     func addItem(priceCents: Int, qty: Int)
     func applyPromo()
@@ -19,7 +21,6 @@ protocol PromoCart: AnyObject {
 }
 
 /// Baseline: discount is computed at checkout from the final subtotal — order-independent.
-@Traced("PromoCart")
 final class GoodCart: PromoCart {
     private let center: NotificationCenter
     private var subtotal = 0
@@ -47,7 +48,6 @@ final class GoodCart: PromoCart {
 }
 
 /// A behavior-preserving refactor (restructured storage, same observable behavior) → EQUIVALENT.
-@Traced("PromoCart")
 final class RefactorCart: PromoCart {
     private let center: NotificationCenter
     private var lines: [(price: Int, qty: Int)] = []
@@ -81,7 +81,6 @@ final class RefactorCart: PromoCart {
 /// An ORDER-DEPENDENT regression: `applyPromo` snapshots the discountable subtotal *at apply time*, so
 /// items added after the promo aren't discounted. Identical to baseline on the usual order
 /// (add → promo → checkout); wrong when promo runs before an item is added.
-@Traced("PromoCart")
 final class OrderBugCart: PromoCart {
     private let center: NotificationCenter
     private var subtotal = 0
@@ -109,7 +108,6 @@ final class OrderBugCart: PromoCart {
 
 /// A VALUE-DEPENDENT regression: integer-truncation discount (`subtotal / 10`) instead of rounded 10%.
 /// Identical to baseline when the subtotal is a multiple of 10; off-by-one otherwise.
-@Traced("PromoCart")
 final class RoundBugCart: PromoCart {
     private let center: NotificationCenter
     private var subtotal = 0

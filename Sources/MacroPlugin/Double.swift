@@ -1,39 +1,39 @@
 import SwiftSyntax
 import SwiftSyntaxMacros
 
-// MARK: - @TracedDouble (peer)
+// MARK: - Double<Protocol> (the stand-in)
 
-/// Generates a recording test double from a pasted protocol — the collaborator counterpart of
-/// `@TracedForwarder`, with **nothing behind the boundary**.
+/// Emits the double: a recording stand-in for a collaborator, with **nothing behind the boundary**.
 ///
 /// A hand-written double is a second implementation of the collaborator, and a second implementation
 /// can drift. The honest double records the call and does nothing: the interaction at the boundary is
 /// the behavior a differential checks, and everything past it is fixture. Where the subject *reads* a
-/// return, the value is not emulated state but **generated input** — synthesized as a seam read keyed
-/// `"<label>.<method>"`, so it defaults to the type's zero, is recorded into the plan, sweeps when a
-/// spec declares a domain for that key in `.vary`, and replays identically.
+/// return or a property, the value is not emulated state but **generated input** — synthesized as a
+/// seam read keyed `"<label>.<member>"`, so it defaults to the type's zero, is recorded into the plan,
+/// sweeps when a spec declares a domain for that key in `.vary`, and replays identically.
 ///
 /// Collections return their genuine empty, an optional custom type returns `nil`, and a required
 /// custom type — which has no universal zero — resolves the factory the spec declared with
 /// `.generates(_:_:)`, trapping fail-fast at the first call when none was.
-public struct TracedDoubleMacro: PeerMacro {
-    public static func expansion(
-        of node: AttributeSyntax,
-        providingPeersOf declaration: some DeclSyntaxProtocol,
-        in context: some MacroExpansionContext
-    ) throws -> [DeclSyntax] {
-        guard let proto = declaration.as(ProtocolDeclSyntax.self) else {
-            throw MacroError("@TracedDouble can only be attached to a protocol")
-        }
-        guard let label = stringArgument(of: node, name: "label") else {
-            throw MacroError("@TracedDouble requires a 'label:' string naming the collaborator boundary")
-        }
+enum DoubleEmitter {
+    /// The generated `Double<Protocol>` stand-in.
+    ///
+    /// - Parameters:
+    ///   - proto: The pasted protocol the double conforms to.
+    ///   - label: The collaborator's stable trace label, the root of every event and seam key.
+    ///   - context: The expansion context, which locates the protocol's own file for the origin.
+    /// - Returns: The double's class declaration.
+    static func double(
+        for proto: ProtocolDeclSyntax,
+        label: String,
+        context: some MacroExpansionContext
+    ) -> DeclSyntax {
+        let generatedName = "Double\(proto.name.text)"
         let protoName = proto.name.text
-        let generatedName = stringArgument(of: node, name: "as") ?? "Traced\(protoName)"
 
         // The generated code is the double's whole behavior, so — unlike a forwarder, whose behavior
         // lives in the wrapped Obj-C class — its origin points at the protocol's own file.
-        let file = context.location(of: declaration, at: .afterLeadingTrivia, filePathMode: .fileID)?
+        let file = context.location(of: proto, at: .afterLeadingTrivia, filePathMode: .fileID)?
             .file.trimmedDescription
 
         var members: [String] = []
@@ -44,22 +44,24 @@ public struct TracedDoubleMacro: PeerMacro {
                     continue
                 }
                 members.append(doubleMethod(function, label: label, symbol: generatedName, file: file))
-            } else if let variable = decl.as(VariableDeclSyntax.self), !isStaticOrClass(variable.modifiers) {
-                throw MacroError(
-                    "@TracedDouble cannot synthesize the property requirement "
-                        + "'\(variable.trimmedDescription)' — hand-write this double"
-                )
+            } else if let variable = decl.as(VariableDeclSyntax.self), !isStaticOrClass(variable.modifiers),
+                      let property = doubleProperty(variable, label: label, symbol: generatedName, file: file) {
+                members.append(property)
+            } else if let initializer = decl.as(InitializerDeclSyntax.self) {
+                members.append(refusingInit(initializer, generatedName: generatedName))
             }
         }
 
         // The boundaries this double serves, read off the pasted protocol's inheritance clause — the
-        // refinement is the registry entry `SeamContext.resolve(_:)` matches by type identity.
-        let boundaries = (proto.inheritanceClause?.inheritedTypes ?? [])
+        // refinement is the registry entry `SeamContext.resolve(_:)` matches by type identity. The
+        // protocol serves itself too: a Swift boundary the adopter owns is stamped directly, with no
+        // refining paste in between.
+        let refined = (proto.inheritanceClause?.inheritedTypes ?? [])
             .map(\.type.trimmedDescription)
-            .filter { $0 != "AnyObject" && $0 != "NSObjectProtocol" }
-        let served = boundaries.isEmpty
-            ? ""
-            : "\n    static var servedBoundaries: [Any.Type] { [\(boundaries.map { "\($0).self" }.joined(separator: ", "))] }\n"
+            .filter { $0 != "AnyObject" && $0 != "NSObjectProtocol" && $0 != "Sendable" }
+        let boundaries = [protoName] + refined
+        let served = "\n    static var servedBoundaries: [Any.Type] { "
+            + "[\(boundaries.map { "\($0).self" }.joined(separator: ", "))] }\n"
 
         // NSObject-rooted for the same reason the forwarder is: the double usually backs an Obj-C
         // `id<Protocol>` injection point. `SeamDouble` is what lets `context.double(_:)` construct and
@@ -74,7 +76,71 @@ public struct TracedDoubleMacro: PeerMacro {
         \(members.joined(separator: "\n\n"))
         }
         """
-        return [DeclSyntax("\(raw: source)")]
+        return DeclSyntax("\(raw: source)")
+    }
+
+    /// The double's witness of a pasted `init` requirement, which traps naming the route that builds a
+    /// double. Conformance demands a witness, but a double is built by the capture, never by the
+    /// subject's construction contract.
+    ///
+    /// - Parameters:
+    ///   - initializer: The pasted `init` requirement to witness.
+    ///   - generatedName: The double's class name, which the trap message names.
+    /// - Returns: The witness's source.
+    private static func refusingInit(_ initializer: InitializerDeclSyntax, generatedName: String) -> String {
+        let message = "\(generatedName) is a stand-in, built by the capture: context.double(\(generatedName).self)"
+        return "    convenience init\(initializer.signature.parameterClause.trimmedDescription) {\n"
+            + "        preconditionFailure(\(quotedLiteral(message)))\n"
+            + "    }"
+    }
+
+    /// One synthesized property, whose read is a generated value and whose write is recorded and kept
+    /// nowhere. It is the property form of a method's seam read and a `Void` method's no-op.
+    ///
+    /// - Parameters:
+    ///   - variable: The protocol's `var` requirement.
+    ///   - label: The boundary's trace label; the seam key and the write's event are
+    ///     `"<label>.<name>"`.
+    ///   - symbol: The double's class name, recorded as the write's origin.
+    ///   - file: The stamped protocol's `#fileID`, recorded as the write's origin; `nil` when the
+    ///     expansion context cannot locate it.
+    /// - Returns: The property's source, or `nil` when the requirement is not a simple typed `var`.
+    ///
+    /// A read is not recorded, as a forwarder's read is not; it returns the seam `"<label>.<name>"`,
+    /// defaulted to the type's zero. A `{ get set }` requirement's setter records the write as a
+    /// `stateChange`.
+    private static func doubleProperty(
+        _ variable: VariableDeclSyntax,
+        label: String,
+        symbol: String,
+        file: String?
+    ) -> String? {
+        guard variable.bindingSpecifier.tokenKind == .keyword(.var),
+              let binding = variable.bindings.first,
+              let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
+              let type = binding.typeAnnotation?.type.trimmedDescription
+        else { return nil }
+        let key = "\(label).\(name)"
+        let read = defaultedReturn(type: type, key: key)
+        guard case let .accessors(accessors) = binding.accessorBlock?.accessors,
+              accessors.contains(where: { $0.accessorSpecifier.tokenKind == .keyword(.set) })
+        else {
+            return hasAsyncGetter(binding)
+                ? "    var \(name): \(type) { get async { \(read) } }"
+                : "    var \(name): \(type) { \(read) }"
+        }
+        let origin = originArguments(label: label, symbol: symbol, sourceExpression: file)
+        return """
+            var \(name): \(type) {
+                get { \(read) }
+                set {
+                    let __oracle = TraceContext.active
+                    __oracle?.noteOrigin(\(origin))
+                    __oracle?.stateChange(\(quotedLiteral(key)), subject: self, \
+        value: RuntimeValue.canonical(newValue as Any))
+                }
+            }
+        """
     }
 
     /// One synthesized method: records `call`/`ret` exactly as a forwarder would, around a body that
@@ -89,7 +155,7 @@ public struct TracedDoubleMacro: PeerMacro {
         let body = tracedBody(
             function: function,
             label: key,
-            innerBody: defaultedReturn(of: function, key: key),
+            innerBody: defaultedReturn(type: function.signature.returnClause?.type.trimmedDescription, key: key),
             timed: false,
             origin: originArguments(label: label, symbol: symbol, sourceExpression: file)
         )
@@ -105,8 +171,8 @@ public struct TracedDoubleMacro: PeerMacro {
     /// fail-fast at the first call. Every seam key doubles as the `.vary` override point —
     /// `Seam("Inventory.stock", .int(0 ... 5))` turns a zero into swept surface with no change to the
     /// double, and a factory's field keys (`"<key>.<field>"`) sweep the same way.
-    private static func defaultedReturn(of function: FunctionDeclSyntax, key: String) -> String {
-        guard let returnType = function.signature.returnClause?.type.trimmedDescription else { return "" }
+    private static func defaultedReturn(type returnType: String?, key: String) -> String {
+        guard let returnType else { return "" }
         // `Int!` accepts a bare `Int`, so a defaulted read satisfies it. A `?` is remembered: `nil` is
         // the one genuine zero an *optional* custom type has. An IUO custom type is treated as
         // required — `!` is legacy spelling for "callers assume non-nil", and a silent nil default

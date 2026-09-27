@@ -2,7 +2,7 @@ import Foundation
 import HaruspecCore
 
 /// A `NotificationCenter` that records what is posted through it — the notification boundary observed
-/// by **injection**, the same way a collaborator is observed through a `@TracedForwarder` decorator.
+/// by **injection**, the same way a collaborator is observed through its stamped forwarder.
 ///
 /// Not an observer registered from the outside: that shape makes notifications a *second capture
 /// path* with different rules from every other kind of event — it holds the recorder directly instead

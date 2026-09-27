@@ -11,15 +11,29 @@ import HaruspecTrace
 // Prototype: proves the ergonomics on a decoupled checkout, with call-ordering variation as the headline
 // (stateful/model-based differential testing — the baseline branch *is* the model).
 
-/// A generated recording double's construction contract (`@TracedDouble` emits the conformance):
-/// built from the capture's context, so its synthesized returns read generated seam values and
-/// `SeamContext.double(_:)` can construct-and-register in one move.
+/// A generated recording double's construction contract (`@Haruspec` emits the conformance on its
+/// `Double<Protocol>`): built from the capture's context, so its synthesized returns read generated
+/// seam values and `SeamContext.double(_:)` can construct-and-register in one move.
 public protocol SeamDouble: TraceLabeled {
     init(_ seams: SeamContext)
-    /// The collaborator boundaries this double serves — the protocols its pasted declaration
-    /// refines, emitted by `@TracedDouble` from the inheritance clause. `SeamContext.resolve(_:)`
-    /// matches these by type identity, so the pasted refinement *is* the registry entry.
+    /// The collaborator boundaries this double serves — the stamped protocol and the protocols it
+    /// refines, emitted from the inheritance clause. ``SeamContext/resolve(_:)`` matches these by type
+    /// identity, so the pasted refinement *is* the registry entry.
     static var servedBoundaries: [Any.Type] { get }
+}
+
+/// A generated forwarder's registry entry (`@Haruspec` emits the conformance on its
+/// `Traced<Protocol>`): which boundary it forwards, and how to wrap a conformer of it. This is how a
+/// spec over `any Cart` records through `TracedCart` without naming it.
+public protocol StampedForwarder: AnyObject {
+    /// The existential the forwarder wraps, `(any Cart).self`.
+    static var forwardedBoundary: Any.Type { get }
+    /// Wraps a conformer in the forwarder, so the one wrap serves a build however it was made.
+    ///
+    /// - Parameter conformer: The build to wrap, possibly already wrapped.
+    /// - Returns: A forwarder around `conformer`, `conformer` itself when it is already one, or `nil`
+    ///   when it does not conform to the boundary.
+    static func wrap(_ conformer: Any) -> Any?
 }
 
 public extension SeamDouble {
@@ -43,8 +57,8 @@ public struct SeamContext {
     var resourceMakers: [ObjectIdentifier: (SeamContext) -> Any] = [:]
 
     /// Hands a recording double to the subject as an injected collaborator. The act of injection is
-    /// the declaration: the double states its own trace label (`TraceLabeled`, emitted by `@Traced` /
-    /// `@TracedForwarder`), and that label leaves the completeness audit's denominator — the
+    /// the declaration: the double states its own trace label (`TraceLabeled`, emitted on every
+    /// stamped forwarder and double), and that label leaves the completeness audit's denominator — the
     /// interaction is captured at this boundary, so the double's sources are the fixture's, not the
     /// subject's. A traced collaborator constructed *around* this call is not registered, and its
     /// sources gate: over-reporting stays the safe direction.
@@ -53,7 +67,7 @@ public struct SeamContext {
         return double
     }
 
-    /// Constructs a generated recording double (`@TracedDouble`) and hands it in, in one move — the
+    /// Constructs a generated recording double (a stamp's `Double<Protocol>`) and hands it in, in one move — the
     /// double reads its synthesized returns through this context, and constructing it here is what
     /// registers it as an injected collaborator.
     public func double<D: SeamDouble>(_ type: D.Type) -> D {
@@ -182,9 +196,9 @@ public struct Op<S> {
 }
 
 /// One observed property of the boundary: the fully qualified label its writes carry
-/// (`"Cart.itemCount"` — matching what `@Traced` / `@TracedForwarder` record), and how the harness
+/// (`"Cart.itemCount"` — matching what the stamped forwarder records), and how the harness
 /// reads its value back for the end-state snapshot. Declared via `.observes(_:)`, or derived from
-/// the boundary protocol's `var` requirements by `@DerivedOps`.
+/// the boundary protocol's `var` requirements by `@Haruspec`.
 public struct Observed<S> {
     let label: String
     /// Async so an actor port's isolated property can witness a `{ get async }` requirement and
@@ -256,9 +270,9 @@ public struct Spec<S> {
     var makeSystem: (SeamContext) -> S = { _ in
         fatalError(
             "this spec has no system factory — author it (.system { context in … }), or let the "
-                + "derivation supply it: paste the baseline's init into the @TracedForwarder protocol "
-                + "and @DerivedOps emits the wiring (collaborators resolve to their @TracedDouble "
-                + "doubles, NotificationCenter to the capture's)"
+                + "derivation supply it: paste the baseline's init into the @Haruspec protocol and "
+                + "its catalog emits the wiring (collaborators resolve to their stamped doubles, "
+                + "NotificationCenter to the capture's)"
         )
     }
 
@@ -266,10 +280,10 @@ public struct Spec<S> {
     /// `.operations(derivedFrom:)` when the catalog derives construction, and what
     /// `check(_ conformer:)` runs. `nil` when construction has to be authored.
     var makeConformer: ((SeamContext, Any.Type) -> S)?
-    /// Wraps a candidate in the capture boundary before it is driven — the `@TracedForwarder`
-    /// sibling when the catalog has one, so a port authored by closure records through the same
-    /// class as the baseline. Identity when the spec knows no boundary.
-    var wrapCandidate: (S) -> S = { $0 }
+    /// Wraps every build in the capture boundary before it is driven — the stamped protocol's
+    /// forwarder, so the baseline and a port authored by closure record through the same class.
+    /// Identity when `S` is not a stamped protocol.
+    var wrapCandidate: (S) -> S = StampedForwarderRegistry.wrap(S.self)
 
     var operations: [Op<S>] = []
     var tolerances: Tolerance = .strict
@@ -306,9 +320,7 @@ public struct Spec<S> {
     /// says so.
     var derivedDefaultSeams: Set<String> = []
     /// The boundary properties this spec observes (see `Observed`): each one is snapshot at the end
-    /// of every capture (the state contract, gates always), and its `.stateChange` writes join the
-    /// diff under `Tolerance.mutationOrder`. Writes to anything *not* listed here are dropped at
-    /// diff time — a port's private state is not surface.
+    /// of every capture — the state contract, which gates always.
     var observedProperties: [Observed<S>] = []
 
     public init(_ name: String) {
@@ -389,23 +401,14 @@ public struct Spec<S> {
         var copy = self; copy.tolerances = spec; return copy
     }
 
-    /// Observes boundary properties: snapshots each at the end of every capture (end-state values gate
-    /// unconditionally), and compares their write timelines under `Tolerance.mutationOrder`. The label
-    /// is the fully qualified one writes carry (`"Cart.itemCount"`). Derived specs get this from the
-    /// protocol's `var` requirements; this is the authored spelling.
+    /// Observes boundary properties: snapshots each at the end of every capture, and the end-state
+    /// values gate unconditionally. The label is the fully qualified one the forwarder records
+    /// (`"Cart.itemCount"`). Derived specs get this from the protocol's `var` requirements; this is
+    /// the authored spelling.
     public func observes(_ properties: Observed<S>...) -> Spec<S> {
         var copy = self
         copy.observedProperties += properties
         return copy
-    }
-
-    /// The tolerance the diff actually runs under: the authored tolerance, scoped to the observed
-    /// properties — computed at use rather than stored, so `.tolerate` and `.observes` compose in
-    /// either order.
-    var effectiveTolerances: Tolerance {
-        var spec = tolerances
-        spec.observedStateLabels = observedProperties.map(\.label)
-        return spec
     }
 
     /// Accepts that the *subject* reaches an effect channel the capture cannot see — the spec-level
@@ -422,7 +425,7 @@ public struct Spec<S> {
         return copy
     }
 
-    /// How to build a `T` when a synthesized double must return one (`@TracedDouble`, a custom-type
+    /// How to build a `T` when a synthesized double must return one (a stamped double's custom-type
     /// requirement). One declaration per type, on the spec — both sides of every differential build
     /// their values through the same factory.
     ///
@@ -438,7 +441,7 @@ public struct Spec<S> {
     }
 
     /// Provide a capture-scoped resource: how to build a `T` when a derived system's constructor
-    /// parameter wants one and no `@TracedDouble` serves it — an isolated in-memory store, a scratch
+    /// parameter wants one and no stamped double serves it — an isolated in-memory store, a scratch
     /// directory. The maker runs once per capture, so every probe gets a fresh, isolated instance:
     /// this is `notifications` (the built-in resource) generalized to types the engine cannot know.
     ///

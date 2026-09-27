@@ -185,10 +185,6 @@ public extension Spec {
         // Every build records through the spec's capture boundary, however it was constructed — the
         // one choke point for baseline, candidate, record and replay alike.
         let system = wrapCandidate(make(context))
-        // The system states what its instrumentation can see of property writes (`@Traced` = full,
-        // `@TracedForwarder` = boundary), and the trace carries it — the diff needs both sides'
-        // answers before it may compare write timelines.
-        recorder.declareMutationCapture((system as? MutationCapturing)?.mutationCapture ?? .none)
         // Task-locals are inherited across `await`, so binding once around the whole loop still
         // reaches an operation that suspends — which is what lets an op drive an actor. The op
         // identity is bound per operation, so every event — and every block or task the op spawns,
@@ -219,9 +215,8 @@ public extension Spec {
             guard DeferredTimers.fire(for: recorder) else { break }
         }
         // The end-state snapshots: after quiescence (a racing read is not a reading), the harness
-        // itself reads each observed property back. Harness-read on both sides by construction, so
-        // they compare under every `MutationCapture` capability — the state contract that stays
-        // gating even while write *order* is advisory.
+        // itself reads each observed property back. Harness-read on both sides by construction — the
+        // state contract, which gates.
         for property in observedProperties {
             await recorder.snapshot(property.label, value: RuntimeValue.canonical(property.read(system)))
         }
@@ -244,12 +239,12 @@ public extension Spec {
             inputs: cassette.tracks,
             baseline: baseline,
             candidate: candidateTrace,
-            tolerances: effectiveTolerances
+            tolerances: tolerances
         )
         let diff = BehavioralDiff.compare(
             baseline: baseline,
             candidate: candidateTrace,
-            tolerances: effectiveTolerances
+            tolerances: tolerances
         )
         .classified(against: intent, evidence: evidence)
         return ProbeComparison(diff: diff, candidateReplay: replay, evidence: evidence)

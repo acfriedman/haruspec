@@ -54,7 +54,7 @@ final class CausalDomainAttributionTests: XCTestCase {
             self.notifications = notifications
         }
 
-        /// The shape `@Traced` expands to: a call, the body, a return.
+        /// The shape a forwarder expands to: a call, the body, a return.
         func run() {
             recorder.call("Checkout.run", subject: self)
             notifications.post(name: Notification.Name("CheckoutDidComplete"), object: nil)

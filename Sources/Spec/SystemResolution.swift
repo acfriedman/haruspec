@@ -5,11 +5,11 @@ import ObjectiveC
 
 // Injected doubles are the default, so the wiring that hands them in should not need authoring.
 // `context.resolve(InventoryReserving.self)` finds the one synthesized double serving that boundary —
-// the pasted `@TracedDouble` protocol *refines* the boundary, so conformance IS the declaration and
+// the stamped protocol *refines* the boundary, so conformance IS the declaration and
 // there is no second registry to keep in sync. Anything unresolvable traps with the preferred fix
 // spelled out: the trap message is the teaching surface for the boilerplate it replaced.
 
-/// Every `@TracedDouble`-synthesized double linked into the process. Doubles are `NSObject`-rooted
+/// Every stamped double linked into the process. Doubles are `NSObject`-rooted
 /// (they back Obj-C injection points), so the Obj-C class list is a complete census; the sweep runs
 /// once and only when a derivation actually resolves.
 enum SeamDoubleRegistry {
@@ -22,6 +22,38 @@ enum SeamDoubleRegistry {
         return UnsafeBufferPointer(start: classes, count: Int(count))
             .compactMap { $0 as? any SeamDouble.Type }
     }()
+}
+
+/// Every stamped forwarder linked into the process, found by the same Obj-C class-list census as
+/// `SeamDoubleRegistry` — forwarders are `NSObject`-rooted.
+enum StampedForwarderRegistry {
+    static let all: [any StampedForwarder.Type] = {
+        var count: UInt32 = 0
+        guard let classes = objc_copyClassList(&count) else {
+            return []
+        }
+        defer { free(UnsafeMutableRawPointer(classes)) }
+        return UnsafeBufferPointer(start: classes, count: Int(count))
+            .compactMap { $0 as? any StampedForwarder.Type }
+    }()
+
+    /// The wrap for a spec over `S`: its stamped forwarder when `S` is a stamped protocol's
+    /// existential, identity otherwise.
+    ///
+    /// - Parameter _: The spec's system type, `(any Cart).self`.
+    /// - Returns: A function that wraps a build in the forwarder, or hands it back unchanged.
+    static func wrap<S>(_: S.Type) -> (S) -> S {
+        guard let forwarder = all.first(where: { ObjectIdentifier($0.forwardedBoundary) == ObjectIdentifier(S.self) })
+        else {
+            return { $0 }
+        }
+        return { system in
+            guard let wrapped = forwarder.wrap(system) as? S else {
+                preconditionFailure("\(forwarder) could not wrap \(type(of: system)) as \(S.self) — file a bug")
+            }
+            return wrapped
+        }
+    }
 }
 
 /// A packaged default for a capture resource: linking the provider is the declaration, so a spec
@@ -130,7 +162,7 @@ public extension SeamContext {
                 + ".system { context in … context.double(\(candidates.map { "\($0)" }.sorted()[0]).self) … }"
         }
         return "nothing serves \(boundary) — declare it: paste its protocol under "
-            + "@TracedDouble(label: …) refining \(boundary) (a recorded collaborator), provide it "
+            + "@Haruspec(\"<label>\") refining \(boundary) (a recorded collaborator), provide it "
             + "as a capture resource: .provides(\(boundary).self) { context in … } (isolated "
             + "infrastructure, observed through the subject's reads), or author the wiring: "
             + ".system { context in … }"

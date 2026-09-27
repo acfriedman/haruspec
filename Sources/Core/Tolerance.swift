@@ -147,21 +147,6 @@ public enum SpawnEdgePolicy: String, Codable, Sendable {
     case ignored // spawn edges are not compared at all
 }
 
-/// How the *order* of observed property writes (`.stateChange` events) participates in the verdict.
-///
-/// Default `.advisory` — deliberately weaker than the safe-by-default gates: intermediate write
-/// order is contract **iff something observes the property between writes** (KVO / Combine /
-/// SwiftUI), and the capture records no subscriptions, so the engine cannot know.
-/// Gating every port on internal write order would fail refactors no observer can distinguish.
-/// The end-state *values* still gate unconditionally through `.snapshot` events, so advisory here
-/// never waives the state contract — only the timeline. A spec whose subject is known-observed opts
-/// up to `.gating`, where an intended reorder declares itself via `Intent` (`Reorders(_:)`).
-public enum MutationOrderPolicy: String, Codable, Sendable {
-    case advisory // write-order divergences are reported, but do not fail the verdict
-    case gating // an undeclared write-order change fails the verdict
-    case ignored // `.stateChange` events are dropped before diffing
-}
-
 /// The declared "acceptable behavioral delta" between two traces.
 ///
 /// The *tolerance model*: the contract that separates a real behavioral change from
@@ -207,16 +192,6 @@ public struct Tolerance: Sendable, Equatable {
     /// (red until declared via ``Intent/expectedOrderingLosses`` / ``Intent/expectedOrderingAdditions``).
     public var spawnEdges: SpawnEdgePolicy
 
-    /// How observed-property write order participates in the verdict. Defaults to `.advisory`
-    /// (see `MutationOrderPolicy` — snapshots gate the values regardless).
-    public var mutationOrder: MutationOrderPolicy
-
-    /// The `.stateChange` labels this comparison is *about*: the boundary protocol's properties, fully
-    /// qualified (`"Cart.itemCount"`), with writes to anything else dropped at diff time so a port's
-    /// private state never manufactures a divergence. `nil` means unscoped, the raw-diff default in
-    /// which every recorded write compares; a spec always scopes, possibly to nothing.
-    public var observedStateLabels: [String]?
-
     public init(
         volatileFields: [VolatileField] = [],
         numericEpsilon: Double = 0,
@@ -227,9 +202,7 @@ public struct Tolerance: Sendable, Equatable {
         structuralComparison: StructuralComparison = .strict,
         domainMigration: DomainMigrationPolicy = .gating,
         concurrency: ConcurrencyComparison = .totalOrder,
-        spawnEdges: SpawnEdgePolicy = .gating,
-        mutationOrder: MutationOrderPolicy = .advisory,
-        observedStateLabels: [String]? = nil
+        spawnEdges: SpawnEdgePolicy = .gating
     ) {
         self.volatileFields = volatileFields
         self.numericEpsilon = numericEpsilon
@@ -241,8 +214,6 @@ public struct Tolerance: Sendable, Equatable {
         self.domainMigration = domainMigration
         self.concurrency = concurrency
         self.spawnEdges = spawnEdges
-        self.mutationOrder = mutationOrder
-        self.observedStateLabels = observedStateLabels
     }
 
     /// The default: exact match on everything (nondeterminism already removed by canonicalization of
@@ -310,7 +281,6 @@ extension Tolerance: Codable {
     enum CodingKeys: String, CodingKey {
         case volatileFields, numericEpsilon, timingBudgets, unorderedGroups, ignoredKinds
         case ignoredNotificationNames, structuralComparison, domainMigration, concurrency, spawnEdges
-        case mutationOrder, observedStateLabels
     }
 
     /// Every field is optional in JSON so a partial spec is ergonomic.
@@ -330,10 +300,6 @@ extension Tolerance: Codable {
             .decodeIfPresent(ConcurrencyComparison.self, forKey: .concurrency) ?? .totalOrder
         spawnEdges = try container
             .decodeIfPresent(SpawnEdgePolicy.self, forKey: .spawnEdges) ?? .gating
-        mutationOrder = try container
-            .decodeIfPresent(MutationOrderPolicy.self, forKey: .mutationOrder) ?? .advisory
-        observedStateLabels = try container
-            .decodeIfPresent([String].self, forKey: .observedStateLabels)
     }
 }
 

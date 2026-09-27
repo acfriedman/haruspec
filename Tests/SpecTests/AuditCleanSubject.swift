@@ -12,14 +12,14 @@ import HaruspecTrace
 // by a subject whose file is clean throughout. `SpecPrototypeTests.swift` is not — `DefaultPinger`
 // posts through `NotificationCenter.default` there, deliberately — so the clean case lives here.
 
-protocol AuditSubject: AnyObject {
+@Haruspec
+protocol AuditedLedger: AnyObject {
     func add(cents: Int)
     func total() -> Int
 }
 
 /// Baseline: every effect goes through the injected center, which is the recorder.
-@Traced("Ledger")
-final class InjectedLedger: AuditSubject {
+final class InjectedLedger: AuditedLedger {
     private let center: NotificationCenter
     private var cents = 0
 
@@ -39,8 +39,7 @@ final class InjectedLedger: AuditSubject {
 }
 
 /// A behavior-preserving refactor of the baseline — same effects, different storage.
-@Traced("Ledger")
-final class RestructuredLedger: AuditSubject {
+final class RestructuredLedger: AuditedLedger {
     private let center: NotificationCenter
     private var entries: [Int] = []
 
@@ -63,28 +62,21 @@ final class RestructuredLedger: AuditSubject {
     }
 }
 
-func makeInjectedLedger(_ ctx: SeamContext) -> AuditSubject {
+func makeInjectedLedger(_ ctx: SeamContext) -> AuditedLedger {
     InjectedLedger(center: ctx.notifications)
 }
 
-func makeRestructuredLedger(_ ctx: SeamContext) -> AuditSubject {
+func makeRestructuredLedger(_ ctx: SeamContext) -> AuditedLedger {
     RestructuredLedger(center: ctx.notifications)
 }
 
 // MARK: - A subject with an injected collaborator
 
-/// What the ledger announces through — a collaborator boundary. The audit's question is where the
-/// *implementation* of this protocol lives, and whether its file is the subject's problem.
-protocol Announcing: AnyObject {
-    func announce(total: Int)
-}
-
-/// A subject that hands its announcements to an injected collaborator. This file stays clean: the
-/// call is recorded at the collaborator's boundary, and what the collaborator does past it is the
-/// fixture's business (see `AuditGateTests`, where the implementation deliberately lives in the
-/// bypass-carrying file).
-@Traced("Ledger")
-final class AnnouncingLedger: AuditSubject {
+/// A subject that hands its announcements to an injected collaborator (`Announcing`). This file
+/// stays clean: the call is recorded at the collaborator's boundary, and what the collaborator does
+/// past it is the fixture's business (see `AuditGateTests`, where the collaborator is deliberately
+/// stamped in the bypass-carrying file).
+final class AnnouncingLedger: AuditedLedger {
     private let center: NotificationCenter
     private let announcer: Announcing
     private var cents = 0

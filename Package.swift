@@ -75,7 +75,8 @@ let package = Package(
         .target(name: "HaruspecDemo", dependencies: [
             "HaruspecCore",
             "HaruspecTrace",
-            "HaruspecMacros"
+            "HaruspecMacros",
+            "HaruspecSpec"
         ], path: "Sources/Demo"),
 
         // The MCP stdio server (`haruspec mcp`) — the tool surface other agents call. A library so the
@@ -160,19 +161,14 @@ let package = Package(
             "HaruspecCore",
             "HaruspecTrace",
             "HaruspecSeams",
-            "HaruspecMacros",
             "LegacyObjC"
         ], path: "Tests/SeamsTests"),
-        // Also depends on the plugin itself: the DEBUG guard `@Traced` emits is a property of the
-        // *expansion*, and a debug-built test can only see the DEBUG branch by running it.
         .testTarget(name: "HaruspecMacrosTests", dependencies: [
             "HaruspecCore",
             "HaruspecTrace",
             "HaruspecMacros",
-            "HaruspecMacroPlugin",
-            .product(name: "SwiftSyntax", package: "swift-syntax"),
-            .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
-            .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax")
+            "HaruspecSeams",
+            "HaruspecSpec"
         ], path: "Tests/MacrosTests"),
         .testTarget(name: "HaruspecDemoTests", dependencies: [
             "HaruspecCore",

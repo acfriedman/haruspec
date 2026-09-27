@@ -1,10 +1,10 @@
 import Foundation
 import HaruspecCore
 
-/// The ambient recorder that `@Traced` methods record into.
+/// The ambient recorder that stamped forwarders and doubles record into.
 ///
 /// Using a task-local means an instrumented type needs **no recorder property** — capture is turned
-/// on around a spec with `TraceContext.$current.withValue(recorder) { … }`, and every `@Traced`
+/// on around a spec with `TraceContext.$current.withValue(recorder) { … }`, and every instrumented
 /// method inside that dynamic scope records to it. Outside a capture window `current` is nil and the
 /// generated code is a cheap nil-check, so instrumentation can ship in production.
 ///

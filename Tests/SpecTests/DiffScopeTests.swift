@@ -11,12 +11,12 @@ import XCTest
 // collapses to a rollup line — and the two honesty exits (unreadable artifact, unscopable
 // verdict) always render in full rather than hiding behind a diff nobody measured them against.
 
+@Haruspec
 protocol Abacus: AnyObject {
     func ring(amount: Int)
     func total() -> Int
 }
 
-@Traced("Abacus")
 private final class LegacyAbacus: Abacus {
     private var cents = 0
     func ring(amount: Int) {
@@ -29,7 +29,6 @@ private final class LegacyAbacus: Abacus {
 }
 
 /// The port that diverges: every ring overcharges by one.
-@Traced("Abacus")
 private final class OverchargingAbacus: Abacus {
     private var cents = 0
     func ring(amount: Int) {

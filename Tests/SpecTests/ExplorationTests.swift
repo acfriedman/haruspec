@@ -21,7 +21,6 @@ private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
 
 /// The baseline's behavior everywhere except the very top of the declared quantity domain — the shape
 /// of bug a uniform sample finds by luck and a boundary-first one finds by construction.
-@Traced("PromoCart")
 private final class TopOfRangeBugCart: PromoCart {
     private let center: NotificationCenter
     private var subtotal = 0

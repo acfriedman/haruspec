@@ -7,12 +7,12 @@ import HaruspecTrace
 import XCTest
 
 // The generated collaborator double, end to end: nobody wrote a double here. The protocol below is
-// the whole authored surface — `@TracedDouble` synthesizes the class, `context.double` constructs and
+// the whole authored surface — `@Haruspec` synthesizes the class, `context.double` constructs and
 // registers it, void requirements record and no-op, and the one value-returning requirement is a seam
 // read: zero by default, swept when the spec declares a domain for its key, replayed like any seam.
 
-/// The boundary the subject depends on. `TracedMetering` is generated as a peer.
-@TracedDouble(label: "Meter")
+/// The boundary the subject depends on. `DoubleMetering` is generated as a peer.
+@Haruspec
 protocol Metering: AnyObject {
     func record(value: Int)
     func threshold() -> Int
@@ -90,23 +90,23 @@ private final class SilentGauge: Gauge {
     }
 }
 
-final class TracedDoubleTests: XCTestCase {
+final class DoubleTests: XCTestCase {
     private func gauge(sweepingThreshold: Bool = false) -> Spec<Gauge> {
         var spec = Spec<Gauge>("double.gauge")
-            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self)) }
+            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self)) }
             .operations {
                 Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
                     gauge.add(value: Int(value))
                 }
             }
             // The custom return's factory: every field a seam read under the synthesized key, so the
-            // fee is recorded, sweepable at "Meter.tariff.cents", and identical on both sides.
+            // fee is recorded, sweepable at "Metering.tariff.cents", and identical on both sides.
             .generates(Fee.self) { seams, key in
                 Fee(cents: Int(seams.int("\(key).cents", default: 3)))
             }
         if sweepingThreshold {
             spec = spec.vary {
-                Seam("Meter.threshold", .int(0 ... 8))
+                Seam("Metering.threshold", .int(0 ... 8))
             }
         }
         return spec
@@ -114,12 +114,12 @@ final class TracedDoubleTests: XCTestCase {
 
     func testAGeneratedDoubleNeedsNoAuthoredImplementation() async {
         let verdict = await gauge().verify(against: { ctx in
-            MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+            MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
         })
 
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertTrue(
-            verdict.qualification.coveredClasses.contains("Meter"),
+            verdict.qualification.coveredClasses.contains("Metering"),
             "the boundary is captured — record calls and threshold reads are trace events"
         )
         XCTAssertTrue(
@@ -130,12 +130,12 @@ final class TracedDoubleTests: XCTestCase {
 
     func testASynthesizedReturnSweepsWhenTheSpecDeclaresItsDomain() async {
         let verdict = await gauge(sweepingThreshold: true).verify(against: { ctx in
-            MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+            MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
         })
 
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertGreaterThan(
-            verdict.qualification.seamPositions["Meter.threshold"] ?? 0,
+            verdict.qualification.seamPositions["Metering.threshold"] ?? 0,
             0,
             "the double's return is declared surface: recorded, varied, and reported like any seam"
         )
@@ -146,7 +146,7 @@ final class TracedDoubleTests: XCTestCase {
         // surcharge lands in the payload deterministically. lastFee() -> Fee? defaults nil and
         // history() -> [Int] defaults empty with no declaration at all — "repeated" stays false.
         let verdict = await gauge().verify(against: { ctx in
-            MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+            MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
         })
 
         XCTAssertEqual(verdict.verdict, .equivalent)
@@ -155,15 +155,15 @@ final class TracedDoubleTests: XCTestCase {
     func testAFactoryFieldSweepsLikeAnyOtherSeam() async {
         let verdict = await gauge()
             .vary {
-                Seam("Meter.tariff.cents", .int(1 ... 9))
+                Seam("Metering.tariff.cents", .int(1 ... 9))
             }
             .verify(against: { ctx in
-                MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+                MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
             })
 
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertGreaterThan(
-            verdict.qualification.seamPositions["Meter.tariff.cents"] ?? 0,
+            verdict.qualification.seamPositions["Metering.tariff.cents"] ?? 0,
             0,
             "a custom return's field is declared surface — swept and reported like an op argument"
         )
@@ -173,7 +173,7 @@ final class TracedDoubleTests: XCTestCase {
     /// definition, and its field domains travel with it — swept and reported with no `.vary` at all.
     func testAModelsOwnGeneratorTravelsWithItsDomains() async {
         let spec = Spec<Gauge>("double.gauge.conformance")
-            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self)) }
+            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self)) }
             .operations {
                 Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
                     gauge.add(value: Int(value))
@@ -182,7 +182,7 @@ final class TracedDoubleTests: XCTestCase {
             .generates(Fee.self)
 
         let verdict = await spec.verify(against: { ctx in
-            MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+            MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
         })
 
         XCTAssertEqual(verdict.verdict, .equivalent)
@@ -197,7 +197,7 @@ final class TracedDoubleTests: XCTestCase {
     /// `Seam` on the type-scoped key wins over the generator's domain in either declaration order.
     func testASpecNarrowsAModelFieldWithAnExplicitSeam() async {
         let verdict = await Spec<Gauge>("double.gauge.narrowed")
-            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self)) }
+            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self)) }
             .operations {
                 Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
                     gauge.add(value: Int(value))
@@ -208,7 +208,7 @@ final class TracedDoubleTests: XCTestCase {
             }
             .generates(Fee.self)
             .verify(against: { ctx in
-                MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+                MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
             })
 
         XCTAssertEqual(verdict.verdict, .equivalent)
@@ -220,7 +220,7 @@ final class TracedDoubleTests: XCTestCase {
     /// registered by the argument itself (no `.generates` call anywhere).
     func testAGeneratedModelAsAnOpArgument() async {
         let spec = Spec<Gauge>("double.gauge.argument")
-            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self)) }
+            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self)) }
             .operations {
                 Op("charge", varying: .generated(Fee.self), .int(0 ... 10).named("bump")) { gauge, fee, bump in
                     gauge.add(value: fee.cents + Int(bump))
@@ -228,7 +228,7 @@ final class TracedDoubleTests: XCTestCase {
             }
 
         let verdict = await spec.verify(against: { ctx in
-            MeteredGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+            MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
         })
 
         XCTAssertEqual(verdict.verdict, .equivalent)
@@ -246,9 +246,9 @@ final class TracedDoubleTests: XCTestCase {
 
     func testDroppingTheBoundaryCallDiverges() async {
         let verdict = await gauge().verify(against: { ctx in
-            SilentGauge(center: ctx.notifications, meter: ctx.double(TracedMetering.self))
+            SilentGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
         })
 
-        XCTAssertEqual(verdict.verdict, .diverged, "sink traffic gates: the drop is a missing Meter.record")
+        XCTAssertEqual(verdict.verdict, .diverged, "sink traffic gates: the drop is a missing Metering.record")
     }
 }

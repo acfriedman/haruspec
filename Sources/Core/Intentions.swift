@@ -241,9 +241,8 @@ public struct Awaits: Intention {
     }
 }
 
-/// The port deliberately reorders an event whose order is compared — `reordered`, by label. The
-/// canonical case is an observed property's write under `MutationOrderPolicy.gating`: a port that
-/// computes its state in a different order names the writes it moves, and only those.
+/// The port deliberately reorders an event whose order is compared — `reordered`, by label: a port
+/// that emits its effects in a different order names the events it moves, and only those.
 ///
 /// Say which way it moved and the declaration becomes a tripwire for every other move:
 /// `Reorders("Archive.archive", before: "CartDidChange")` holds only for an event that now sits

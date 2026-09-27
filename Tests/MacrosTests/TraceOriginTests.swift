@@ -1,12 +1,14 @@
 import HaruspecMacros
+import HaruspecSeams
+@testable import HaruspecSpec
 @testable import HaruspecTrace
 import XCTest
 
 // Where a covered label is declared — the audit's source map, stamped by the macro at expansion and
 // collected when the instrumented body runs. These pin the case that makes searching for the label
-// useless: `Cart` is answered by a Swift port *and* an Obj-C class behind a forwarder, neither of
-// which is named "Cart". The subjects live in TracedForwarderMacroTests.swift (same target):
-// `@Traced("Cart") CartPort` and `@TracedForwarder(label: "Cart")` over `CartManager`.
+// useless: `Cart` is answered by a Swift port *and* an Obj-C class behind one forwarder, neither of
+// which is named "Cart". The subjects live in ForwarderTests.swift (same target): `@Haruspec protocol Cart`
+// over `CartManager` and `SwiftCart`.
 
 final class TraceOriginTests: XCTestCase {
     /// Build the recorder *inside* the binding: it picks the collector up at init, so a capture that
@@ -19,24 +21,25 @@ final class TraceOriginTests: XCTestCase {
     }
 
     func testOneLabelRegistersEveryDeclarationThatAnsweredToIt() {
-        let manager = CartManager()
-
         let origins = collect { _ in
-            CartPort(manager).add(Product(sku: "A"), quantity: 1)
-            TracedCart(manager).add(Product(sku: "A"), quantity: 1)
+            TracedCart(SwiftCart()).add(Product(sku: "A"), quantity: 1)
+            TracedCart(CartManager()).add(Product(sku: "A"), quantity: 1)
         }
 
         XCTAssertEqual(origins.map(\.label), ["Cart", "Cart"], "both declarations trace as one label")
-        XCTAssertEqual(origins.map(\.symbol), ["CartManager", "CartPort"], "and are told apart by type")
+        XCTAssertEqual(origins.map(\.symbol), ["CartManager", "SwiftCart"], "and are told apart by type")
     }
 
-    /// The Swift side carries a `#fileID` — module-relative on purpose, since an absolute path would
-    /// make the verdict machine-specific and the cross-machine freshness guard compares verdicts.
-    func testASwiftDeclarationCarriesTheFileThatDeclaresIt() throws {
-        let origins = collect { _ in CartPort(CartManager()).add(Product(sku: "A"), quantity: 1) }
+    /// A double's behavior is its generated code, so it carries the stamped protocol's `#fileID` —
+    /// module-relative on purpose, since an absolute path would make the verdict machine-specific
+    /// and the cross-machine freshness guard compares verdicts.
+    func testADoubleCarriesTheFileThatStampsIt() throws {
+        let context = SeamContext(notifications: NotificationCenter(), cassette: Cassette())
+        let origins = collect { _ in DoubleCart(context).add(Product(sku: "A"), quantity: 1) }
 
+        XCTAssertEqual(origins.first?.symbol, "DoubleCart")
         let source = try XCTUnwrap(origins.first?.source)
-        XCTAssertTrue(source.hasSuffix("TracedForwarderMacroTests.swift"), source)
+        XCTAssertTrue(source.hasSuffix("ForwarderTests.swift"), source)
         XCTAssertTrue(source.contains("/"), "a fileID is module-qualified, not a bare name")
     }
 
@@ -64,7 +67,7 @@ final class TraceOriginTests: XCTestCase {
     func testAnUnreachedDeclarationRegistersNothing() {
         let origins = collect { _ in TracedCart(CartManager()).add(Product(sku: "A"), quantity: 1) }
 
-        XCTAssertEqual(origins.map(\.symbol), ["CartManager"], "CartPort ran in no capture here")
+        XCTAssertEqual(origins.map(\.symbol), ["CartManager"], "SwiftCart ran in no capture here")
     }
 
     /// Two verifications cannot pool their sources. The collector is bound per verification rather
@@ -72,10 +75,10 @@ final class TraceOriginTests: XCTestCase {
     /// verdicts — a global would hand every spec the union of everything the test process touched.
     func testCollectionIsScopedToOneVerification() {
         let manager = CartManager()
-        let first = collect { _ in CartPort(manager).add(Product(sku: "A"), quantity: 1) }
+        let first = collect { _ in TracedCart(SwiftCart()).add(Product(sku: "A"), quantity: 1) }
         let second = collect { _ in TracedCart(manager).add(Product(sku: "A"), quantity: 1) }
 
-        XCTAssertEqual(first.map(\.symbol), ["CartPort"])
+        XCTAssertEqual(first.map(\.symbol), ["SwiftCart"])
         XCTAssertEqual(second.map(\.symbol), ["CartManager"])
     }
 
@@ -83,7 +86,7 @@ final class TraceOriginTests: XCTestCase {
     func testTracingWithNothingCollectingIsHarmless() {
         let recorder = TraceRecorder(name: "unbound")
 
-        TraceContext.$current.withValue(recorder) { CartPort(CartManager()).add(Product(sku: "A"), quantity: 1) }
+        TraceContext.$current.withValue(recorder) { TracedCart(CartManager()).add(Product(sku: "A"), quantity: 1) }
 
         XCTAssertEqual(recorder.trace().events.map(\.label), ["Cart.add", "Cart.add"])
     }

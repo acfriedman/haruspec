@@ -1,9 +1,12 @@
 import Foundation
+import HaruspecMacros
+import HaruspecSpec
+import HaruspecTrace
 
 /// The observable result of a checkout. `orderID` and `issuedAt` are deliberately non-deterministic
 /// (fresh every run) to prove the tolerance model neutralizes real-world volatility.
 ///
-/// `Codable` is all it takes for `@Traced` to capture a checkout's return value as a structured
+/// `Codable` is all it takes for the forwarder to capture a checkout's return value as a structured
 /// payload (via the `Codable → CanonicalValue` bridge), so the diff can report per-field mismatches.
 public struct Receipt: Sendable, Equatable, Codable {
     public var subtotalCents: Int
@@ -34,7 +37,10 @@ public struct Receipt: Sendable, Equatable, Codable {
 }
 
 /// The behavior contract every variant of the cart implements. The spec driver only knows this
-/// surface — exactly the position an AI agent is in when it refactors "the module."
+/// surface — exactly the position an AI agent is in when it refactors "the module." The stamp's
+/// forwarder, `TracedCartService`, records every variant through this one shape, timed so the
+/// checkout's timing budget has a duration to compare.
+@Haruspec(timed: true)
 public protocol CartService: AnyObject {
     func addItem(sku: String, unitPriceCents: Int, quantity: Int)
     func removeItem(sku: String)

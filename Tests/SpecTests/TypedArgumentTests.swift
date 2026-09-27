@@ -13,12 +13,12 @@ import XCTest
 // removes the key, so neither is expressible.
 
 /// A cart whose behavior depends on the *pair* — a sku and the quantity it was added with.
-private protocol TypedCart: AnyObject {
+@Haruspec
+protocol TypedCart: AnyObject {
     func add(sku: String, quantity: Int)
     func total() -> Int
 }
 
-@Traced("TypedCart")
 private final class GoodTypedCart: TypedCart {
     private let center: NotificationCenter
     private var cents = 0
@@ -43,7 +43,6 @@ private final class GoodTypedCart: TypedCart {
 
 /// Identical except at the very top of the declared quantity domain — the shape of bug that only a
 /// swept argument finds.
-@Traced("TypedCart")
 private final class TopOfRangeTypedCart: TypedCart {
     private let center: NotificationCenter
     private var cents = 0

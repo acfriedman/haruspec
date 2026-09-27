@@ -8,7 +8,7 @@ import XCTest
 
 // The `.system` closure, derived. The pasted protocol carries the baseline's init requirement, so
 // the forwarder can mirror it and wire it: collaborators resolve to their synthesized doubles by
-// conformance (the pasted @TracedDouble protocol *refines* the boundary — conformance is the
+// conformance (the stamped collaborator protocol *refines* the boundary — conformance is the
 // registry), the NotificationCenter parameter takes the capture's isolated center. With ops and
 // system both derived, the whole spec is one entry point and its authored residue.
 
@@ -17,8 +17,8 @@ protocol ReceiptPrinting {
     func printLine(total: Int)
 }
 
-@TracedDouble(label: "Printer")
-protocol PrinterDouble: ReceiptPrinting {
+@Haruspec
+protocol Printer: ReceiptPrinting {
     func printLine(total: Int)
 }
 
@@ -49,8 +49,7 @@ final class KioskManager {
 /// The pasted interface, init included — construction is part of the Clang interface, and pasting it
 /// is what lets the wiring derive. Every conformer (baseline and ports) carries the same init, which
 /// is what lets the spec build any of them from its type.
-@DerivedOps
-@TracedForwarder(label: "Kiosk")
+@Haruspec
 protocol Kiosk: AnyObject {
     init(printer: ReceiptPrinting, center: NotificationCenter)
     func ring(amount: Int)
@@ -110,8 +109,7 @@ final class RegisterManager {
     }
 }
 
-@DerivedOps
-@TracedForwarder(label: "Register")
+@Haruspec
 protocol Register: AnyObject {
     init(book: TallyBook, center: NotificationCenter)
     func punch(amount: Int)
@@ -149,8 +147,7 @@ final class DerivedSystemTests: XCTestCase {
     }
 
     func testTheCatalogCarriesTheDerivedSystemFactory() {
-        XCTAssertNotNil(DerivedKiosk.derivedSystem, "a pasted init + forwarder sibling derive the wiring")
-        XCTAssertNotNil(DerivedKiosk.derivedWrapper, "a forwarder sibling is the capture boundary")
+        XCTAssertNotNil(DerivedKiosk.derivedSystem, "a pasted init derives the wiring")
     }
 
     /// The port is built and wrapped exactly as the baseline was — nothing authored, no attribute
@@ -188,7 +185,7 @@ final class DerivedSystemTests: XCTestCase {
             Budget(runs: 60)
         }.verify(against: { context in
             SwiftKiosk(
-                printer: context.double(TracedPrinterDouble.self),
+                printer: context.double(DoublePrinter.self),
                 center: context.notifications
             )
         })
@@ -242,6 +239,6 @@ final class DerivedSystemTests: XCTestCase {
 
         let resolved = context.resolve(ReceiptPrinting.self)
 
-        XCTAssertTrue(resolved is TracedPrinterDouble, "the pasted protocol's refinement is the registry")
+        XCTAssertTrue(resolved is DoublePrinter, "the pasted protocol's refinement is the registry")
     }
 }

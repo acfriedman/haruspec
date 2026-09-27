@@ -7,7 +7,7 @@ import XCTest
 // reachable *solely* because `import Haruspec` re-exports it. If any re-export were missing this file
 // would not compile — which is the test. It deliberately touches one symbol from each module:
 //
-//   HaruspecMacros   — @Traced, @Timed, @Seamed
+//   HaruspecMacros   — @Haruspec
 //   HaruspecTrace    — Haruspec.marker / Haruspec.interval, TraceRecorder, RecordingNotificationCenter, ManualClock
 //   HaruspecCore     — Tolerance, TraceDiff.Verdict
 //   HaruspecSeams    — Cassette, Seam, SeamClock, SeamDomain
@@ -19,14 +19,16 @@ import XCTest
 // coexist without ambiguity.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
 
+/// The stamp (HaruspecMacros) gives the structural tier for free: its forwarder records every call,
+/// timed. Its expansion names HaruspecSpec symbols at *this* use site, so it only resolves because
+/// `import Haruspec` re-exports them.
+@Haruspec(timed: true)
 protocol Cart: AnyObject {
     func add(cents: Int, qty: Int)
     func checkout() -> Int
 }
 
-/// Baseline. `@Traced` (HaruspecMacros) gives the structural tier for free; the notifications +
-/// `Haruspec.marker` (HaruspecTrace) give the durable semantic tier; `@Timed` times one method.
-@Traced("Cart")
+/// Baseline. The notifications + `Haruspec.marker` (HaruspecTrace) give the durable semantic tier.
 final class GoodCart: Cart {
     private let center: NotificationCenter
     private var subtotal = 0
@@ -39,7 +41,7 @@ final class GoodCart: Cart {
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
     }
 
-    @Timed func checkout() -> Int {
+    func checkout() -> Int {
         center.post(name: .init("CheckoutCompleted"), object: nil, userInfo: ["total": subtotal])
         Haruspec.marker("checkout_completed") // ← `Haruspec.marker` under `import Haruspec`: the collision proof
         return subtotal
@@ -48,7 +50,6 @@ final class GoodCart: Cart {
 
 /// A behavior-preserving refactor (different internal storage, identical observable behavior) →
 /// the differential harness should call this EQUIVALENT to `GoodCart`.
-@Traced("Cart")
 final class RefactorCart: Cart {
     private let center: NotificationCenter
     private var lines: [(price: Int, qty: Int)] = []
@@ -65,20 +66,10 @@ final class RefactorCart: Cart {
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
     }
 
-    @Timed func checkout() -> Int {
+    func checkout() -> Int {
         center.post(name: .init("CheckoutCompleted"), object: nil, userInfo: ["total": subtotal])
         Haruspec.marker("checkout_completed")
         return subtotal
-    }
-}
-
-/// `@Seamed` (HaruspecMacros) routes un-injected nondeterminism through the ambient `Seam`
-/// cassette (HaruspecSeams). The rewrite it emits references HaruspecSeams symbols at *this* use site,
-/// so it only resolves because `import Haruspec` re-exports them.
-@Seamed
-final class LegacyClock {
-    func stampMillis() -> Int {
-        Int(Date().timeIntervalSince1970 * 1000)
     }
 }
 
@@ -134,13 +125,13 @@ final class UmbrellaImportTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), scenarioHTML)
     }
 
-    /// The HaruspecTrace capture surface: recorder + interceptor + `@Traced`/`@Timed` bodies +
+    /// The HaruspecTrace capture surface: recorder + interceptor + the forwarder's timed bodies +
     /// `Haruspec.interval` / `Haruspec.marker`, all named through the umbrella.
     func testCaptureSurfaceIsReExported() {
         let recorder = TraceRecorder(name: "umbrella", clock: ManualClock()) // ← TraceRecorder + ManualClock
         let center = RecordingNotificationCenter()
 
-        let cart = GoodCart(center: center)
+        let cart = TracedCart(GoodCart(center: center))
         TraceContext.$current.withValue(recorder) { // ← TraceContext (HaruspecTrace)
             Haruspec.interval("session") { // ← `Haruspec.interval` under `import Haruspec`
                 cart.add(cents: 500, qty: 3)
@@ -148,13 +139,12 @@ final class UmbrellaImportTests: XCTestCase {
             }
         }
         let labels = recorder.trace().events.map(\.label)
-        XCTAssertTrue(labels.contains("Cart.add"), "@Traced recorded the structural tier")
+        XCTAssertTrue(labels.contains("Cart.add"), "the forwarder recorded the structural tier")
         XCTAssertTrue(labels.contains("checkout_completed"), "Haruspec.marker recorded the semantic tier")
         XCTAssertTrue(labels.contains("CheckoutCompleted"), "the interceptor captured the notification")
     }
 
-    /// The HaruspecSeams surface: `Cassette` record→replay of a value seam, and `@Seamed` + `Seam`
-    /// binding of un-injected `Date()`.
+    /// The HaruspecSeams surface: `Cassette` record→replay of a value seam.
     func testSeamHarnessIsReExported() {
         // A value seam: record once, replay returns the recorded reading (not the live one).
         let recording = Cassette() // ← Cassette
@@ -165,12 +155,5 @@ final class UmbrellaImportTests: XCTestCase {
             live: { -1 }
         ).now()
         XCTAssertEqual(replayed, recorded, "replay yields the recorded value, not the live one")
-
-        // `@Seamed`: the rewritten bare `Date()` reads from the ambient cassette when one is bound.
-        let clock = LegacyClock()
-        let session = Cassette()
-        let golden = Seam.bind(session) { clock.stampMillis() } // ← Seam.bind
-        let onReplay = Seam.bind(Cassette(replaying: session.snapshot())) { clock.stampMillis() }
-        XCTAssertEqual(onReplay, golden, "@Seamed-routed Date() replays identically through the cassette")
     }
 }
