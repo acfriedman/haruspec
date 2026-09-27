@@ -19,7 +19,7 @@ import HaruspecTrace
 /// the base build produced under exactly those inputs.
 public struct SpecProbe: Codable, Sendable, Equatable {
     /// Op labels in execution order — the replay contract. Labels are the cross-build identity of an
-    /// operation (the analog of `@Traced`'s stable labels), so renaming an op orphans recorded input.
+    /// operation (the analog of a stamp's stable labels), so renaming an op orphans recorded input.
     public var ordering: [String]
     /// The seam values replayed into this run.
     public var cassette: CassetteData
@@ -70,7 +70,7 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     public var probes: [SpecProbe]
     /// The trace-derived coverage index: class labels the golden traces exercise, extracted from the
     /// structural tier (`PromoCart.checkout` → `PromoCart`). Includes classes reached *transitively*,
-    /// which is the payoff of keeping `@Traced` on — a semantic-tier-only spec can't be scoped.
+    /// which is the payoff of recording through the forwarder — a semantic-tier-only spec can't be scoped.
     public var coveredClasses: [String]
 
     /// The record-on-merge freshness stamp (`PlanProvenance`), or `nil` for a plan recorded
@@ -268,12 +268,12 @@ public extension Spec {
                 inputs: probe.cassette.tracks,
                 baseline: probe.golden,
                 candidate: current,
-                tolerances: effectiveTolerances
+                tolerances: tolerances
             )
             let diff = BehavioralDiff.compare(
                 baseline: probe.golden,
                 candidate: current,
-                tolerances: effectiveTolerances
+                tolerances: tolerances
             )
             .classified(against: intent, evidence: evidence)
             let run = ProbeComparison(diff: diff, candidateReplay: replay, evidence: evidence)

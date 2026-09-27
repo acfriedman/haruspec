@@ -208,7 +208,7 @@ public func haruspecContextAcquire() -> UnsafeMutableRawPointer? {
     return Unmanaged.passRetained(recorder).toOpaque()
 }
 
-/// Runs the enqueued block with the captured recorder rebound, so `@Traced` code inside it finds the
+/// Runs the enqueued block with the captured recorder rebound, so instrumented code inside it finds the
 /// same recorder the enqueueing thread had. This is the whole of the reachability fix.
 @_cdecl("haruspec_context_run")
 public func haruspecContextRun(

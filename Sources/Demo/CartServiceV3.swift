@@ -1,6 +1,5 @@
 import Foundation
 import HaruspecCore
-import HaruspecMacros
 import HaruspecTrace
 
 /// A *feature* change, not a refactor: it deliberately extends behavior (a loyalty-points program) and
@@ -19,7 +18,6 @@ import HaruspecTrace
 /// Pricing is the shared, correct `Pricing` math (unlike `CartServiceBuggy`), so the only value change
 /// is the intended `pointsEarned`. The oracle must absorb (1) and (2) as intended while still catching
 /// (3) as collateral. The `checkout_completed` marker is payload-free — it just pins the milestone.
-@Traced("CartService")
 public final class CartServiceV3: CartService {
     private let center: NotificationCenter
     private var items: [(sku: String, price: Int, qty: Int)] = []
@@ -45,7 +43,6 @@ public final class CartServiceV3: CartService {
         return promoActive
     }
 
-    @Timed
     public func checkout() -> Receipt {
         Haruspec.simulateCost(100)
         let subtotal = items.reduce(0) { $0 + $1.price * $1.qty }

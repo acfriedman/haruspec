@@ -17,8 +17,7 @@ import XCTest
 /// A subject whose effects leave through the global center — no injected collaborator, exactly like
 /// a faithful port of legacy code. Both sides of the differential are this same class: identical
 /// behavior, so an EQUIVALENT diff is guaranteed and the only thing left to catch is the channel.
-@Traced("BypassLedger")
-final class BypassingLedger: AuditSubject {
+final class BypassingLedger: AuditedLedger {
     private var cents = 0
 
     func add(cents: Int) {
@@ -31,18 +30,17 @@ final class BypassingLedger: AuditSubject {
     }
 }
 
-private func makeBypassingLedger(_: SeamContext) -> AuditSubject {
+private func makeBypassingLedger(_: SeamContext) -> AuditedLedger {
     BypassingLedger()
 }
 
-/// A recording collaborator double whose *declaring file is this one* — which carries a deliberate
-/// `NotificationCenter.default` reach. That placement is the point of the scoping tests: an audit
-/// that reads collaborator sources gates the subject on this file; one scoped by `.injects` does not.
-@Traced("Announcer")
-final class RecordingAnnouncer: Announcing {
-    func announce(total: Int) {
-        _ = total
-    }
+/// What the ledger announces through — a collaborator boundary. It is stamped *in this file*, which
+/// carries a deliberate `NotificationCenter.default` reach, so its double's declaring file is this
+/// one. That placement is the point of the scoping tests: an audit that reads collaborator sources
+/// gates the subject on this file; one scoped by injection does not.
+@Haruspec
+protocol Announcing: AnyObject {
+    func announce(total: Int)
 }
 
 final class AuditGateTests: XCTestCase {
@@ -54,8 +52,8 @@ final class AuditGateTests: XCTestCase {
             .deletingLastPathComponent()
     }
 
-    private func ledger(system: @escaping (SeamContext) -> AuditSubject) -> Spec<AuditSubject> {
-        Spec<AuditSubject>("audit.ledger")
+    private func ledger(system: @escaping (SeamContext) -> AuditedLedger) -> Spec<AuditedLedger> {
+        Spec<AuditedLedger>("audit.ledger")
             .system(system)
             .operations {
                 Op("add") { ledger, seams in
@@ -172,9 +170,9 @@ final class AuditGateTests: XCTestCase {
     // MARK: - Subject vs collaborator (the audit's denominator)
 
     private func announcingLedger(
-        make: @escaping (SeamContext) -> AuditSubject
-    ) -> Spec<AuditSubject> {
-        Spec<AuditSubject>("audit.announcing-ledger")
+        make: @escaping (SeamContext) -> AuditedLedger
+    ) -> Spec<AuditedLedger> {
+        Spec<AuditedLedger>("audit.announcing-ledger")
             .system(make)
             .operations {
                 Op("add") { ledger, seams in
@@ -189,11 +187,11 @@ final class AuditGateTests: XCTestCase {
 
     func testAnInjectedCollaboratorsSourcesAreTheFixturesNotTheSubjects() async {
         // The collaborator's declaring file carries a real bypass — but both sides call through the
-        // same double, and the interaction is recorded at its boundary. Handing it through
-        // `ctx.inject` IS the declaration: the double states its own label, and its sources leave
+        // same double, and the interaction is recorded at its boundary. Building it through
+        // `ctx.double` IS the declaration: the double states its own label, and its sources leave
         // the denominator entirely, so the subject reads audited-clean.
-        let injected = { (ctx: SeamContext) -> AuditSubject in
-            AnnouncingLedger(center: ctx.notifications, announcer: ctx.inject(RecordingAnnouncer()))
+        let injected = { (ctx: SeamContext) -> AuditedLedger in
+            AnnouncingLedger(center: ctx.notifications, announcer: ctx.double(DoubleAnnouncing.self))
         }
         let verdict = await announcingLedger(make: injected)
             .verify(against: injected)
@@ -202,16 +200,16 @@ final class AuditGateTests: XCTestCase {
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertEqual(verdict.qualification.blindSpots, [], "the fixture's file must not gate the subject")
         XCTAssertFalse(
-            verdict.qualification.origins.contains { $0.label == "Announcer" },
+            verdict.qualification.origins.contains { $0.label == "Announcing" },
             "an injected label leaves the denominator, not just the findings"
         )
     }
 
     func testACollaboratorConstructedAroundTheInjectionPointStillGates() async {
-        // Not handed through `ctx.inject` = not registered: the audit over-reports — the safe
+        // Not built through `ctx.double` = not registered: the audit over-reports — the safe
         // direction — and the exit is routing the construction through the injection point.
-        let bare = { (ctx: SeamContext) -> AuditSubject in
-            AnnouncingLedger(center: ctx.notifications, announcer: RecordingAnnouncer())
+        let bare = { (ctx: SeamContext) -> AuditedLedger in
+            AnnouncingLedger(center: ctx.notifications, announcer: DoubleAnnouncing(ctx))
         }
         let verdict = await announcingLedger(make: bare)
             .verify(against: bare)
@@ -247,7 +245,7 @@ final class AuditGateTests: XCTestCase {
     func testAnUnreadableDeclarationGatesLikeABypass() async {
         let verdict = await ledger(system: makeInjectedLedger)
             .verify(against: makeRestructuredLedger)
-            .noting(origins: [TraceOrigin(label: "Ledger", symbol: "LedgerThatMoved", source: nil)])
+            .noting(origins: [TraceOrigin(label: "AuditedLedger", symbol: "LedgerThatMoved", source: nil)])
             .audited(against: packageRoot, declaring: .none)
 
         XCTAssertEqual(verdict.verdict, .cannotVerify)

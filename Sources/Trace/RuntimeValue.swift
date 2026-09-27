@@ -4,7 +4,8 @@ import ObjectiveC
 
 /// Best-effort conversion of a runtime `Any` into a `CanonicalValue`.
 ///
-/// Used by the runtime capture backends (notifications, KVO) and by `@Traced`, where values arrive
+/// Used by the runtime capture backends (notifications, KVO) and by the stamped forwarders and doubles, where values
+/// arrive
 /// type-erased — often as bridged `NSNumber`s or as plain objects. Unlike the compile-time
 /// `Encodable` bridge, this must cope with whatever the runtime hands us: bridged JSON scalars are
 /// claimed first, then we reach for structure (`Encodable`, then reflection) so a non-`Codable`

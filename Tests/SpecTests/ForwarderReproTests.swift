@@ -5,8 +5,8 @@ import HaruspecSpec
 import HaruspecTrace
 import XCTest
 
-// Repro of the example-xcode-migration failure: a @TracedForwarder baseline over a legacy class,
-// diffed against a behaviorally-identical @Traced port, driven by the same ops.
+// Repro of the example-xcode-migration failure: a legacy class and a behaviorally-identical port,
+// both wrapped by the stamped protocol's forwarder, driven by the same ops.
 // If the faithful port DIVERGES here, the bug is in the Haruspec mechanism (forwarder / capture), not the app.
 
 /// NSObject models with IUO-imported-style signatures — to exercise the same `objcObject` (KVC)
@@ -76,7 +76,7 @@ final class ReproLegacyManager {
     }
 }
 
-@TracedForwarder(label: "Cart")
+@Haruspec
 protocol ReproCart: AnyObject {
     func add(_ product: ReproProduct!, quantity: Int)
     func removeSku(_ sku: String!)
@@ -87,7 +87,6 @@ protocol ReproCart: AnyObject {
 extension ReproLegacyManager: ReproCart {}
 
 /// Faithful port — identical behavior, posting to `.default` directly.
-@Traced("Cart")
 final class ReproSwiftPort: ReproCart {
     let notifications: NotificationCenter
 
@@ -140,7 +139,7 @@ final class ReproSwiftPort: ReproCart {
 final class ForwarderReproTests: XCTestCase {
     func testForwarderBaselineVsFaithfulPortIsEquivalent() async {
         let spec = Spec<ReproCart>("cart.repro")
-            .system { context in TracedReproCart(ReproLegacyManager(notifications: context.notifications)) }
+            .system { context in ReproLegacyManager(notifications: context.notifications) }
             .operations {
                 Op("addCoffee") { sut, seams in
                     sut.add(ReproProduct(sku: "COFFEE", price: 1299), quantity: Int(seams.int("coffeeQty", default: 2)))

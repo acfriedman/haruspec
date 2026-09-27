@@ -55,7 +55,7 @@ A silent collaborator — a singleton the SUT calls for a side effect that emits
 no KVO (reserve stock, enqueue analytics) — is observed by **injection**, not interception. The
 injectability precondition (see [`SEAMS.md`](SEAMS.md)) asks for the one-file
 refactor that makes the boundary injectable (settable-`.shared` behind a protocol), and the harness
-injects a generated `@TracedDouble` that records each outbound call as a semantic `effect` event with
+injects a stamped protocol's generated double that records each outbound call as a semantic `effect` event with
 nothing live behind it. A dropped call surfaces as a `missingEvent`; an altered argument as a `valueMismatch`.
 
 This **retired the runtime `forwardInvocation:` spy** (`CollaboratorSpy` / `HaruspecObjCShim`, removed), and

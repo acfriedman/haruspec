@@ -9,6 +9,7 @@ import XCTest
 // leads with that counterexample. Uses the DSL rather than a hand-built verdict because SpecVerdict's
 // counterexample is only produced by an actual failing run.
 
+@Haruspec
 protocol Till: AnyObject {
     func addItem(priceCents: Int, qty: Int)
     func applyPromo()
@@ -16,7 +17,6 @@ protocol Till: AnyObject {
 }
 
 /// Baseline: rounded 10% discount at checkout.
-@Traced("Till")
 final class GoodTill: Till {
     private let center: NotificationCenter
     private var subtotal = 0
@@ -43,7 +43,6 @@ final class GoodTill: Till {
 }
 
 /// Truncating-discount regression — off-by-one unless the subtotal is a multiple of 10.
-@Traced("Till")
 final class RoundBugTill: Till {
     private let center: NotificationCenter
     private var subtotal = 0

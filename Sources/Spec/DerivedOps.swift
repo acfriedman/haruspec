@@ -3,7 +3,7 @@ import HaruspecCore
 import HaruspecSeams
 
 // The op list derived from the boundary protocol, so the mechanical two-thirds of an `.operations`
-// block — method bindings and type-heuristic domains — stop being authored. `@DerivedOps` on the
+// block — method bindings and type-heuristic domains — stop being authored. `@Haruspec` on the
 // protocol emits a `Derived<Proto>` catalog; `.operations(derivedFrom:)` adopts it, and the authored
 // residue is only what a signature cannot state: semantic values ("SAVE10"), and structure (`.last()`).
 //
@@ -13,16 +13,12 @@ import HaruspecSeams
 // write. A domain the engine did supply is marked on the verdict ("derived default"), so a green from
 // an all-derived spec says so.
 
-/// A derived op catalog — what `@DerivedOps` emits as a peer of the boundary protocol.
+/// A derived op catalog — what `@Haruspec` emits as a peer of the boundary protocol.
 public protocol DerivedOperations {
     associatedtype System
     static var derivedOps: [DerivedOp<System>] { get }
-    /// The capture boundary — emitted when the protocol carries a `@TracedForwarder` sibling: wraps
-    /// a build in the forwarder (identity for one already wrapped), so the baseline and every
-    /// candidate record through the same protocol-shaped class. `nil` when there is no forwarder.
-    static var derivedWrapper: ((System) -> System)? { get }
     /// The derived construction — emitted when the protocol carries a pasted `init` requirement
-    /// and a `@TracedForwarder` sibling (the forwarder's `init(resolving:_:)` holds the wiring):
+    /// (the sibling forwarder's `init(resolving:_:)` holds the wiring):
     /// builds the given conformer through the requirement and wraps it. `nil` when construction
     /// has to be authored.
     ///
@@ -35,10 +31,6 @@ public protocol DerivedOperations {
 }
 
 public extension DerivedOperations {
-    static var derivedWrapper: ((System) -> System)? {
-        nil
-    }
-
     static var derivedSystem: ((SeamContext, Any.Type) -> System)? {
         nil
     }
@@ -49,8 +41,8 @@ public extension DerivedOperations {
 }
 
 /// One property derived from a protocol `var` requirement: its name, the fully qualified label its
-/// writes carry (the `@TracedForwarder` sibling's label when there is one, the protocol's name
-/// otherwise), and the mechanical read-back the end-state snapshot uses.
+/// writes carry (the stamp's label, as the forwarder records it), and the mechanical read-back the
+/// end-state snapshot uses.
 public struct DerivedProperty<S> {
     public let name: String
     public let label: String
@@ -61,6 +53,17 @@ public struct DerivedProperty<S> {
         self.name = name
         self.label = label
         self.read = read
+    }
+}
+
+/// Carries a derived op's system across a global-actor hop (`@MainActor func display` driven from
+/// a nonisolated op). Emitted by the catalog only for such requirements; the system is the conformer
+/// the spec built for one capture, held by nothing else, so the handover cannot race.
+public final class UncheckedHandOver<Value>: @unchecked Sendable {
+    public let value: Value
+
+    public init(_ value: Value) {
+        self.value = value
     }
 }
 
@@ -170,6 +173,19 @@ public struct DerivedArgument {
             resolution: ArgumentDomain<T>.generated(type).named(name).erased(),
             isDerivedDefault: false
         )
+    }
+
+    /// A model parameter whose type has no `SeamGenerated` factory, left pending so a catalog no spec
+    /// drives still compiles. A spec that drives this op traps at construction naming the argument.
+    ///
+    /// - Parameters:
+    ///   - name: The parameter's name, the seam-key half and the amendment-matching name.
+    ///   - _: The parameter's type, named in the pending argument.
+    /// - Returns: A pending argument, with no domain until an amendment declares one.
+    ///
+    /// Overload resolution prefers the `SeamGenerated` form whenever the conformance exists.
+    public static func generated<T>(_ name: String, _: T.Type) -> DerivedArgument {
+        pending(name, type: "\(T.self)")
     }
 }
 
@@ -460,8 +476,8 @@ public extension Spec {
         }
         var copy = adopting(ops)
         copy.derivedDefaultSeams = derivedDefaults
-        // The protocol's `var` requirements become observed properties: snapshot at every capture
-        // boundary, write timeline compared under `Tolerance.mutationOrder`.
+        // The protocol's `var` requirements become observed properties, snapshot at every capture
+        // boundary.
         copy.observedProperties += D.derivedProperties.map { property in
             Observed(property.label, property.read)
         }
@@ -486,7 +502,7 @@ public extension Spec {
     ///
     /// - Parameters:
     ///   - name: The spec's name, unique within the catalog.
-    ///   - source: The derived catalog, as `@DerivedOps` generated it from the boundary protocol.
+    ///   - source: The derived catalog, as `@Haruspec` generated it from the boundary protocol.
     ///   - baseline: The legacy type the candidates are compared against.
     ///   - build: Amendments to the derived ops; empty leaves the catalog as derived.
     /// - Precondition: The catalog derives construction — a pasted `init` requirement and a forwarder
@@ -511,7 +527,7 @@ public extension Spec {
         guard let derived = D.derivedSystem else {
             preconditionFailure(
                 "\(D.self) derives no construction, so it cannot build \(baseline) — paste the "
-                    + "baseline's init into the @TracedForwarder protocol, or author .system { context in … } "
+                    + "baseline's init into the @Haruspec protocol, or author .system { context in … } "
                     + "and drop `baseline:`"
             )
         }
@@ -528,9 +544,6 @@ public extension Spec {
     ) where D.System == S {
         self.init(name)
         makeConformer = D.derivedSystem
-        if let wrap = D.derivedWrapper {
-            wrapCandidate = wrap
-        }
         self = operations(derivedFrom: source, overriding: build)
     }
 }

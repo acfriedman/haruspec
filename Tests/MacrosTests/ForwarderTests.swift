@@ -1,11 +1,12 @@
 @testable import HaruspecCore
 import HaruspecMacros
+import HaruspecSpec
 @testable import HaruspecTrace
 import XCTest
 
 /// A stand-in for a Clang-imported Obj-C class: a plain reference type whose Swift-facing API carries
 /// the implicitly-unwrapped optionals (`Product!`, `String!`, `Receipt!`) the importer would produce.
-/// `@Traced` can't annotate this (it's the "Obj-C" side); the forwarder brings it under capture anyway.
+/// It carries no attribute (it's the "Obj-C" side); the forwarder brings it under capture anyway.
 final class CartManager {
     private(set) var itemCount = 0
     private(set) var lastPromo: String?
@@ -33,9 +34,9 @@ struct Product: Equatable { let sku: String }
 struct Receipt: Equatable { let total: Int }
 
 /// The developer pastes the class's "Generated Interface" verbatim into a protocol and attaches the
-/// macro. The peer `TracedCart` is generated: a final class conforming to `Cart` that wraps any
-/// `Cart`, forwards 1:1, and emits the same `call`/`ret` events `@Traced` would.
-@TracedForwarder(label: "Cart")
+/// stamp. The peer `TracedCart` is generated: a final class conforming to `Cart` that wraps any
+/// `Cart`, forwards 1:1, and emits `call`/`ret` events under the label.
+@Haruspec
 protocol Cart: AnyObject {
     func add(_ product: Product!, quantity: Int)
     func applyPromo(_ code: String!) -> Bool
@@ -46,28 +47,6 @@ protocol Cart: AnyObject {
 
 /// The baseline conforms by extension — the signatures are its own, verbatim.
 extension CartManager: Cart {}
-
-/// The equivalent hand-written `@Traced` "port": same stable label, forwarding to the same manager.
-/// Its events are the alignment target the generated forwarder must match byte-for-byte.
-@Traced("Cart")
-final class CartPort {
-    private let mgr: CartManager
-    init(_ mgr: CartManager) {
-        self.mgr = mgr
-    }
-
-    func add(_ product: Product!, quantity: Int) {
-        mgr.add(product, quantity: quantity)
-    }
-
-    func applyPromo(_ code: String!) -> Bool {
-        mgr.applyPromo(code)
-    }
-
-    func checkout() -> Receipt! {
-        mgr.checkout()
-    }
-}
 
 /// A port with no Haruspec attribute at all, factored differently from the baseline: `add` goes
 /// through a private helper. Wrapped by the same forwarder, its trace must not know that.
@@ -99,7 +78,7 @@ final class SwiftCart: Cart {
 }
 
 /// An async boundary, so an actor can conform: one requirement declared main-isolated, one not.
-@TracedForwarder(label: "Till")
+@Haruspec
 protocol Till: AnyObject {
     func ring(amount: Int) async
     @MainActor func display(total: Int) async
@@ -141,7 +120,7 @@ final class ClassTill: Till {
     }
 }
 
-final class TracedForwarderIsolationTests: XCTestCase {
+final class ForwarderIsolationTests: XCTestCase {
     private func capture(_ body: () async -> Void) async -> [TraceEvent] {
         let recorder = TraceRecorder(name: "t")
         await TraceContext.$current.withValue(recorder) { await body() }
@@ -149,7 +128,7 @@ final class TracedForwarderIsolationTests: XCTestCase {
     }
 
     /// A forwarded call into an actor is recorded as the actor — and the effect the actor emits
-    /// from inside inherits that domain, exactly as it did when `@Traced` sat on the actor.
+    /// from inside inherits that domain, with no attribute on the actor.
     func testAnActorConformerIsRecordedAsTheActor() async {
         let events = await capture {
             let till = TracedTill(ActorTill(center: RecordingNotificationCenter()))
@@ -189,7 +168,7 @@ final class TracedForwarderIsolationTests: XCTestCase {
     }
 }
 
-final class TracedForwarderMacroTests: XCTestCase {
+final class ForwarderTests: XCTestCase {
     private func run(_ body: () -> Void) -> [TraceEvent] {
         let recorder = TraceRecorder(name: "t")
         TraceContext.$current.withValue(recorder, operation: body)
@@ -273,28 +252,16 @@ final class TracedForwarderMacroTests: XCTestCase {
         XCTAssertEqual(events.first?.tier, .semantic)
     }
 
-    /// The forwarder sees only writes that cross it — the wrapped object's internal writes are
-    /// invisible — and its trace says so.
-    func testForwarderDeclaresBoundaryMutationCapture() {
-        XCTAssertEqual((TracedCart(CartManager()) as MutationCapturing).mutationCapture, .boundary)
-    }
-
-    /// The generated forwarder's trace aligns byte-for-byte with the hand-written `@Traced` port.
-    func testTraceAlignsWithTracedPort() {
+    /// Each requirement records a `call`/`ret` pair under the label, arguments keyed by internal
+    /// name and returns captured structurally.
+    func testRecordsEachCallUnderTheLabel() {
         let forwarded = run {
             let cart = TracedCart(CartManager())
             cart.add(Product(sku: "A"), quantity: 3)
             _ = cart.applyPromo("SAVE")
             _ = cart.checkout()
         }
-        let ported = run {
-            let port = CartPort(CartManager())
-            port.add(Product(sku: "A"), quantity: 3)
-            _ = port.applyPromo("SAVE")
-            _ = port.checkout()
-        }
 
-        XCTAssertEqual(forwarded, ported)
         XCTAssertEqual(forwarded.map(\.label), [
             "Cart.add",
             "Cart.add",
@@ -306,4 +273,24 @@ final class TracedForwarderMacroTests: XCTestCase {
         XCTAssertEqual(forwarded[0].payload, ["product": ["sku": "A"], "quantity": 3]) // canonical args
         XCTAssertEqual(forwarded[3].payload, .bool(true)) // Bool return captured
     }
+
+    /// A timed stamp brackets each forwarded call with a signpost interval — what a timing budget
+    /// compares — and an untimed one records none.
+    func testATimedStampRecordsEachCallsDuration() {
+        let timed = run { TracedMeter(ManualMeter()).tick() }
+        let untimed = run { _ = TracedCart(CartManager()).checkout() }
+
+        XCTAssertEqual(timed.map(\.kind), [.call, .signpost, .ret])
+        XCTAssertEqual(timed[1].label, "Meter.tick")
+        XCTAssertFalse(untimed.contains { $0.kind == .signpost })
+    }
+}
+
+@Haruspec(timed: true)
+protocol Meter: AnyObject {
+    func tick()
+}
+
+final class ManualMeter: Meter {
+    func tick() {}
 }

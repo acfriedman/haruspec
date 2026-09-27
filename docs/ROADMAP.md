@@ -88,7 +88,7 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
 - ✅ **Collaborator observation (silent side effects)** — closes the blind spot where a SUT hands work
   to a singleton/collaborator that mutates the world but emits *no* other signal (no notification, no
   KVO): the **injectability precondition** (a one-file settable-`.shared`-behind-a-protocol refactor)
-  plus a generated **`@TracedForwarder`** the harness injects, recording each outbound call as a
+  plus a generated forwarder (now emitted by **`@Haruspec`**) the harness injects, recording each outbound call as a
   semantic-tier `effect` event (label + canonicalized args) before forwarding. A port that *drops* the
   call diverges as a `missingEvent`; one that *alters an argument* as a `valueMismatch` — over the
   covered surface. This **retired the runtime `forwardInvocation:` spy** (`CollaboratorSpy` /
@@ -100,10 +100,16 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   reaches an *undeclared* boundary no forwarder covers.
 - ✅ **Automatic value capture** — `Codable → CanonicalValue` bridge; `RuntimeValue` for type-erased
   runtime values.
-- ✅ **`@Traced` / `@TracedMethod` macros** — zero-code method call/args/return capture against an
-  ambient recorder; stable labels across renames; SwiftSyntax confined to the opt-in macro path.
-- ✅ **`@Timed` / `@Traced(timing:)`** — method-level timing baked into the macro; `Haruspec.interval`
-  for sub-method regions.
+- ✅ **`@Haruspec` — one stamp per boundary protocol** (2026-09-27) — replaces the seven earlier
+  macros. A pasted protocol yields its forwarder (`Traced<P>`), op catalog (`Derived<P>`) and double
+  (`Double<P>`), all under one stable label; a spec gives the protocol its role by using it, and every
+  spec over a stamped protocol records through its forwarder automatically. `timed: true` restores
+  per-call timing for timing budgets; `Haruspec.interval` still covers sub-call regions. Retired with
+  it: the class macros `@Traced` / `@TracedMethod` / `@TracedProperty` / `@Timed` / `@Seamed`, which
+  had to sit on production types. With `@TracedProperty` went full property-write capture, and the
+  write-*order* diff it fed (`MutationCapture`, `Tolerance.mutationOrder`) was deleted: it only ever
+  ran Swift-to-Swift, and end-state snapshots still gate. A write that crosses a forwarder or double
+  is now compared like a call.
 - ✅ **Semantic tier + two-tier durability** — the durable contract is *observable product behavior*:
   notifications, KVO/state changes, and payload-free `Haruspec.marker(...)` temporal signposts. The
   fragile structural tier is internal call mechanics (calls/returns/timing). `structuralComparison:
@@ -153,19 +159,17 @@ the golden branch, replay the *same* transcript into both branches, and diff. Se
   UserDefaults, `URLSession` (via `URLProtocol`, no swizzle), locale/tz, keychain, file reads. See
   [`SEAMS.md`](SEAMS.md#implemented--the-oracleseams-target). Now **wired to the diff engine end-to-end**:
   a replayed seam run whose readings flow into behavior diffs `EQUIVALENT` vs. its golden and `DIVERGED`
-  (localized) for a code change. **Un-injected reach started:** the `@Seamed` macro rewrites bare
-  `Date()`/`Date.now`/`UUID()` (DEBUG-only) to the ambient `HaruspecSeam` cassette, so pure-Swift legacy
-  code with no DI is reachable (`UninjectedReachTests`). **Singletons & ObjC** are handled at runtime
+  (localized) for a code change. (An un-injected reach, the `@Seamed` bare-`Date()`/`UUID()` rewrite,
+  was built and then removed with the class macros on 2026-09-27.) **Singletons & ObjC** are handled at runtime
   (dispatch decides the tool): `SeamSwizzle` (`method_exchangeImplementations`) for `@objc dynamic`/ObjC
   methods — replaces the impl once, catching all callers — and a `.shared`-swap recording decorator for
-  settable pure-Swift singletons (`SingletonSeamTests`). *Next:* extend the macro to `Int.random`/
-  `arc4random`, and drive breadth with property-based generation at the seam.
+  settable pure-Swift singletons (`SingletonSeamTests`). *Next:* drive breadth with property-based
+  generation at the seam.
 - 📋 **Seam codegen — generate the plumbing, *declare* the boundary.** Hand-writing a paired
   `seam_*` method + swizzle install per singleton method is pure boilerplate the user shouldn't own.
   Split the work by dispatch, and — critically — split the **HOW** from the **WHAT**:
   - **HOW (100% generatable):** *Swift owned* → a `@SeamedSingleton` macro emits the recording
-    decorator + `.shared`-swap install (distinct from `@Seamed`, which rewrites a method's *internals*;
-    this wraps the method *boundary*). *ObjC* → a **runtime generic swizzler**
+    decorator + `.shared`-swap install (it wraps the method *boundary*). *ObjC* → a **runtime generic swizzler**
     (`class_copyMethodList` + `method_getTypeEncoding` + `imp_implementationWithBlock`) — no *static*
     gen needed because the runtime already has the metadata static gen would parse from headers. Start
     with nullary object/scalar getters (the common singleton seam); arg-bearing / variadic-arity

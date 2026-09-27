@@ -13,7 +13,6 @@ import XCTest
 
 /// Posts a declared-new loyalty event *and* carries the truncation regression: with the event
 /// intended, one divergence renders in each classification table.
-@Traced("PromoCart")
 private final class LoyaltyRoundBugCart: PromoCart {
     private let center: NotificationCenter
     private var subtotal = 0
@@ -42,7 +41,6 @@ private final class LoyaltyRoundBugCart: PromoCart {
 }
 
 /// Reads a seam the recording never covered — behaviorally identical, so only coverage can object.
-@Traced("PromoCart")
 private final class GreedyCart: PromoCart {
     private let center: NotificationCenter
     private let context: SeamContext

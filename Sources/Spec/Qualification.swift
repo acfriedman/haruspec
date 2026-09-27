@@ -40,11 +40,9 @@ public struct Qualification: Codable, Sendable, Equatable {
     /// that makes derived specs safe to offer. `nil` on verdicts serialized before the field existed;
     /// rendering treats that as none.
     public let derivedDefaults: [String]?
-    /// The observed-property line: which properties were snapshot, and whether their write timeline
-    /// was compared — or why not (a capture that only sees boundary writes cannot stand behind a
-    /// write-order claim, and the abstention must be on the verdict, never silent). `nil` when the
-    /// spec observes no properties, and on verdicts serialized before the field existed.
-    public let propertyMutations: String?
+    /// The observed-property line: which properties were snapshot at the end of every capture, whose
+    /// end-state values gate. `nil` when the spec observes no properties.
+    public let observedProperties: String?
 
     public init(
         coveredClasses: [String],
@@ -54,7 +52,7 @@ public struct Qualification: Codable, Sendable, Equatable {
         blindSpots: [String]?,
         origins: [TraceOrigin] = [],
         derivedDefaults: [String]? = nil,
-        propertyMutations: String? = nil
+        observedProperties: String? = nil
     ) {
         self.coveredClasses = coveredClasses
         self.operations = operations
@@ -63,7 +61,7 @@ public struct Qualification: Codable, Sendable, Equatable {
         self.blindSpots = blindSpots
         self.origins = origins
         self.derivedDefaults = derivedDefaults
-        self.propertyMutations = propertyMutations
+        self.observedProperties = observedProperties
     }
 
     /// The same qualification with the origins one verification collected. Assembled here rather than
@@ -78,7 +76,7 @@ public struct Qualification: Codable, Sendable, Equatable {
             blindSpots: blindSpots,
             origins: origins,
             derivedDefaults: derivedDefaults,
-            propertyMutations: propertyMutations
+            observedProperties: observedProperties
         )
     }
 
@@ -93,7 +91,7 @@ public struct Qualification: Codable, Sendable, Equatable {
             blindSpots: blindSpots,
             origins: origins,
             derivedDefaults: derivedDefaults,
-            propertyMutations: propertyMutations
+            observedProperties: observedProperties
         )
     }
 }
@@ -110,7 +108,7 @@ extension SpecVerdict {
             (label: "orderings", value: orderingsEntry),
             (label: "seams", value: seamsEntry)
         ]
-        if let properties = qualification.propertyMutations {
+        if let properties = qualification.observedProperties {
             entries.append((label: "properties", value: properties))
         }
         entries.append((label: "NOT seen", value: blindSpotEntry))
@@ -126,7 +124,7 @@ extension SpecVerdict {
             "  declared in: \(sourcesEntry)",
             "  seams: \(seamsEntry)"
         ]
-        if let properties = qualification.propertyMutations {
+        if let properties = qualification.observedProperties {
             lines.append("  properties: \(properties)")
         }
         lines.append("  blind spots: \(blindSpotEntry)")
@@ -229,28 +227,17 @@ extension Spec {
             seamPositions: seamPositions(in: golden.tracks, varied: Set(seamDomains.keys).union(sweeps.keys)),
             blindSpots: nil,
             derivedDefaults: derivedDefaultSeams.union(sweeps.keys).sorted(),
-            propertyMutations: propertyMutationsEntry(capturedBy: goldenTrace.mutationCapture)
+            observedProperties: observedPropertiesEntry
         )
     }
 
-    /// The properties line: what was snapshot, and whether the write timeline was compared. The
-    /// baseline's capability is the one measurable up front; a candidate below `.full` drops the
-    /// comparison at diff time under the same rule (`BehavioralDiff.compare`).
-    func propertyMutationsEntry(capturedBy capability: MutationCapture) -> String? {
+    /// The properties line: the observed labels, whose end-state snapshots gate; `nil` when the spec
+    /// observes none.
+    var observedPropertiesEntry: String? {
         guard !observedProperties.isEmpty else {
             return nil
         }
-        let labels = observedProperties.map(\.label).sorted().joined(separator: ", ")
-        let head = "\(labels) — snapshots gate"
-        guard capability == .full else {
-            let sees = capability == .boundary ? "boundary writes only" : "no writes"
-            return "\(head) · write order NOT compared (baseline capture sees \(sees))"
-        }
-        switch tolerances.mutationOrder {
-        case .advisory: return "\(head) · write order advisory"
-        case .gating: return "\(head) · write order gating"
-        case .ignored: return "\(head) · write order ignored"
-        }
+        return "\(observedProperties.map(\.label).sorted().joined(separator: ", ")) — snapshots gate"
     }
 
     /// The replay qualification: the plan already pins the surface — classes, varied seams, and the
@@ -269,9 +256,7 @@ extension Spec {
             ),
             blindSpots: nil,
             derivedDefaults: derivedDefaultSeams.union(resourceSweeps(reaching: goldenTracks.keys).keys).sorted(),
-            propertyMutations: propertyMutationsEntry(
-                capturedBy: plan.probes.first?.golden.mutationCapture ?? .none
-            )
+            observedProperties: observedPropertiesEntry
         )
     }
 }

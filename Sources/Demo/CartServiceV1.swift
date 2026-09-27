@@ -1,15 +1,13 @@
 import Foundation
 import HaruspecCore
-import HaruspecMacros
 import HaruspecTrace
 
 /// Baseline implementation — the "golden" behavior every change is verified against.
 ///
-/// Look how little the oracle intrudes: `@Traced` instruments every method (call/args/return) with no
-/// per-method code, the injected `RecordingNotificationCenter` records the posted notifications, and the only explicit
-/// hook is `Haruspec.interval`, which marks the region a timing budget applies to. The class holds no
-/// recorder; capture is ambient.
-@Traced("CartService")
+/// Look how little the oracle intrudes: the class carries no Haruspec attribute. The stamped
+/// `CartService` protocol's forwarder records every call (call/args/return, timed), the injected
+/// `RecordingNotificationCenter` records the posted notifications, and the class holds no recorder;
+/// capture is ambient.
 public final class CartServiceV1: CartService {
     private let center: NotificationCenter
     private var items: [(sku: String, price: Int, qty: Int)] = []
@@ -35,9 +33,8 @@ public final class CartServiceV1: CartService {
         return promoActive
     }
 
-    @Timed
     public func checkout() -> Receipt {
-        Haruspec.simulateCost(100) // representative recompute cost; @Timed measures the whole method
+        Haruspec.simulateCost(100) // representative recompute cost; the timed forwarder measures the call
         let subtotal = items.reduce(0) { $0 + $1.price * $1.qty }
         let discount = Pricing.discount(subtotal: subtotal, promoActive: promoActive)
         let taxable = subtotal - discount

@@ -16,7 +16,7 @@ final class ConcurrencyDomainTests: XCTestCase {
             self.recorder = recorder
         }
 
-        /// No isolation argument here on purpose: this is the shape `@Traced` expands to, and the
+        /// No isolation argument here on purpose: this is the shape a sync forwarded call expands to, and the
         /// default `#isolation` has to pick the actor up without the call site naming it.
         func post() {
             recorder.marker("Ledger.post")

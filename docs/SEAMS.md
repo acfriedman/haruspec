@@ -44,14 +44,14 @@ determinism, and have clean interception points.
 | Seam | Mechanism | Record | Replay | Notes |
 |------|-----------|:------:|:------:|-------|
 | Injectable logical clock | ctor/ambient injection | ✅ | ✅ | Engine's canonical clock; **`SeamClock` adds cassette record/replay of wall-clock reads**. |
-| `Date()` / `Date.now` (bare call) | source shim (`@Seamed`) | ✅ | ✅ | `@Seamed` rewrites bare `Date()`/`Date.now` → ambient `HaruspecSeam` cassette, **DEBUG-only** (release keeps the bare call). No DI needed. |
+| `Date()` / `Date.now` (bare call) | inject a `SeamClock` | 📋 | 📋 | The `@Seamed` source shim was removed (2026-09-27): it had to sit on the production type, and Haruspec attributes now live only on test-side protocols. Until a bare read is injected, redact it with the tolerance model. |
 | `CACurrentMediaTime`, `mach_absolute_time`, `DispatchTime.now` | interpose | 📋 | 📋 | Timing-budget captures depend on this. |
 | `Timer` / `RunLoop` scheduling | swizzle / virtualized clock | 🔬 | 🔬 | Needs a virtual scheduler to replay deterministically. |
 
 ### Randomness & identity
 | Seam | Mechanism | Record | Replay | Notes |
 |------|-----------|:------:|:------:|-------|
-| `UUID()` (bare call) | source shim (`@Seamed`) / redaction | ✅ | ✅ | `@Seamed` rewrites bare `UUID()` → ambient cassette (DEBUG-only, no DI); also redactable via the tolerance model. |
+| `UUID()` (bare call) | redaction | ✅ | n/a | Redact via the tolerance model (`volatileFields`). The `@Seamed` source shim was removed with the class macros (2026-09-27). |
 | `SystemRandomNumberGenerator`, `Int.random(using:)` | injectable RNG (`SeamRNG`) | ✅ | ✅ | `SeamRNG` records/replays the `next()` stream via `Cassette`; drop into any `random(in:using:)`. Bare `Int.random(in:)` (no `using:`) still needs a shim. |
 
 ### Network
@@ -109,7 +109,7 @@ injectability refactor is EQUIVALENT (then is retired), and as the irreducible n
 ### Third-party SDKs
 | Seam | Mechanism | Record | Replay | Notes |
 |------|-----------|:------:|:------:|-------|
-| Analytics / logging / silent singletons | injected recording double (`@TracedDouble`) | ✅ | n/a | *Observed*, not stubbed: make the collaborator injectable (settable-`.shared`-behind-protocol), inject a generated `@TracedDouble` that records each outbound call as a semantic `effect` event before forwarding, so a dropped/altered call diverges. A *capture* channel (watch the boundary), not a value-replay seam — nothing to replay. Clean DI, no runtime interception. |
+| Analytics / logging / silent singletons | injected recording double (`@Haruspec`) | ✅ | n/a | *Observed*, not stubbed: make the collaborator injectable (settable-`.shared`-behind-protocol), inject the stamp's generated double that records each outbound call as a semantic `effect` event before forwarding, so a dropped/altered call diverges. A *capture* channel (watch the boundary), not a value-replay seam — nothing to replay. Clean DI, no runtime interception. |
 | Crash reporters | no-op in DEBUG harness | 📋 | 📋 | Suppress side effects during replay. |
 
 ---
@@ -139,14 +139,11 @@ Seven seams knocked off the ledger against it, all pure-Swift and no simulator:
 - **`SeamKeychain`** (auth-gate token) — record the token, replay it headlessly.
 - **`SeamFileSystem`** (file I/O) — reads recorded/replayed by path; writes in-memory (read-your-writes).
 
-Most do the clean **injected** boundary. The **un-injected** reach has started too: `HaruspecSeam` (an
-ambient, task-local cassette) plus the **`@Seamed`** macro, which rewrites bare `Date()` / `Date.now` /
-`UUID()` call-sites in a type's methods to route through it — **only under `#if DEBUG`**, so release
-builds keep the original calls and production is untouched. `UninjectedReachTests` proves it on a
-`LegacySession` that has no injected seam at all (a fresh `LegacySession()` calling bare `Date()`/`UUID()`
-replays identically under a cassette, and passes straight through when none is bound). That's the
-mechanism for reaching real legacy code, which never has clean DI; `Int.random`/`arc4random` are the
-next macro extensions.
+All of these are the clean **injected** boundary. The **un-injected** reach — a bare `Date()` / `UUID()`
+inside a type's methods — had a source shim, the `@Seamed` macro, until 2026-09-27. It was removed with
+the other class macros: it had to sit on the production type, and Haruspec attributes now live only on
+test-side protocols (`@Haruspec`). The ambient `Seam` cassette it routed through remains for
+hand-written seams such as a swizzled singleton.
 
 **Singletons & ObjC — make the boundary injectable, don't intercept it.** A shared singleton called
 from everywhere used to force *runtime* interception (there's no injection point). The
@@ -157,11 +154,11 @@ then observe through clean DI.
 - **ObjC / `@objc dynamic` singleton with source** (Foundation-style, most legacy `NSObject` singletons)
   → extract a protocol, keep `+sharedInstance` exactly as callers use it, make the backing store settable
   (`+setSharedInstance:`). One file changes; all call sites are untouched. The harness sets a recording
-  double (a generated `@TracedForwarder`); production ships the real one.
+  double (a stamped protocol's generated double); production ships the real one.
 - **pure-Swift singleton with a settable `.shared`** → the same shape natively: swap in a recording
   subclass decorator. The call-site is untouched; only the global is redirected (`SingletonSeamTests`).
-- **pure-Swift `final` + `let shared` + non-`@objc`** → the genuine hold-out: `@Seamed` if you own the
-  source, or make it settable, else `CANNOT-VERIFY`.
+- **pure-Swift `final` + `let shared` + non-`@objc`** → the genuine hold-out: make it settable, else
+  `CANNOT-VERIFY`.
 
 The **chicken-and-egg** — "making it injectable is itself an unverified refactor" — resolves cleanly:
 swizzle the pre-refactor singleton **once** to capture a golden, apply the refactor, diff → EQUIVALENT
@@ -186,12 +183,9 @@ Layered, cheapest-and-most-faithful first:
 3. **Environment / suite override** — `UserDefaults` suites, `TimeZone`/`Locale` overrides,
    in-memory stores. Cheap, no swizzling.
 4. **`URLProtocol` registration** — Apple's sanctioned network seam. High value, no swizzling.
-5. **Source shim (macro)** — rewrite `Date()` / RNG call-sites through an ambient provider, confined
-   to the DEBUG/opt-in path like `@Traced`. Faithful, opt-in. **Implemented for `Date()`/`Date.now`/
-   `UUID()`:** `@Seamed` (on a type) rewrites those bare calls to the ambient `HaruspecSeam` cassette,
-   emitted only under `#if DEBUG` so release builds are byte-for-byte untouched. This is how the harness
-   reaches legacy code with no DI. Manual value-level syntax walk (the prebuilt SwiftSyntax can't link a
-   `SyntaxRewriter` subclass). `Int.random`/`arc4random` rewriting is the next extension.
+5. **Source shim (macro)** — rewrite `Date()` / RNG call-sites through an ambient provider. Built as
+   `@Seamed` for `Date()`/`Date.now`/`UUID()` and **removed 2026-09-27**: an attribute on the production
+   type is exactly what the protocol-only stamp (`@Haruspec`) rules out.
 6. **Swizzle bootstrap (`SeamSwizzle`)** — `method_exchangeImplementations` on an `@objc dynamic`/ObjC
    method, used **once** to certify that "make this singleton injectable" is EQUIVALENT, then retired
    (case 2). Also the last reach for a third-party *binary* framework with no source to refactor. Not a

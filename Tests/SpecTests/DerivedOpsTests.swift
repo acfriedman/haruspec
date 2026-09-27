@@ -13,14 +13,13 @@ import XCTest
 
 /// The boundary protocol a spec would interrogate. `sku` is pending (String), `quantity` defaults,
 /// `eager` defaults to both values, `total` derives with no arguments.
-@DerivedOps
+@Haruspec
 protocol MeteredCart: AnyObject {
     func add(sku: String, quantity: Int)
     func setEager(_ eager: Bool)
     func total() -> Int
 }
 
-@Traced("MeteredCart")
 final class GoodMeteredCart: MeteredCart {
     private let center: NotificationCenter
     private var cents = 0
@@ -50,7 +49,6 @@ final class GoodMeteredCart: MeteredCart {
 
 /// Identical except at one decade rollover inside the *derived* quantity ladder — only reachable
 /// if the engine-supplied default is actually swept to its scheduled edges.
-@Traced("MeteredCart")
 final class TopOfDerivedDomainCart: MeteredCart {
     private let center: NotificationCenter
     private var cents = 0
@@ -75,7 +73,6 @@ final class TopOfDerivedDomainCart: MeteredCart {
 
 /// Treats a negative quantity as a purchase where the baseline rejects it — the divergence only a
 /// negative probe reaches, which is why the derived ladder carries both signs.
-@Traced("MeteredCart")
 final class NegativeBlindCart: MeteredCart {
     private let center: NotificationCenter
     private var cents = 0
@@ -100,14 +97,14 @@ final class NegativeBlindCart: MeteredCart {
 
 /// The structured/unsupported end of the heuristic: a `SeamGenerated` model derives through its own
 /// factory, a `Double` defaults, and a collection parameter is pending — no heuristic to guess with.
-@DerivedOps
+@Haruspec
 protocol WidgetDock: AnyObject {
     func attach(_ widget: Widget, tilt: Double)
     func flush(_ tags: [String])
 }
 
 /// Narrow widths: the emitted conversions trap on overflow, so each family's span must fit its type.
-@DerivedOps
+@Haruspec
 protocol NarrowKnobs: AnyObject {
     func warm(level: Int8)
     func tick(_ count: UInt8)
@@ -116,7 +113,7 @@ protocol NarrowKnobs: AnyObject {
 
 /// The all-`var` boundary (a ViewModel: settable input, published outputs). No ops derive, and
 /// that is legitimate — the properties still do, and the spec authors its input writes as ops.
-@DerivedOps
+@Haruspec
 protocol VarOnlyPanel: AnyObject {
     var level: Int { get set }
     var reading: Int { get }

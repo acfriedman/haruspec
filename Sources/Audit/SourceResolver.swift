@@ -161,7 +161,7 @@ private struct SourceIndex {
     ]
 
     /// The next whitespace-delimited token, advancing `rest` past it. Attributes with arguments
-    /// (`@Traced("Cart")`) come back whole, which is all the modifier check needs.
+    /// (`@objc(Cart)`) come back whole, which is all the modifier check needs.
     private static func nextToken(in rest: inout Substring) -> String? {
         rest = rest.drop { $0 == " " || $0 == "\t" }
         guard !rest.isEmpty else { return nil }

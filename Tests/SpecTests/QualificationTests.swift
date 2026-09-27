@@ -88,9 +88,10 @@ final class QualificationTests: XCTestCase {
             ["GoodCart", "RefactorCart"],
             "baseline and candidate both — a PR audit needs the sources the candidate introduced"
         )
-        for origin in origins {
-            XCTAssertEqual(origin.source?.hasSuffix("SpecPrototypeTests.swift"), true, "\(origin)")
-        }
+        XCTAssertTrue(
+            origins.allSatisfy { $0.source == nil },
+            "a forwarder names the wrapped type and no file — the audit resolves the declaration"
+        )
     }
 
     /// On replay the golden comes from the plan, so only the current build declares anything — which

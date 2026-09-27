@@ -8,10 +8,11 @@ import HaruspecTrace
 public enum CheckoutSpec {
     /// Runs the canonical spec, capturing a trace under a deterministic clock.
     ///
-    /// Capture is fully ambient and zero-code on the service side: `@Traced` records call/args/return
-    /// against `TraceContext.current` (bound here), and an injected `RecordingNotificationCenter` records a
-    /// dedicated `NotificationCenter` (isolated, so parallel runs and system noise can't leak in). The
-    /// service is a plain business object with no knowledge of the oracle.
+    /// Capture is fully ambient and zero-code on the service side: the stamped protocol's forwarder
+    /// records call/args/return against `TraceContext.current` (bound here), and an injected
+    /// `RecordingNotificationCenter` records a dedicated `NotificationCenter` (isolated, so parallel
+    /// runs and system noise can't leak in). The service is a plain business object with no knowledge
+    /// of the oracle.
     public static func capture(
         name: String,
         _ makeService: (NotificationCenter) -> CartService
@@ -20,7 +21,7 @@ public enum CheckoutSpec {
         let recorder = TraceRecorder(name: name, clock: clock)
         let center = RecordingNotificationCenter()
 
-        let service = makeService(center)
+        let service = TracedCartService(makeService(center))
 
         TraceContext.$current.withValue(recorder) {
             service.addItem(sku: "COFFEE", unitPriceCents: 1299, quantity: 2)

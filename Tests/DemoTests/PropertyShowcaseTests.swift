@@ -22,7 +22,7 @@ final class PropertyShowcaseTests: XCTestCase {
     ) -> Trace {
         let recorder = TraceRecorder(name: name, clock: ManualClock())
         let center = RecordingNotificationCenter()
-        let service = make(center)
+        let service = TracedCartService(make(center))
         TraceContext.$current.withValue(recorder) {
             let qty = Int(cassette.int(seam: "coffeeQty", live: { 10 })) // input from a seam boundary
             service.addItem(sku: "COFFEE", unitPriceCents: 999, quantity: qty)

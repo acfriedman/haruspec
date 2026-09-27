@@ -5,8 +5,8 @@ import HaruspecCore
 /// it must read before it can claim a verdict saw every effect channel.
 ///
 /// A verdict's `coveredClasses` names *labels* (`"Cart"`), and a label is deliberately decoupled from
-/// the type carrying it — `@Traced("Cart") final class SwiftCartActor`, and
-/// `@TracedForwarder(label: "Cart")` wrapping the Obj-C baseline. So a label
+/// the type carrying it — `@Haruspec protocol Cart`'s forwarder wraps the Obj-C baseline and
+/// `SwiftCartActor` alike. So a label
 /// cannot be resolved to a file by searching for its own name: two ports can share one label, and
 /// neither has to be named after it. The macro is the one place that knows both halves at once, so it
 /// stamps the origin at expansion time (a forwarder reads the wrapped type as it runs) and the
@@ -15,10 +15,10 @@ import HaruspecCore
 public struct TraceOrigin: Codable, Hashable, Sendable, Comparable {
     /// The trace label the events carry (`"Cart"`) — the join key back to `coveredClasses`.
     public let label: String
-    /// The type that declares the behavior: the `@Traced` type, or a forwarder's wrapped class.
+    /// The type that declares the behavior: a forwarder's wrapped class, or a double's own.
     public let symbol: String?
     /// The declaring file as a `#fileID` path (`"LegacyApp/SwiftCartActor.swift"`), or `nil` where
-    /// there is no Swift source to read — an Obj-C class behind a `@TracedForwarder`.
+    /// there is no Swift source to read — an Obj-C class behind a forwarder.
     ///
     /// `#fileID` rather than `#filePath` on purpose: an absolute path is machine-specific, and verdicts
     /// are compared char-for-char across machines (the CI freshness guard *is* that comparison).
@@ -85,38 +85,10 @@ public enum TraceOrigins {
     @TaskLocal public static var collector: OriginCollector?
 }
 
-/// A type that knows the trace label its events carry. Conformance is emitted by `@Traced` and
-/// `@TracedForwarder`, so any instrumented instance can state its own label — which is what lets an
+/// A type that knows the trace label its events carry. Conformance is emitted on every stamped
+/// forwarder and double, so any instrumented instance can state its own label — which is what lets an
 /// injection point (`SeamContext.inject`) register a collaborator without anyone typing the label a
 /// second time.
 public protocol TraceLabeled {
     var traceLabel: String { get }
-}
-
-/// A type that states how much of its property-write timeline its instrumentation records — the
-/// per-side fact the mutation-order diff refuses to guess (see `MutationCapture`). The capture reads
-/// it off the system under test and stamps the trace; a system declaring nothing captures `.none`.
-public protocol MutationCapturing {
-    var mutationCapture: MutationCapture { get }
-}
-
-/// The `@Traced` conformance: observer instrumentation on every stored property, so the whole write
-/// timeline is recorded. A marker with a default, so macro-generated code names a protocol rather
-/// than an enum case from a module the use site may not import.
-public protocol FullMutationCapture: MutationCapturing {}
-
-public extension FullMutationCapture {
-    var mutationCapture: MutationCapture {
-        .full
-    }
-}
-
-/// The `@TracedForwarder` conformance: the generated setter records writes that cross the wrapper,
-/// and nothing records the wrapped object's internal writes — boundary capture.
-public protocol BoundaryMutationCapture: MutationCapturing {}
-
-public extension BoundaryMutationCapture {
-    var mutationCapture: MutationCapture {
-        .boundary
-    }
 }

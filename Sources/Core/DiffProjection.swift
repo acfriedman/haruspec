@@ -84,11 +84,9 @@ extension BehavioralDiff {
     }
 
     /// The per-event advisory rule, shared by every matcher: a structural-tier event under
-    /// `StructuralComparison.advisory`, or an observed-property write under the (default)
-    /// `MutationOrderPolicy.advisory` — either way the divergence is reported without gating.
+    /// `StructuralComparison.advisory` is reported without gating.
     static func isAdvisory(_ event: TraceEvent, under spec: Tolerance) -> Bool {
-        (spec.structuralComparison == .advisory && event.tier == .structural)
-            || (event.kind == .stateChange && spec.mutationOrder == .advisory)
+        spec.structuralComparison == .advisory && event.tier == .structural
     }
 
     // MARK: - Within one domain
