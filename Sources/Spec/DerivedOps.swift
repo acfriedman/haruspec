@@ -480,23 +480,27 @@ public extension Spec {
 }
 
 public extension Spec {
-    /// The collapsed spec: name, derived catalog, the baseline, and the authored residue — one
-    /// entry point.
+    /// The collapsed spec: name, derived catalog, baseline, and authored residue in one entry point.
+    /// The baseline is built and wrapped along the same path `check(SwiftCart.self)` runs a port
+    /// through, so the two sides differ in nothing but the conformer.
+    ///
+    /// - Parameters:
+    ///   - name: The spec's name, unique within the catalog.
+    ///   - source: The derived catalog, as `@DerivedOps` generated it from the boundary protocol.
+    ///   - baseline: The legacy type the candidates are compared against.
+    ///   - build: Amendments to the derived ops; empty leaves the catalog as derived.
+    /// - Precondition: The catalog derives construction — a pasted `init` requirement and a forwarder
+    ///   sibling; a protocol without one authors `.system { }` and uses ``init(_:derivedFrom:overriding:)``.
+    ///   `baseline` conforms to the boundary protocol; one that does not traps at the first capture,
+    ///   naming the extension to write.
+    ///
+    /// Exploration runs at the derived defaults, and `.vary` overrides them. The whole spec for a
+    /// derived catalog reads:
     ///
     ///     Spec<Cart>("cart.objc-to-swift", derivedFrom: DerivedCart.self, baseline: CartManager.self) {
     ///         Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
     ///         Amend("checkout").last()
     ///     }
-    ///
-    /// - Precondition: The catalog must derive construction — a pasted `init` requirement and a
-    ///   forwarder sibling. A protocol without one authors `.system { }` and uses
-    ///   `init(_:derivedFrom:overriding:)`. The baseline must conform to the boundary protocol;
-    ///   one that does not traps at the first capture, naming the extension to write.
-    ///
-    /// The baseline is constructed through the protocol's pasted `init` and wrapped in the
-    /// `@TracedForwarder` sibling — the same path `check(SwiftCart.self)` runs a port through, so
-    /// the two sides differ in nothing but the conformer. Exploration runs at the derived defaults;
-    /// `.vary` overrides them.
     init<D: DerivedOperations>(
         _ name: String,
         derivedFrom source: D.Type,

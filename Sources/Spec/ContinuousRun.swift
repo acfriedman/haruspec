@@ -23,6 +23,10 @@ public enum ContinuousMode: String, Sendable {
     /// Linking a spec into the test target is its registration — the census reads that registry,
     /// so a new spec needs no manifest entry.
     case census
+    /// The app host launches and the suite waits, running nothing, so a local check can measure
+    /// what launching the app executes — including its asynchronous launch work — and tell a spec's
+    /// own coverage apart from it.
+    case settle
 
     public static let environmentKey = "HARUSPEC_MODE"
 
@@ -32,8 +36,11 @@ public enum ContinuousMode: String, Sendable {
         environment[environmentKey].flatMap(ContinuousMode.init(rawValue:))
     }
 
-    /// Whether campaign suites — in-build `check()` runs, where baseline and ports coexist —
-    /// should stand down for this process: true under `record` and `census`, false otherwise.
+    /// Returns whether campaign suites (in-build checks, where baseline and ports coexist) stand
+    /// down for this process, so they never pollute a measurement.
+    ///
+    /// - Parameter environment: The process environment, or a stand-in for one.
+    /// - Returns: `true` under `record`, `census`, and `settle`; `false` under `replay` or no mode.
     ///
     /// A record run's code coverage becomes the plan's dependency list, so a campaign executing
     /// beside the capture — a port, another subject — pollutes it into spurious staleness.
@@ -43,7 +50,7 @@ public enum ContinuousMode: String, Sendable {
         _ environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
         switch fromEnvironment(environment) {
-        case .record, .census: true
+        case .record, .census, .settle: true
         case .replay, nil: false
         }
     }
@@ -61,10 +68,20 @@ public enum ContinuousRun: Sendable {
     /// Sweep side: write a `<spec>.census.json` marker into `resultsDirectory` — the declared-spec
     /// inventory the record-on-merge sweep diffs against the committed plans.
     case census(resultsDirectory: URL)
+    /// Launch-measurement side: wait `seconds` and run nothing.
+    case settle(seconds: Double)
 
     public static let planPathKey = "HARUSPEC_PLAN_PATH"
     public static let resultsDirectoryKey = "HARUSPEC_RESULTS_DIR"
     public static let intentPathKey = "HARUSPEC_INTENT_PATH"
+    /// How long a `settle` run waits, in seconds; unset means ``defaultSettleSeconds``.
+    public static let settleSecondsKey = "HARUSPEC_SETTLE_SECONDS"
+    /// The wait of a `settle` run with no ``settleSecondsKey`` set.
+    ///
+    /// Shorter than a recording on purpose: a measurement that stops early only makes a check
+    /// replay more specs, while one that outlasts a recording could hide a spec's use of code the
+    /// launch keeps running.
+    public static let defaultSettleSeconds = 5.0
 
     /// The spec a conventioned plan path names — `<spec>.plan.json[.gz]` — or `nil` for a path
     /// outside the convention, which applies to every suite.
@@ -99,11 +116,17 @@ public enum ContinuousRun: Sendable {
         case .record: .record
         case .replay: .replay
         case .census: .census
+        case .settle: .settle
         }
     }
 
-    /// `nil` when no mode is selected, which disables the suite. A selected mode with a missing
-    /// destination throws instead: paths are always explicit, never defaulted.
+    /// Returns the run the environment selects, with every destination its mode needs. Paths are
+    /// always explicit, never defaulted, so a selected mode missing one is an error.
+    ///
+    /// - Parameter environment: The process environment with the `TEST_RUNNER_` prefix stripped.
+    /// - Returns: The run, or `nil` when no mode is selected, which disables the suite.
+    /// - Throws: ``ContinuousRunError`` when a selected mode lacks a destination, or carries an
+    ///   intent it cannot use or one paired with another spec's plan.
     public static func fromEnvironment(
         _ environment: [String: String] = ProcessInfo.processInfo.environment
     ) throws -> ContinuousRun? {
@@ -144,6 +167,9 @@ public enum ContinuousRun: Sendable {
             }
             let resultsPath = try environment.requiredPath(Self.resultsDirectoryKey, mode: mode)
             return .census(resultsDirectory: URL(fileURLWithPath: resultsPath, isDirectory: true))
+        case .settle:
+            let seconds = environment[Self.settleSecondsKey].flatMap(Double.init) ?? Self.defaultSettleSeconds
+            return .settle(seconds: max(0, seconds))
         }
     }
 }
@@ -213,14 +239,23 @@ public extension Spec {
         }
     }
 
-    func runContinuous(_ run: ContinuousRun) async -> ContinuousOutcome {
+    /// Runs `run`'s side of the continuous shape for this spec.
+    ///
+    /// - Parameters:
+    ///   - run: The side to run and its destinations.
+    ///   - suite: The test suite hosting this run, recorded by a census so a local check can select
+    ///     that suite alone; `nil` when the suite did not name itself.
+    /// - Returns: The outcome; a failure carries its reason in the summary rather than throwing.
+    func runContinuous(_ run: ContinuousRun, suite: ContinuousSuite? = nil) async -> ContinuousOutcome {
         switch run {
         case let .record(planURL):
             await recordContinuous(to: planURL)
         case let .replay(planURL, resultsDirectory, intentURL):
             await replayContinuous(plan: planURL, into: resultsDirectory, intent: intentURL)
         case let .census(resultsDirectory):
-            censusContinuous(into: resultsDirectory)
+            censusContinuous(into: resultsDirectory, suite: suite)
+        case let .settle(seconds):
+            await settleContinuous(for: seconds)
         }
     }
 
@@ -243,13 +278,23 @@ public extension Spec {
         }
     }
 
-    private func censusContinuous(into resultsDirectory: URL) -> ContinuousOutcome {
+    private func settleContinuous(for seconds: Double) async -> ContinuousOutcome {
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        return ContinuousOutcome(
+            succeeded: true,
+            summary: "settle: waited \(seconds)s",
+            artifactPath: nil,
+            htmlReportPath: nil
+        )
+    }
+
+    private func censusContinuous(into resultsDirectory: URL, suite: ContinuousSuite?) -> ContinuousOutcome {
         do {
             try FileManager.default.createDirectory(at: resultsDirectory, withIntermediateDirectories: true)
-            let markerURL = resultsDirectory.appendingPathComponent("\(name).census.json")
+            let markerURL = resultsDirectory.appendingPathComponent(name + CensusMarker.fileSuffix)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
-            try encoder.encode(["spec": name]).write(to: markerURL)
+            try encoder.encode(CensusMarker(spec: name, suite: suite)).write(to: markerURL)
             return ContinuousOutcome(
                 succeeded: true,
                 summary: "census: \(name)",

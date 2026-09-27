@@ -117,6 +117,7 @@ final class ContinuousRunTests: XCTestCase {
         XCTAssertTrue(outcome.succeeded, outcome.summary)
         let marker = dir.appendingPathComponent("promo-cart.continuous.census.json")
         XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+        XCTAssertEqual(CensusMarker.read(from: dir), [CensusMarker(spec: "promo-cart.continuous", suite: nil)])
     }
 
     func testCampaignsStandDownOnlyForBaselineMeasuringModes() {
@@ -325,5 +326,26 @@ final class ContinuousRunTests: XCTestCase {
 
         XCTAssertFalse(outcome.succeeded)
         XCTAssertTrue(outcome.summary.contains("HARUSPEC_MODE"), outcome.summary)
+    }
+}
+
+/// Suite identity and the settle side, kept apart from the class body so it stays readable.
+extension ContinuousRunTests {
+    func testACensusRecordsTheSuiteThatNamedItself() async {
+        let dir = scratch()
+        let suite = ContinuousSuite(ContinuousRunTests.self)
+        _ = await cart(system: makeGood).runContinuous(.census(resultsDirectory: dir), suite: suite)
+        XCTAssertEqual(suite?.path, "ContinuousRunTests", "the module prefix is the test target's, not the path's")
+        XCTAssertEqual(CensusMarker.read(from: dir).first?.suite, suite)
+    }
+
+    func testASettleRunWaitsAndRecordsNothing() async throws {
+        XCTAssertTrue(ContinuousMode.standsDownCampaigns(["HARUSPEC_MODE": "settle"]))
+        let environment = ["HARUSPEC_MODE": "settle", "HARUSPEC_SETTLE_SECONDS": "0"]
+        let run = try XCTUnwrap(ContinuousRun.fromEnvironment(environment))
+        XCTAssertEqual(run.mode, .settle)
+        let outcome = await cart(system: makeGood).runContinuous(run)
+        XCTAssertTrue(outcome.succeeded)
+        XCTAssertNil(outcome.artifactPath)
     }
 }

@@ -135,6 +135,62 @@ refuses to claim coverage it does not have. `UNSTABLE` means replays of the same
 and the run-to-run delta is the diagnostic. Exit codes carry the verdict, so the same command is
 the CI gate.
 
+## Checking a branch locally
+
+The continuous shape runs on your machine before it ever runs in CI, for the slice of code your
+change touches. Opt a repository in once, from its root:
+
+```bash
+mkdir -p .haruspec/bin
+curl -fsSL https://raw.githubusercontent.com/acfriedman/haruspec/main/Scripts/haruspec -o .haruspec/bin/haruspec
+chmod +x .haruspec/bin/haruspec
+.haruspec/bin/haruspec init
+```
+
+(While this repository is private, copy `Scripts/haruspec` from a checkout instead of `curl`.)
+The launcher runs the CLI at exactly the engine version your project already uses, a local
+package or the version `Package.resolved` pins, and builds it once per version. Nothing is
+installed globally. `init` writes `.haruspec/config.json` from your Xcode project; check its
+guesses, then commit both files.
+
+Give each spec a continuous suite that names itself, so a check runs that suite and nothing else:
+
+```swift
+@Suite("cart.objc-to-swift continuous")
+struct CartContinuousTests {
+    @Test(arguments: CartMigrationSpec().continuousModes())
+    func continuousRunHolds(_ mode: ContinuousMode) async throws {
+        try await CartMigrationSpec().checkContinuous(mode, in: Self.self)
+    }
+}
+```
+
+Then, on any branch:
+
+```bash
+.haruspec/bin/haruspec check
+```
+
+The check records the merge base's behavior once per base commit, noting which files each spec
+exercised beyond what launching the app runs. It then replays only the specs whose files your
+change touches (uncommitted changes included), each through its own suite. Specs outside the
+slice are listed as untouched, and changed source files no spec exercises are listed as
+unchecked. `--all` replays everything. Nothing is committed and CI is untouched: machine output
+lives in `.haruspec/cache/`, which ignores itself.
+
+When a red is the point of your branch, the report ends with the command that declares it:
+
+```bash
+.haruspec/bin/haruspec intent save cart.objc-to-swift \
+  'Changes("LoyaltyPointsEarned", field: "points").increases().only(in: "checkout")'
+```
+
+That writes `.haruspec/intent/<branch>.md`, and the next check replays under it and writes its
+verdict into the file as evidence. The file is in the PR-description format, so attaching it to a
+PR is also how you would declare the same intent to a CI gate. Commit these files or ignore them;
+that is the team's call. Agents get the same two steps as MCP tools (`check`, `save_intent`)
+through `haruspec mcp`.
+
 For a working CI setup (PR replay, sticky comments, record-on-merge), see the
 [example migration repo](https://github.com/acfriedman/example-xcode-migration).
 

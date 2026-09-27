@@ -18,7 +18,15 @@ public struct AuditReport: Sendable, Equatable {
         self.findings = findings
     }
 
-    /// Runs the whole audit: resolves each declaration, then lints what resolved.
+    /// Runs the whole audit: resolves each declaration to its source, then lints the sources that
+    /// resolved.
+    ///
+    /// - Parameters:
+    ///   - origins: The labels a capture reached, each with the symbol and file it was declared in.
+    ///   - root: The directory sources are resolved beneath.
+    ///   - rules: The channels to look for; the built-in deny list by default.
+    /// - Returns: The report: `unresolved` holds the declarations no source was found for, `findings`
+    ///   every rule hit in the rest.
     public static func audit(
         origins: some Sequence<TraceOrigin>,
         root: URL,

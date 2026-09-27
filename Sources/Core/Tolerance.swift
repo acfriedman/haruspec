@@ -26,9 +26,9 @@ public struct VolatileField: Sendable, Equatable, Hashable {
     public enum Position: Sendable, Equatable, Hashable {
         /// A key matched by name at any depth.
         case key(String)
-        /// The exact route from the payload root, one component per object key. Arrays are
-        /// transparent — elements contribute no component, so one path addresses the field in
-        /// every element. Non-empty by construction.
+        /// The exact route from the payload root, one component per object key and non-empty by
+        /// construction. Arrays are transparent: elements contribute no component, so one path
+        /// addresses the field in every element.
         case path([String])
     }
 
@@ -42,14 +42,26 @@ public struct VolatileField: Sendable, Equatable, Hashable {
         self.label = label
     }
 
-    /// A key matched by name at any depth, optionally confined to events with `label`.
+    /// Returns a rule matching a key by name at any depth, optionally confined to one event label.
+    ///
+    /// - Parameters:
+    ///   - key: The payload key to redact wherever it appears.
+    ///   - label: The event label the rule is confined to; `nil` applies it to every event.
+    /// - Returns: The rule; two rules with the same key and label are equal.
     public static func key(_ key: String, inEvent label: String? = nil) -> VolatileField {
         VolatileField(position: .key(key), label: label)
     }
 
-    /// An exact payload position as a dotted route from the root, e.g. `"receipt.issuedAt"`,
-    /// optionally confined to events with `label`. Traps on an empty or dot-mangled path so a
-    /// mistyped rule fails at construction, not by silently never matching.
+    /// Returns a rule matching one exact payload position, given as a dotted route from the root,
+    /// optionally confined to one event label. A mistyped route traps here, at construction, rather
+    /// than silently never matching.
+    ///
+    /// - Parameters:
+    ///   - dotted: The route, one component per object key, such as `"receipt.issuedAt"`; a key that
+    ///     itself contains a dot is only addressable through ``key(_:inEvent:)``.
+    ///   - label: The event label the rule is confined to; `nil` applies it to every event.
+    /// - Returns: The rule, with `dotted` split into its components.
+    /// - Precondition: `dotted` is non-empty and so is every dot-separated component of it.
     public static func path(_ dotted: String, inEvent label: String? = nil) -> VolatileField {
         guard let components = parsePath(dotted) else {
             preconditionFailure("volatile path \"\(dotted)\" must be dot-separated non-empty components")
@@ -57,14 +69,23 @@ public struct VolatileField: Sendable, Equatable, Hashable {
         return VolatileField(position: .path(components), label: label)
     }
 
-    /// `nil` unless every dot-separated component is non-empty (rejects `""`, `".a"`, `"a..b"`…).
+    /// Returns the components of a dotted route, or `nil` when any component is empty.
+    ///
+    /// - Parameter dotted: The route as typed.
+    /// - Returns: The components in order, or `nil` for `""`, `".a"`, `"a..b"`, and the like.
     static func parsePath(_ dotted: String) -> [String]? {
         let components = dotted.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
         return components.contains("") ? nil : components
     }
 
-    /// Whether this rule redacts the field named `key` at `path` (root-to-field, inclusive) inside
-    /// an event labeled `label`.
+    /// Whether this rule redacts a field at one position in one event.
+    ///
+    /// - Parameters:
+    ///   - candidateKey: The field's own key.
+    ///   - candidateLabel: The label of the event the field sits in.
+    ///   - candidatePath: The route from the payload root to the field, inclusive.
+    /// - Returns: `true` when the rule's label, if it has one, equals `candidateLabel` and its
+    ///   position names the field, by key or by whole path.
     public func matches(key candidateKey: String, label candidateLabel: String, path candidatePath: [String]) -> Bool {
         if let label, label != candidateLabel {
             return false
@@ -80,7 +101,7 @@ public struct VolatileField: Sendable, Equatable, Hashable {
 ///
 /// Default `.gating`, **red until declared**: a domain move is a real behavioral change — different
 /// re-entrancy, different observers' threads, different subtle bugs — so an undeclared one fails the
-/// verdict, and the intended one is a one-line `Intent.expectedDomainMigrations` declaration.
+/// verdict, and the intended one is a one-line ``Intent/expectedDomainMigrations`` declaration.
 /// `.advisory` reports without failing; `.ignored` turns detection off, where a moved
 /// event reads as a missing + unexpected pair.
 public enum DomainMigrationPolicy: String, Codable, Sendable {
@@ -104,7 +125,7 @@ public enum DomainMigrationPolicy: String, Codable, Sendable {
 ///  - an ordered baseline domain whose events land in an unordered candidate domain is compared as a
 ///    multiset (either side unordered ⇒ multiset — losing an assertion rather than inventing one),
 ///    and the dropped guarantee itself is reported as `orderingRelaxed`, which **gates** until the
-///    change declares it via `Intent.expectedOrderingRelaxations`.
+///    change declares it via ``Intent/expectedOrderingRelaxations``.
 public enum ConcurrencyComparison: String, Codable, Sendable {
     case totalOrder // compare the recorded interleaving as one sequence
     case perDomain // project by domain: ordered ⇒ sequence, unordered ⇒ multiset, cross-domain order dropped
@@ -116,7 +137,7 @@ public enum ConcurrencyComparison: String, Codable, Sendable {
 /// constraint the candidate can no longer prove is `orderingLost` — a dropped synchronization,
 /// detected structurally from a passing run — and the reverse is `orderingAdded`, the awaited port
 /// of fire-and-forget work. Default `.gating`, **red until declared**
-/// (`Intent.expectedOrderingLosses` / `expectedOrderingAdditions`): both are real behavioral
+/// (``Intent/expectedOrderingLosses`` / ``Intent/expectedOrderingAdditions``): both are real behavioral
 /// changes. Known cost, accepted deliberately: the pass does not chase transitive chains, so a
 /// constraint preserved through an intermediate hop over-reports — a spec hitting that drops to
 /// `.advisory`, and the over-report rate on real subjects is an open measurement.
@@ -147,16 +168,15 @@ public enum MutationOrderPolicy: String, Codable, Sendable {
 /// inherent run-to-run noise (fresh UUIDs, clock jitter, order-insensitive side effects). Anything
 /// not explicitly tolerated is a divergence. Loadable from JSON so applications ship their own specs.
 public struct Tolerance: Sendable, Equatable {
-    /// Payload fields whose values are non-deterministic and must be ignored — e.g.
-    /// `.key("orderID")`. Redacted to a placeholder before comparison. See `VolatileField` for the
-    /// scoping options (`inEvent:`, `.path`).
+    /// Payload fields whose values are non-deterministic, such as `.key("orderID")`; each is redacted
+    /// to a placeholder before comparison. See ``VolatileField`` for the scoping options.
     public var volatileFields: [VolatileField]
 
     /// Absolute epsilon for numeric comparisons, absorbing floating-point jitter.
     public var numericEpsilon: Double
 
-    /// Per-label allowed *increase* in `durationTicks`, keyed by event label. Absent ⇒ timing for
-    /// that label is fully tolerant (ignored). Present ⇒ a regression beyond the budget is flagged.
+    /// The allowed *increase* in `durationTicks` per event label. A label with no budget is fully
+    /// tolerant of timing, and one with a budget flags any regression beyond it.
     public var timingBudgets: [String: Int64]
 
     /// Groups of labels whose relative order is not significant. A reordering confined to a group is
@@ -166,17 +186,16 @@ public struct Tolerance: Sendable, Equatable {
     /// Event kinds to drop entirely before diffing (e.g. noisy internal `.custom` telemetry).
     public var ignoredKinds: [EventKind]
 
-    /// Notification names to drop before diffing. Since specs capture *all* notifications by
-    /// default, this is the opt-out for a specific noisy channel: it removes matching `.notification`
-    /// events from both sides at diff time, leaving the raw trace faithful. Mirrors `ignoredKinds` but
-    /// scoped by name rather than kind.
+    /// Notification names whose `.notification` events are dropped from both sides at diff time,
+    /// leaving the raw trace faithful. Specs capture *all* notifications by default, so this is the
+    /// opt-out for one noisy channel: ``ignoredKinds`` scoped by name rather than kind.
     public var ignoredNotificationNames: [String]
 
     /// How the structural (auto-captured) tier participates in the verdict. Defaults to `.strict`.
     public var structuralComparison: StructuralComparison
 
     /// How an event that moved isolation domains participates in the verdict. Defaults to `.gating`
-    /// (red until declared via `Intent.expectedDomainMigrations`).
+    /// (red until declared via ``Intent/expectedDomainMigrations``).
     public var domainMigration: DomainMigrationPolicy
 
     /// How concurrent traces are compared. Defaults to `.totalOrder`; a spec whose subject does
@@ -185,18 +204,17 @@ public struct Tolerance: Sendable, Equatable {
     public var concurrency: ConcurrencyComparison
 
     /// How spawn-edge constraint changes participate in the verdict. Defaults to `.gating`
-    /// (red until declared via `Intent.expectedOrderingLosses` / `expectedOrderingAdditions`).
+    /// (red until declared via ``Intent/expectedOrderingLosses`` / ``Intent/expectedOrderingAdditions``).
     public var spawnEdges: SpawnEdgePolicy
 
     /// How observed-property write order participates in the verdict. Defaults to `.advisory`
     /// (see `MutationOrderPolicy` — snapshots gate the values regardless).
     public var mutationOrder: MutationOrderPolicy
 
-    /// The `.stateChange` labels this comparison is *about* — the boundary protocol's properties,
-    /// fully qualified (`"Cart.itemCount"`). Writes to anything else (a port's private state) are
-    /// dropped at diff time so internals never manufacture divergences; the raw trace stays faithful.
-    /// `nil` means unscoped — every recorded write compares — which is the raw-diff default; a spec
-    /// always scopes (possibly to nothing).
+    /// The `.stateChange` labels this comparison is *about*: the boundary protocol's properties, fully
+    /// qualified (`"Cart.itemCount"`), with writes to anything else dropped at diff time so a port's
+    /// private state never manufactures a divergence. `nil` means unscoped, the raw-diff default in
+    /// which every recorded write compares; a spec always scopes, possibly to nothing.
     public var observedStateLabels: [String]?
 
     public init(
@@ -320,18 +338,37 @@ extension Tolerance: Codable {
 }
 
 public extension Tolerance {
+    /// Loads a tolerance from a JSON file, so an application can ship its own specs.
+    ///
+    /// - Parameter url: The file to read.
+    /// - Throws: Any error reading `url`, or a `DecodingError` when its contents are not a tolerance.
     init(contentsOf url: URL) throws {
         self = try JSONDecoder().decode(Tolerance.self, from: Data(contentsOf: url))
     }
 
+    /// Whether any volatile-field rule redacts the field at one position in one event.
+    ///
+    /// - Parameters:
+    ///   - key: The field's own key.
+    ///   - label: The label of the event the field sits in.
+    ///   - path: The route from the payload root to the field, inclusive.
+    /// - Returns: `true` when at least one rule in ``volatileFields`` matches.
     func isVolatile(key: String, label: String, path: [String]) -> Bool {
         volatileFields.contains { $0.matches(key: key, label: label, path: path) }
     }
 
+    /// Whether a label belongs to any unordered group.
+    ///
+    /// - Parameter label: The event label.
+    /// - Returns: `true` when some group in ``unorderedGroups`` names it.
     func isUnordered(label: String) -> Bool {
         unorderedGroups.contains { $0.contains(label) }
     }
 
+    /// Returns the timing budget declared for a label.
+    ///
+    /// - Parameter label: The event label.
+    /// - Returns: The allowed increase in ticks, or `nil` when timing for the label is fully tolerant.
     func timingBudget(for label: String) -> Int64? {
         timingBudgets[label]
     }

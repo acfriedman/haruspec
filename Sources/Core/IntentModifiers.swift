@@ -32,8 +32,16 @@ public struct ProbeEvidence: Sendable {
     /// against. `classified(against:evidence:)` fills it from the diff it classifies.
     public var divergences: [Divergence]
 
-    /// - Parameter tolerances: the tolerance the diff ran under — the traces are canonicalized with
-    ///   it here so their sequence numbers are the ones the divergences carry.
+    /// Creates the evidence a modifier is checked against, canonicalizing both traces under
+    /// `tolerances` so their sequence numbers are the ones the divergences carry.
+    ///
+    /// - Parameters:
+    ///   - inputs: The probe's inputs; `nil` when the probe had none.
+    ///   - baseline: The recorded trace; `nil` leaves `baseline` empty.
+    ///   - candidate: The candidate trace; `nil` leaves `candidate` empty.
+    ///   - tolerances: The tolerance the diff ran under; `.strict` when the caller has none.
+    ///   - divergences: Every divergence of the comparison being classified; empty when the
+    ///     comparison is not known.
     public init(
         inputs: ProbeInputs? = nil,
         baseline: Trace? = nil,

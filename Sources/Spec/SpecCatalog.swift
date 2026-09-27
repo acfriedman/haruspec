@@ -55,17 +55,47 @@ public extension SpecProviding {
         return [mode]
     }
 
-    /// Runs the continuous side CI selected, prints the verdict, and throws unless it held.
+    /// Runs the continuous side CI selected, prints the verdict, and throws unless it held. A local
+    /// check runs the whole test target for a suite that calls this form.
+    ///
+    /// - Parameters:
+    ///   - mode: The side the test's arguments selected.
+    ///   - environment: Where the run's destinations are read from; the process environment by default.
+    /// - Throws: `SpecCatalog.CheckFailure` unless the side held, carrying the printed summary.
     func checkContinuous(
         _ mode: ContinuousMode,
         environment: [String: String] = ProcessInfo.processInfo.environment
+    ) async throws {
+        try await checkContinuous(mode, suite: nil, environment: environment)
+    }
+
+    /// Runs the continuous side selected, naming the test suite that hosts it, so a local
+    /// `haruspec check` runs this suite alone instead of the whole test target.
+    ///
+    /// - Parameters:
+    ///   - mode: The side the test's arguments selected.
+    ///   - suite: The type of the suite calling this; inside the suite, that is `Self`.
+    ///   - environment: Where the run's destinations are read from; the process environment by default.
+    /// - Throws: `SpecCatalog.CheckFailure` unless the side held, carrying the printed summary.
+    func checkContinuous(
+        _ mode: ContinuousMode,
+        in suite: Any.Type,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) async throws {
+        try await checkContinuous(mode, suite: ContinuousSuite(suite), environment: environment)
+    }
+
+    private func checkContinuous(
+        _ mode: ContinuousMode,
+        suite: ContinuousSuite?,
+        environment: [String: String]
     ) async throws {
         let outcome: ContinuousOutcome
         do {
             guard let run = try ContinuousRun.fromEnvironment(environment), mode == run.mode else {
                 throw SpecCatalog.CheckFailure(description: "no \(ContinuousMode.environmentKey) set")
             }
-            outcome = await spec.runContinuous(run)
+            outcome = await spec.runContinuous(run, suite: suite)
         } catch let failure as SpecCatalog.CheckFailure {
             throw failure
         } catch {
@@ -88,7 +118,7 @@ public struct SpecEntry {
     public let candidateNames: [String]
     // Stored as closures, so the async colour lands in the *type* rather than a signature.
     let verifyCandidate: (String, URL?) async -> CandidateVerdict?
-    let runContinuous: (ContinuousRun) async -> ContinuousOutcome
+    let runContinuous: (ContinuousRun, ContinuousSuite?) async -> ContinuousOutcome
 }
 
 public extension Spec {
@@ -98,7 +128,7 @@ public extension Spec {
             name: name,
             candidateNames: candidateNames,
             verifyCandidate: { await verify(candidateNamed: $0, reportsIn: $1) },
-            runContinuous: { await runContinuous($0) }
+            runContinuous: { await runContinuous($0, suite: $1) }
         )
     }
 }
@@ -192,13 +222,43 @@ public struct SpecCatalog {
         try verdict.check(in: String(migrationCase.prefix { $0 != "/" }))
     }
 
-    /// The continuous twin of `check(migrationCase:)`: run the side the environment selects, print
-    /// the verdict, and throw unless it held.
+    /// Runs the continuous side of `spec` the environment selects, prints the verdict, and throws
+    /// unless it held. The continuous twin of ``check(migrationCase:)``.
+    ///
+    /// - Parameters:
+    ///   - spec: The spec's name.
+    ///   - environment: Where the side selection is read from; the process environment by default.
+    /// - Throws: `CheckFailure` when `spec` is not declared or the selected side did not hold, carrying
+    ///   the summary the console printed.
     public func checkContinuous(
         spec: String,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) async throws {
-        guard let outcome = await runContinuous(spec: spec, environment: environment) else {
+        try await checkContinuous(spec: spec, suite: nil, environment: environment)
+    }
+
+    /// Runs the continuous side of `spec` the environment selects, naming the test suite that hosts
+    /// it, so a local `haruspec check` runs this suite alone instead of the whole test target.
+    ///
+    /// - Parameters:
+    ///   - spec: The spec's name.
+    ///   - suite: The type of the suite calling this; inside the suite, that is `Self`.
+    ///   - environment: Where the side selection is read from; the process environment by default.
+    /// - Throws: `CheckFailure` when `spec` is not declared or the selected side did not hold.
+    public func checkContinuous(
+        spec: String,
+        in suite: Any.Type,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) async throws {
+        try await checkContinuous(spec: spec, suite: ContinuousSuite(suite), environment: environment)
+    }
+
+    private func checkContinuous(
+        spec: String,
+        suite: ContinuousSuite?,
+        environment: [String: String]
+    ) async throws {
+        guard let outcome = await runContinuous(spec: spec, suite: suite, environment: environment) else {
             throw CheckFailure(description: "\(spec) is no longer declared")
         }
         Self.report("\(spec) · continuous", outcome.summary, htmlReportPath: outcome.htmlReportPath)
@@ -220,10 +280,17 @@ public struct SpecCatalog {
         return "  📄 visual report: file://\(path)"
     }
 
-    /// Runs the continuous side the environment selects for one spec. `nil` when the name isn't
-    /// declared; a selected mode with a missing destination comes back as a failed outcome.
+    /// Runs the continuous side the environment selects for one spec. A selected mode with a
+    /// missing destination comes back as a failed outcome rather than a throw.
+    ///
+    /// - Parameters:
+    ///   - spec: The spec's name.
+    ///   - suite: The test suite hosting the run, recorded by a census; `nil` when unknown.
+    ///   - environment: Where the side selection is read from; the process environment by default.
+    /// - Returns: The outcome, or `nil` when `spec` is not declared.
     public func runContinuous(
         spec: String,
+        suite: ContinuousSuite? = nil,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) async -> ContinuousOutcome? {
         guard let entry = entries.first(where: { $0.name == spec }) else {
@@ -233,7 +300,7 @@ public struct SpecCatalog {
             guard let run = try ContinuousRun.fromEnvironment(environment) else {
                 return .failed("no \(ContinuousMode.environmentKey) set — nothing to run")
             }
-            return await entry.runContinuous(run)
+            return await entry.runContinuous(run, suite)
         } catch {
             return .failed("\(error)")
         }
