@@ -199,7 +199,7 @@ final class SpecMarkdownReportTests: XCTestCase {
         XCTFail("the offered declarations never fully covered the change")
     }
 
-    /// A red walks a window past its first failing case and reports the most informative one; the
+    /// A red walks every probe past its first failing case and reports the most informative one; the
     /// offer is derived from every failing case, so a value that moves the same way in all of them
     /// is offered as the direction, not pinned to the one value the first case happened to show.
     func testARedReplayReportsTheRichestOfSeveralFailingCasesAndOffersTheirShape() async throws {
@@ -209,7 +209,7 @@ final class SpecMarkdownReportTests: XCTestCase {
 
         let cases = try XCTUnwrap(verdict.failingCases)
         XCTAssertGreaterThan(cases.probes.count, 1, "the truncation bug fails in many probes")
-        XCTAssertLessThanOrEqual(cases.walkedAfterFirst, 64, "the window is bounded")
+        XCTAssertGreaterThan(cases.walkedAfterFirst, 64, "a red walks past the old 64-probe window")
         let richest = try XCTUnwrap(cases.richest)
         XCTAssertEqual(verdict.counterexample, richest.inputs, "the reported case is the richest")
         XCTAssertEqual(verdict.diff.divergences, richest.divergences)

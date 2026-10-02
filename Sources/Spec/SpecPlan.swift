@@ -219,9 +219,9 @@ public extension Spec {
 
     /// Cross-build verify: replays every probe's recorded inputs into the **current** build's system and
     /// diffs against the stored golden traces. Divergence semantics match `verify(against:)` except
-    /// at the exit: no shrink (shrunk orderings have no recorded golden to compare against), and a
-    /// red keeps walking a bounded window of further probes, reporting the richest failing case and
-    /// carrying every one (`FailingCases`); intent-declared deltas are absorbed and the residual
+    /// at the exit: no shrink (shrunk orderings have no recorded golden to compare against). Like it,
+    /// a red walks every probe, reporting the richest failing case and carrying every one
+    /// (`FailingCases`); intent-declared deltas are absorbed and the residual
     /// collateral gates. Inputs the current build
     /// can't reproduce (a renamed/removed op, a seam read past the recording) downgrade an otherwise
     /// EQUIVALENT verdict to CANNOT-VERIFY via `.unrecorded` coverage gaps.
@@ -253,11 +253,10 @@ public extension Spec {
         var replays: [Cassette] = []
         var representative: TraceDiff?
         var sweep = IntentSweep(intent: intent)
-        // A red does not stop the sweep: it opens a window (`RedWindow`). Every failing case inside
-        // it is kept, the richest is reported, and the offer is derived from all of them.
-        var window = RedWindow()
+        // A red does not stop the sweep (`RedCases`): every failing case is kept, the richest is
+        // reported, and the offer is derived from all of them.
+        var reds = RedCases<ReplayedRun>()
         for probe in surface.replayable {
-            guard window.admits() else { break }
             let replay = Cassette(replaying: probe.cassette)
             let current = await capture(
                 make: makeSystem,
@@ -282,16 +281,14 @@ public extension Spec {
             if representative == nil {
                 representative = diff
             }
-            if !diff.isEquivalent {
-                window.note(probe: probe, replay: replay, diff: diff)
-            }
+            reds.observe(ReplayedRun(probe: probe, replay: replay, diff: diff))
         }
 
-        if let reported = window.reported {
+        if let reported = reds.reported {
             return divergedReplayVerdict(
                 reported,
                 surface: surface,
-                failingCases: window.cases,
+                failingCases: reds.cases,
                 observations: sweep.observations
             )
         }
@@ -334,12 +331,12 @@ public extension Spec {
         )
     }
 
-    /// The red exit: pins the reported failing case — the richest of the window — and carries the rest.
+    /// The red exit: pins the reported failing case — the richest of the sweep — and carries the rest.
     ///
-    /// Makes no unobserved-intent claim: a sweep that stopped inside its window walked only part of
-    /// the surface and cannot prove a declaration dead.
+    /// Makes no unobserved-intent claim: the reported diff is one case's, and a declaration it did
+    /// not match may have held in another.
     private func divergedReplayVerdict(
-        _ reported: RedWindow.Entry,
+        _ reported: ReplayedRun,
         surface: ReplaySurface<S>,
         failingCases: FailingCases,
         observations: [IntentObservation]

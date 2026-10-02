@@ -3,61 +3,61 @@ import HaruspecCore
 import HaruspecSeams
 
 // The two pieces of sweep-wide bookkeeping a verify loop keeps as it walks probes: which declared
-// changes it has seen hold (`IntentSweep`), and — once a probe fails — every further failing case
-// within a bounded window (`RedWindow`). A sweep compares many probes but reports one verdict, and
-// both of these are facts about the sweep, not about any one probe.
+// changes it has seen hold (`IntentSweep`), and every failing case (`RedCases`). A sweep compares
+// many probes but reports one verdict, and both of these are facts about the sweep, not about any
+// one probe.
 
-/// The failing cases a replay collects once it has seen its first red. The first case the
-/// schedule reaches is the golden template, and on a derived spec that is often a run that undoes
-/// itself (add, then remove the same item), whose `null → 0` divergences teach nothing — so the
-/// sweep keeps walking `SpecDefaults.redProbeWindow` more probes, keeps every failing one, and
-/// reports the richest.
-struct RedWindow {
-    struct Entry {
-        let probe: SpecProbe
-        let replay: Cassette
-        let diff: TraceDiff
-    }
-
-    private var entries: [Entry] = []
+/// Every failing case a sweep walks, and which one the verdict reports (the richest).
+/// A red does not stop the sweep, because a bug that fails nearly every probe would end it before a
+/// quieter bug is reached.
+///
+/// `Run` is whatever the sweep needs to build its verdict from the reported case.
+struct RedCases<Run> {
+    private var runs: [Run] = []
+    private var probes: [DivergentProbe] = []
     private var walkedAfterFirst = 0
 
-    /// Whether the sweep may replay one more probe: always, until the first red; then until the
-    /// window is spent. Counts the probe it admits.
-    mutating func admits() -> Bool {
-        guard !entries.isEmpty else {
-            return true
+    /// Notes one walked probe, keeping it when it failed.
+    ///
+    /// - Parameters:
+    ///   - run: What the verdict is built from, should this case be the reported one.
+    ///   - ordering: The op labels the probe ran, in order.
+    ///   - inputs: The seam values the probe ran with.
+    ///   - diff: The probe's classified diff.
+    mutating func observe(_ run: Run, ordering: [String], inputs: CassetteData, diff: TraceDiff) {
+        if !probes.isEmpty {
+            walkedAfterFirst += 1
         }
-        guard walkedAfterFirst < SpecDefaults.redProbeWindow else {
-            return false
+        guard !diff.isEquivalent else {
+            return
         }
-        walkedAfterFirst += 1
-        return true
-    }
-
-    mutating func note(probe: SpecProbe, replay: Cassette, diff: TraceDiff) {
-        entries.append(Entry(probe: probe, replay: replay, diff: diff))
+        runs.append(run)
+        probes.append(DivergentProbe(ordering: ordering, inputs: inputs, divergences: diff.divergences))
     }
 
     var cases: FailingCases {
-        FailingCases(
-            probes: entries.map {
-                DivergentProbe(
-                    ordering: $0.probe.ordering,
-                    inputs: $0.probe.cassette,
-                    divergences: $0.diff.divergences
-                )
-            },
-            walkedAfterFirst: walkedAfterFirst
-        )
+        FailingCases(probes: probes, walkedAfterFirst: walkedAfterFirst)
     }
 
-    /// The case the verdict reports — the richest — or `nil` when nothing failed.
-    var reported: Entry? {
-        guard let richest = cases.richest else {
-            return nil
-        }
-        return entries.first { $0.probe.ordering == richest.ordering && $0.probe.cassette == richest.inputs }
+    /// The run behind the case the verdict reports — the richest — or `nil` when nothing failed.
+    var reported: Run? {
+        cases.richestIndex.map { runs[$0] }
+    }
+}
+
+/// One replayed probe, with what the red exit pins from it.
+struct ReplayedRun {
+    let probe: SpecProbe
+    let replay: Cassette
+    let diff: TraceDiff
+}
+
+extension RedCases where Run == ReplayedRun {
+    /// Notes one replayed probe, keeping it when it failed.
+    ///
+    /// - Parameter run: The replayed probe and its classified diff.
+    mutating func observe(_ run: ReplayedRun) {
+        observe(run, ordering: run.probe.ordering, inputs: run.probe.cassette, diff: run.diff)
     }
 }
 

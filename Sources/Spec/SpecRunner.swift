@@ -22,7 +22,8 @@ private struct GoldenSurface<S> {
 public extension Spec {
     /// Differentially verifies a candidate implementation against this spec's baseline: runs both
     /// against the *same* generated inputs (call orderings × seam values) and diffs. The baseline branch
-    /// is the oracle, so no expected output is needed. Stops at (and shrinks) the first divergence.
+    /// is the oracle, so no expected output is needed. A divergence does not stop the sweep: every
+    /// probe runs, and the richest failing case is shrunk and reported (`RedCases`).
     ///
     /// `declaring` is the *candidate's* intent — the deltas this particular port is meant to produce.
     /// It rides the verification call rather than the spec because the spec declares the subject's
@@ -45,9 +46,10 @@ public extension Spec {
 
         // Sweep-wide intent facts (disclosure + unobserved intersection) — see `IntentSweep`.
         var sweep = IntentSweep(intent: intent)
+        var reds = RedCases<DivergedRun>()
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index) {
-                var run = await compare(
+                let run = await compare(
                     make: makeSystem,
                     candidate: candidate,
                     order: order,
@@ -55,20 +57,22 @@ public extension Spec {
                     declaring: intent
                 )
                 sweep.observe(run, ordering: order.map(\.label), inputs: cassette)
-                guard run.diff.isEquivalent else {
-                    return await divergedLiveVerdict(
-                        run: DivergedRun(
-                            diff: run.diff,
-                            candidateReplay: run.candidateReplay,
-                            order: order,
-                            cassette: cassette
-                        ),
-                        candidate: candidate,
-                        surface: surface,
-                        declaring: intent
-                    )
-                }
+                reds.observe(
+                    DivergedRun(diff: run.diff, candidateReplay: run.candidateReplay, order: order, cassette: cassette),
+                    ordering: order.map(\.label),
+                    inputs: cassette,
+                    diff: run.diff
+                )
             }
+        }
+        if let reported = reds.reported {
+            return await divergedLiveVerdict(
+                run: reported,
+                failingCases: reds.cases,
+                candidate: candidate,
+                surface: surface,
+                declaring: intent
+            )
         }
         // Held across the whole explored surface: the swept seams earn domain-coverage credit.
         var representative = await compare(
@@ -92,7 +96,7 @@ public extension Spec {
         )
     }
 
-    /// The comparison that broke the live sweep, with everything the diverged exit needs to pin it.
+    /// A failing comparison of the live sweep, with everything the diverged exit needs to pin it.
     private struct DivergedRun {
         let diff: TraceDiff
         let candidateReplay: Cassette
@@ -100,11 +104,14 @@ public extension Spec {
         let cassette: CassetteData
     }
 
-    /// The first-divergence exit of the live sweep: shrinks the failing order and pins what exposed it.
+    /// The red exit of the live sweep: shrinks the reported case's order, pins what exposed it, and
+    /// carries every failing case.
     ///
-    /// Makes no unobserved-intent claim — a truncated sweep cannot prove a declaration dead.
+    /// Makes no unobserved-intent claim: the reported diff is one case's, and a declaration it did
+    /// not match may have held in another.
     private func divergedLiveVerdict(
         run: DivergedRun,
+        failingCases: FailingCases,
         candidate: @escaping (SeamContext) -> S,
         surface: GoldenSurface<S>,
         declaring intent: Intent
@@ -126,7 +133,8 @@ public extension Spec {
             counterexample: surface.plan.domains.isEmpty ? nil : run.cassette,
             exploration: surface.plan.exploration,
             qualification: surface.qualification,
-            violatedPreconditions: failing.map(preconditionViolations(in:))
+            violatedPreconditions: failing.map(preconditionViolations(in:)),
+            failingCases: failingCases
         )
     }
 

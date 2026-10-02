@@ -25,7 +25,7 @@ public extension SpecVerdict {
         } else if diff.divergences.isEmpty {
             cleanPanel
         } else {
-            HTML.divergenceSection(diff.divergences)
+            HTML.divergenceSection(diff.divergences) + unreportedFindingSection
         }
 
         return HTML.page(title: "Haruspec · \(name)", sections: [
@@ -105,6 +105,21 @@ public extension SpecVerdict {
         return HTML.abstentionSection(
             reason: "\(stability.replays) replays of identical inputs disagreed (\(delta)). "
                 + "An unmodeled nondeterministic axis; a verdict that cannot be reproduced cannot gate."
+        )
+    }
+
+    /// What other failing cases found that the reported one does not show.
+    private var unreportedFindingSection: String {
+        guard let failingCases else {
+            return ""
+        }
+        let others = failingCases.unreported(beside: diff.divergences)
+        guard !others.isEmpty else {
+            return ""
+        }
+        return HTML.divergenceSection(
+            others,
+            heading: "Also in other failing cases (\(failingCases.probes.count) failed in all)"
         )
     }
 

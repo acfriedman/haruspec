@@ -122,12 +122,17 @@ public enum HTML {
 
     /// One card per `Divergence`: kind glyph/badge, label, baseline/candidate seq chips, a classification
     /// badge, and — for `valueMismatch` — a side-by-side baseline-vs-candidate panel with a numeric Δ.
-    public static func divergenceSection(_ divergences: [Divergence]) -> String {
+    ///
+    /// - Parameters:
+    ///   - divergences: The divergences to render, one card each, in order.
+    ///   - heading: The section title; `nil` titles it by count ("3 divergences").
+    /// - Returns: The section's HTML.
+    public static func divergenceSection(_ divergences: [Divergence], heading: String? = nil) -> String {
         let intentInPlay = divergences.contains { $0.classification == .intended }
         let cards = divergences.map { card($0, intentInPlay: intentInPlay) }.joined()
         return """
         <section class="divs">
-          <h2>\(divergences.count) divergence\(divergences.count == 1 ? "" : "s")</h2>
+          <h2>\(esc(heading ?? "\(divergences.count) divergence\(divergences.count == 1 ? "" : "s")"))</h2>
           \(cards)
         </section>
         """

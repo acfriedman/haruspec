@@ -40,6 +40,7 @@ extension SpecVerdict {
                 lines.append("    \(mark)\(divergence.label): \(divergence.detail)")
             }
         }
+        lines += unreportedFindingLines
         lines += diff.unobservedIntentLines()
         lines += failingOrderLines
         let seams = counterexampleSeamPairs
@@ -47,6 +48,20 @@ extension SpecVerdict {
             lines.append("  ↳ counterexample: \(seams.map { "\($0.key)=\($0.value)" }.joined(separator: " "))")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// What other failing cases found that the reported one does not show, so one loud bug cannot
+    /// hide a quieter one.
+    private var unreportedFindingLines: [String] {
+        guard let failingCases else {
+            return []
+        }
+        let others = failingCases.unreported(beside: diff.divergences)
+        guard !others.isEmpty else {
+            return []
+        }
+        return ["  also in other failing cases (\(failingCases.probes.count) failed in all):"]
+            + others.map { "    ≠ \($0.label): \($0.detail)" }
     }
 
     /// The failing call sequence, and — when it came from the out-of-order stratum — which declared

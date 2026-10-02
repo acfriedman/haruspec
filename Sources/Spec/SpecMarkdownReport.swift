@@ -173,16 +173,18 @@ public extension SpecVerdict {
         """]
     }
 
-    /// How many failing cases the red rests on: the reported one is the most informative of them,
-    /// and the offer below is derived from all of them.
+    /// How many failing cases the red rests on, and what the others found beyond the reported one.
     private var failingCasesSection: [String] {
         guard let failingCases, failingCases.probes.count > 1 else {
             return []
         }
         let count = failingCases.probes.count
+        let others = failingCases.unreported(beside: diff.divergences)
+            .map { "- `\($0.label)`: \(tableCell($0.detail))" }
         return ["**\(count) failing cases** among the \(failingCases.walkedAfterFirst + 1) checked from the "
             + "first failure on. The tables above show the most informative one; the offer below is "
             + "derived from all \(count)."]
+            + (others.isEmpty ? [] : [(["**Also in other failing cases:**", ""] + others).joined(separator: "\n")])
     }
 
     /// Per declaration, the divergence it was first seen to absorb and the case that produced it —

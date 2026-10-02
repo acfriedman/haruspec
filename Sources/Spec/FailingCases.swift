@@ -2,13 +2,11 @@ import Foundation
 import HaruspecCore
 import HaruspecSeams
 
-// What a red replay saw beyond the first case that failed. The sweep used to stop at its first
-// divergent probe and report that one — whichever the schedule happened to reach first, which on
-// a derived spec is the golden template: the declared order at middle-of-the-road values, and
-// sometimes a run that undoes itself (add, then remove the same item). A verdict anchored to it
-// pinned `.to(0)` and disclosed an empty cart. Now the sweep keeps walking for a bounded window,
-// keeps every failing case, reports the most informative one, and derives its offer from all of
-// them.
+// What a red sweep saw beyond the case it reports. The sweep used to stop at its first divergent
+// probe, and later behind a 64-probe window. Both hid bugs: one bug that fails nearly every probe
+// ends the sweep before a quieter one is reached, so fixing the first only uncovers the next. Now
+// a red sweep walks every probe, keeps every failing case, reports the most informative one, and
+// lists what the others found that it does not show.
 
 /// One failing case: the probe that was replayed and what diverged in it (classified).
 public struct DivergentProbe: Codable, Sendable, Equatable {
@@ -32,14 +30,14 @@ public struct DivergentProbe: Codable, Sendable, Equatable {
     }
 }
 
-/// The failing cases a red replay walked: every divergent probe within the window after the first,
-/// and how far the window reached.
+/// The failing cases a red sweep walked: every divergent probe, and how many probes followed the
+/// first.
 public struct FailingCases: Codable, Sendable, Equatable {
     /// Every failing case, in sweep order. The verdict's own diff and counterexample are the
     /// richest of these, not the first.
     public var probes: [DivergentProbe]
-    /// Probes replayed after the first failure, failing or not — the window's actual reach, so a
-    /// report can say "8 failing cases among the 64 checked after the first".
+    /// Probes walked after the first failure, failing or not, so a report can say "8 failing cases
+    /// among the 64 checked from the first on".
     public var walkedAfterFirst: Int
 
     public init(probes: [DivergentProbe], walkedAfterFirst: Int) {
@@ -49,13 +47,38 @@ public struct FailingCases: Codable, Sendable, Equatable {
 
     /// The case the verdict reports: the most informative, earliest on a tie.
     public var richest: DivergentProbe? {
-        probes.max { lhs, rhs in lhs.richness < rhs.richness }
-            .flatMap { best in probes.first { $0.richness == best.richness } }
+        richestIndex.map { probes[$0] }
+    }
+
+    /// Where `richest` sits in `probes`, so a sweep can pick out the run that produced it.
+    var richestIndex: Int? {
+        guard let best = probes.map(\.richness).max() else {
+            return nil
+        }
+        return probes.firstIndex { $0.richness == best }
     }
 
     /// Every gating divergence across every failing case — what the offer is derived from.
     public var gatingDivergences: [Divergence] {
         probes.flatMap { $0.divergences.filter(\.isGating) }
+    }
+
+    /// The gating divergences other failing cases found that `reported` does not show, one per
+    /// finding, in sweep order — the bugs a single reported case would otherwise hide.
+    ///
+    /// - Parameter reported: The divergences of the case the verdict reports.
+    /// - Returns: The first divergence seen for each finding absent from `reported`.
+    public func unreported(beside reported: [Divergence]) -> [Divergence] {
+        var seen = Set(reported.map(\.findingKey))
+        return gatingDivergences.filter { seen.insert($0.findingKey).inserted }
+    }
+}
+
+extension Divergence {
+    /// What makes two divergences the same finding across cases: where it happened and what kind of
+    /// change it was, without the values, event numbers, or op that differ from case to case.
+    var findingKey: [String?] {
+        [kind.rawValue, label, field, fromDomain, toDomain]
     }
 }
 
