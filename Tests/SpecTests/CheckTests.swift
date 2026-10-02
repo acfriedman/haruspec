@@ -84,6 +84,8 @@ final class CheckTests: XCTestCase {
                     .description.hasPrefix("expected equivalent, got diverged") ?? false,
                 "\(error)"
             )
+            // The console already printed the report; the thrown error repeats only its headline.
+            XCTAssertFalse("\(error)".contains("\n"), "\(error)")
         }
     }
 

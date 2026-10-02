@@ -61,7 +61,7 @@ public extension SpecProviding {
     /// - Parameters:
     ///   - mode: The side the test's arguments selected.
     ///   - environment: Where the run's destinations are read from; the process environment by default.
-    /// - Throws: `SpecCatalog.CheckFailure` unless the side held, carrying the printed summary.
+    /// - Throws: `SpecCatalog.CheckFailure` unless the side held, carrying the printed summary's first line.
     func checkContinuous(
         _ mode: ContinuousMode,
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -76,7 +76,7 @@ public extension SpecProviding {
     ///   - mode: The side the test's arguments selected.
     ///   - suite: The type of the suite calling this; inside the suite, that is `Self`.
     ///   - environment: Where the run's destinations are read from; the process environment by default.
-    /// - Throws: `SpecCatalog.CheckFailure` unless the side held, carrying the printed summary.
+    /// - Throws: `SpecCatalog.CheckFailure` unless the side held, carrying the printed summary's first line.
     func checkContinuous(
         _ mode: ContinuousMode,
         in suite: Any.Type,
@@ -107,7 +107,7 @@ public extension SpecProviding {
             htmlReportPath: outcome.htmlReportPath
         )
         guard outcome.succeeded else {
-            throw SpecCatalog.CheckFailure(description: outcome.summary)
+            throw SpecCatalog.CheckFailure.reported(outcome.summary)
         }
     }
 }
@@ -206,6 +206,20 @@ public struct SpecCatalog {
     /// verdict rather than a type name.
     public struct CheckFailure: Error, CustomStringConvertible {
         public let description: String
+
+        /// The failure for a check whose report the console already printed. The test runner prints
+        /// a thrown error too, so this carries only the report's first line.
+        ///
+        /// - Parameter report: The full report the console printed.
+        /// - Returns: A failure carrying the report's first line, or the whole report when it is
+        ///   one line.
+        static func reported(_ report: String) -> CheckFailure {
+            let headline = report.prefix { $0 != "\n" }
+            guard headline.count < report.count else {
+                return CheckFailure(description: report)
+            }
+            return CheckFailure(description: "\(headline) — full report above")
+        }
     }
 
     /// Runs one `spec/candidate` case, prints its report, and throws if it didn't earn the verdict
@@ -229,7 +243,7 @@ public struct SpecCatalog {
     ///   - spec: The spec's name.
     ///   - environment: Where the side selection is read from; the process environment by default.
     /// - Throws: `CheckFailure` when `spec` is not declared or the selected side did not hold, carrying
-    ///   the summary the console printed.
+    ///   the first line of the summary the console printed.
     public func checkContinuous(
         spec: String,
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -263,7 +277,7 @@ public struct SpecCatalog {
         }
         Self.report("\(spec) · continuous", outcome.summary, htmlReportPath: outcome.htmlReportPath)
         guard outcome.succeeded else {
-            throw CheckFailure(description: outcome.summary)
+            throw CheckFailure.reported(outcome.summary)
         }
     }
 
