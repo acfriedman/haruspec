@@ -144,7 +144,7 @@ public struct CandidateVerdict: Sendable {
     func check(in specName: String) throws {
         SpecCatalog.report("\(specName)/\(name)", report(), htmlReportPath: htmlReportPath)
         guard metExpectation else {
-            throw SpecCatalog.CheckFailure(description: report())
+            throw SpecCatalog.CheckFailure.reported(report())
         }
     }
 }
