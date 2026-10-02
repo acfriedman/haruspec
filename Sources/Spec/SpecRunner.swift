@@ -184,7 +184,8 @@ public extension Spec {
         )
         // Every build records through the spec's capture boundary, however it was constructed — the
         // one choke point for baseline, candidate, record and replay alike.
-        let system = wrapCandidate(make(context))
+        let wrap = wrapCandidate ?? StampedForwarderRegistry.wrap(S.self)
+        let system = wrap(make(context))
         // Task-locals are inherited across `await`, so binding once around the whole loop still
         // reaches an operation that suspends — which is what lets an op drive an actor. The op
         // identity is bound per operation, so every event — and every block or task the op spawns,

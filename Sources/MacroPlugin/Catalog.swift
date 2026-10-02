@@ -76,6 +76,10 @@ enum CatalogEmitter {
         \(entries.joined(separator: ",\n"))
                 ]
             }
+
+            static var derivedForwarder: (any StampedForwarder.Type)? {
+                \(forwarder).self
+            }
         \(systemEntry)\(propertiesEntry)
         }
         """

@@ -28,6 +28,9 @@ public protocol DerivedOperations {
     /// The boundary's observed properties, one per `var` requirement — the derivation's half of
     /// `.observes(_:)`. Empty when the protocol declares none.
     static var derivedProperties: [DerivedProperty<System>] { get }
+    /// The stamped forwarder every build records through, the generated `Traced<Protocol>` — named by the catalog
+    /// so a spec need not census the process for it. `nil` sends the spec to that census.
+    static var derivedForwarder: (any StampedForwarder.Type)? { get }
 }
 
 public extension DerivedOperations {
@@ -37,6 +40,10 @@ public extension DerivedOperations {
 
     static var derivedProperties: [DerivedProperty<System>] {
         []
+    }
+
+    static var derivedForwarder: (any StampedForwarder.Type)? {
+        nil
     }
 }
 
@@ -476,6 +483,9 @@ public extension Spec {
         }
         var copy = adopting(ops)
         copy.derivedDefaultSeams = derivedDefaults
+        if let forwarder = D.derivedForwarder {
+            copy.wrapCandidate = StampedForwarderRegistry.wrap(S.self, through: forwarder)
+        }
         // The protocol's `var` requirements become observed properties, snapshot at every capture
         // boundary.
         copy.observedProperties += D.derivedProperties.map { property in

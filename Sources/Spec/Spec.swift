@@ -282,8 +282,9 @@ public struct Spec<S> {
     var makeConformer: ((SeamContext, Any.Type) -> S)?
     /// Wraps every build in the capture boundary before it is driven — the stamped protocol's
     /// forwarder, so the baseline and a port authored by closure record through the same class.
-    /// Identity when `S` is not a stamped protocol.
-    var wrapCandidate: (S) -> S = StampedForwarderRegistry.wrap(S.self)
+    /// Set from a derived catalog; `nil` finds the forwarder by census at the first capture, and is
+    /// identity when `S` is not a stamped protocol.
+    var wrapCandidate: ((S) -> S)?
 
     var operations: [Op<S>] = []
     var tolerances: Tolerance = .strict

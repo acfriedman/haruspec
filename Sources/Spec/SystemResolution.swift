@@ -1,6 +1,7 @@
 import Foundation
 import HaruspecSeams
 import HaruspecTrace
+import MachO
 import ObjectiveC
 
 // Injected doubles are the default, so the wiring that hands them in should not need authoring.
@@ -9,33 +10,59 @@ import ObjectiveC
 // there is no second registry to keep in sync. Anything unresolvable traps with the preferred fix
 // spelled out: the trap message is the teaching surface for the boilerplate it replaced.
 
+/// The Obj-C classes from the process's own images: the app, its test bundle, and the packages they
+/// link. The OS frameworks hold most of a process's classes and none of Haruspec's, so skipping them
+/// keeps the census in the hundreds rather than the tens of thousands.
+///
+/// Censused once and shared by every registry below. The cost is the conformance cast each class
+/// takes, so the class count is what the census pays for.
+enum LinkedClasses {
+    static let all: [AnyClass] = {
+        var classes: [AnyClass] = []
+        for index in 0 ..< _dyld_image_count() {
+            guard let image = _dyld_get_image_name(index), !isSystemImage(String(cString: image)) else {
+                continue
+            }
+            var count: UInt32 = 0
+            guard let names = objc_copyClassNamesForImage(image, &count) else {
+                continue
+            }
+            defer { free(UnsafeMutableRawPointer(names)) }
+            for name in UnsafeBufferPointer(start: names, count: Int(count)) {
+                if let linked = objc_lookUpClass(name) {
+                    classes.append(linked)
+                }
+            }
+        }
+        return classes
+    }()
+
+    /// Whether `path` is an OS or toolchain image: macOS's own, a simulator runtime's, or Xcode's
+    /// test frameworks.
+    ///
+    /// - Parameter path: A loaded image's path, as dyld reports it.
+    /// - Returns: `true` when no Haruspec stamp can live in the image.
+    static func isSystemImage(_ path: String) -> Bool {
+        path.hasPrefix("/System/") || path.hasPrefix("/usr/lib/")
+            || path.contains("/RuntimeRoot/")
+            || path.contains("/Developer/Library/") || path.contains("/Developer/usr/lib/")
+    }
+}
+
 /// Every stamped double linked into the process. Doubles are `NSObject`-rooted
 /// (they back Obj-C injection points), so the Obj-C class list is a complete census; the sweep runs
 /// once and only when a derivation actually resolves.
 enum SeamDoubleRegistry {
-    static let all: [any SeamDouble.Type] = {
-        var count: UInt32 = 0
-        guard let classes = objc_copyClassList(&count) else {
-            return []
-        }
-        defer { free(UnsafeMutableRawPointer(classes)) }
-        return UnsafeBufferPointer(start: classes, count: Int(count))
-            .compactMap { $0 as? any SeamDouble.Type }
-    }()
+    static let all: [any SeamDouble.Type] = LinkedClasses.all.compactMap { $0 as? any SeamDouble.Type }
 }
 
-/// Every stamped forwarder linked into the process, found by the same Obj-C class-list census as
+/// Every stamped forwarder linked into the process, found by the same census as
 /// `SeamDoubleRegistry` — forwarders are `NSObject`-rooted.
+///
+/// The fallback for a spec built without a derived catalog: a catalog names its forwarder, so a
+/// derived spec never pays for this census.
 enum StampedForwarderRegistry {
-    static let all: [any StampedForwarder.Type] = {
-        var count: UInt32 = 0
-        guard let classes = objc_copyClassList(&count) else {
-            return []
-        }
-        defer { free(UnsafeMutableRawPointer(classes)) }
-        return UnsafeBufferPointer(start: classes, count: Int(count))
-            .compactMap { $0 as? any StampedForwarder.Type }
-    }()
+    static let all: [any StampedForwarder.Type] = LinkedClasses.all.compactMap { $0 as? any StampedForwarder.Type }
 
     /// The wrap for a spec over `S`: its stamped forwarder when `S` is a stamped protocol's
     /// existential, identity otherwise.
@@ -47,7 +74,17 @@ enum StampedForwarderRegistry {
         else {
             return { $0 }
         }
-        return { system in
+        return wrap(S.self, through: forwarder)
+    }
+
+    /// The wrap for a spec over `S` through a forwarder already in hand, as a derived catalog names it.
+    ///
+    /// - Parameters:
+    ///   - _: The spec's system type, `(any Cart).self`.
+    ///   - forwarder: The stamped forwarder for `S`, a generated `Traced<Protocol>`.
+    /// - Returns: A function that wraps a build in `forwarder`.
+    static func wrap<S>(_: S.Type, through forwarder: any StampedForwarder.Type) -> (S) -> S {
+        { system in
             guard let wrapped = forwarder.wrap(system) as? S else {
                 preconditionFailure("\(forwarder) could not wrap \(type(of: system)) as \(S.self) — file a bug")
             }
@@ -84,15 +121,7 @@ public extension SeamResource {
 
 /// Every `SeamResource` provider linked into the process; censused once, like `SeamDoubleRegistry`.
 enum SeamResourceRegistry {
-    static let all: [any SeamResource.Type] = {
-        var count: UInt32 = 0
-        guard let classes = objc_copyClassList(&count) else {
-            return []
-        }
-        defer { free(UnsafeMutableRawPointer(classes)) }
-        return UnsafeBufferPointer(start: classes, count: Int(count))
-            .compactMap { $0 as? any SeamResource.Type }
-    }()
+    static let all: [any SeamResource.Type] = LinkedClasses.all.compactMap { $0 as? any SeamResource.Type }
 }
 
 public extension SeamContext {
