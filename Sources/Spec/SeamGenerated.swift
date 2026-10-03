@@ -124,6 +124,32 @@ public extension SeamContext {
         return made
     }
 
+    /// Returns a synthesized completion block's error: `nil` unless the `Bool` seam says this delivery
+    /// fails, then the error the spec declared for `any Error`.
+    ///
+    /// - Parameter seam: The slot's key, `"<label>.<method>.<block>.<argument>"`.
+    /// - Returns: `nil` for a successful delivery, else the declared error.
+    /// - Precondition: A failing delivery has a factory declared for `any Error`; without one it
+    ///   traps naming `.generates((any Error).self) { seams, key in … }`. Which error a collaborator
+    ///   fails with is the spec's judgment, never the engine's guess.
+    ///
+    /// The seam defaults to `false`, so a double succeeds until a spec sweeps the key. The slot is
+    /// read as a choice rather than as an optional value because the failure branch is
+    /// the one that matters, and an optional's `nil` default would never reach it.
+    func failure(_ seam: String) -> (any Error)? {
+        guard bool(seam, default: false) else { return nil }
+        guard let failure = valueIfDeclared((any Error).self, key: seam) else {
+            preconditionFailure(
+                """
+                "\(seam)" failed, but no error is declared — declare what the collaborator fails \
+                with: .generates((any Error).self) { seams, key in URLError(.timedOut) } — read \
+                any varying field through the seams, namespaced under the key, so it replays.
+                """
+            )
+        }
+        return failure
+    }
+
     /// The optional-return path: a declared factory if there is one, else `nil` — which IS the
     /// sensible zero for an optional, so `-> Receipt?` needs no declaration until a spec wants the
     /// non-nil branch explored.

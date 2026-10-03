@@ -53,9 +53,7 @@ func tracedBody(
 
     // Argument capture: key each argument by its internal parameter name, encoded at runtime. The
     // `as Any` keeps imported IUO parameters (`Foo!`) from tripping an optional-coercion warning.
-    let innerNames = function.signature.parameterClause.parameters.map { param in
-        (param.secondName ?? param.firstName).text
-    }
+    let innerNames = CompletionBlock.recordedArgumentNames(of: function)
     let callArgs = innerNames.isEmpty ? "" :
         ", args: [" + innerNames.map { "\"\($0)\": RuntimeValue.canonical(\($0) as Any)" }.joined(separator: ", ") + "]"
     let isolation = isolationExpression.map { ", isolation: \($0)" } ?? ""

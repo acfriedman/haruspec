@@ -152,10 +152,14 @@ enum DoubleEmitter {
         file: String?
     ) -> String {
         let key = "\(label).\(function.name.text)"
+        var innerBody = defaultedReturn(type: function.signature.returnClause?.type.trimmedDescription, key: key)
+        if let completion = CompletionBlock.of(function) {
+            innerBody = delivery(completion, key: key) + (innerBody.isEmpty ? "" : "\n\(innerBody)")
+        }
         let body = tracedBody(
             function: function,
             label: key,
-            innerBody: defaultedReturn(type: function.signature.returnClause?.type.trimmedDescription, key: key),
+            innerBody: innerBody,
             timed: false,
             origin: originArguments(label: label, symbol: symbol, sourceExpression: file)
         )
@@ -163,6 +167,47 @@ enum DoubleEmitter {
         let whereClause = function.genericWhereClause.map { " \($0.trimmedDescription)" } ?? ""
         return "    func \(function.name.text)\(generics)\(function.signature.trimmedDescription)"
             + "\(whereClause) {\n\(indent(body))\n    }"
+    }
+
+    /// The double's answer through a completion block, delivered at once, inside the call. Each
+    /// block argument is generated input, exactly as a return of its type would be.
+    ///
+    /// - Parameters:
+    ///   - completion: The method's completion block.
+    ///   - key: The method's seam key and event label, `"<label>.<method>"`.
+    /// - Returns: The statements that generate the arguments and deliver them.
+    ///
+    /// Each argument is a seam read keyed `"<label>.<method>.<block>.<argument>"`, defaulted to the
+    /// type's zero and swept when a spec declares a domain for the key. The delivery is recorded as
+    /// a forwarder records it.
+    ///
+    /// The Cocoa error slot (`(any Error)?`) is the failure branch, which a nil default alone would
+    /// never reach. Its key reads as a `Bool` — whether this delivery fails — and a failing delivery
+    /// builds its error through the factory the spec declared for `any Error`.
+    private static func delivery(_ completion: CompletionBlock, key: String) -> String {
+        let blockKey = "\(key).\(completion.label)"
+        let generated = zip(completion.arguments, completion.boundNames).map { argument, name in
+            let argumentKey = "\(blockKey).\(argument.key)"
+            // An imported `NSError *` slot spells the class; the factory builds any `Error`.
+            let bridged = argument.type.contains("NSError") ? ".map { $0 as NSError }" : ""
+            let value = isErrorSlot(argument.type)
+                ? "__seams.failure(\(quotedLiteral(argumentKey)))\(bridged)"
+                : generatedValue(type: argument.type, key: argumentKey)
+            return "let \(name): \(argument.type) = \(value)"
+        }
+        let bound = completion.boundNames.joined(separator: ", ")
+        let call = "\(completion.name)\(completion.isOptional ? "?" : "")(\(bound))"
+        return (generated + [completion.recordedDelivery(eventLabel: blockKey, deliver: call)]).joined(separator: "\n")
+    }
+
+    /// Returns the generated value a return of `type` would produce, as an expression.
+    ///
+    /// - Parameters:
+    ///   - type: The value's spelled type.
+    ///   - key: The seam key the value reads.
+    /// - Returns: The expression `defaultedReturn` would return.
+    private static func generatedValue(type: String, key: String) -> String {
+        String(defaultedReturn(type: type, key: key).dropFirst("return ".count))
     }
 
     /// The synthesized body: nothing for `Void`, a seam read with the type's zero as its default for

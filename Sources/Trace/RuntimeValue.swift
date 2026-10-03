@@ -77,12 +77,38 @@ public enum RuntimeValue {
         depth: Int,
         visited: Set<ObjectIdentifier>
     ) -> CanonicalValue? {
+        if let error = any as? Error {
+            return canonical(error: error as NSError, depth: depth, visited: visited)
+        }
         guard depth < maxDepth else { return nil }
         if let object = any as? NSObject,
            let structured = objcObject(object, depth: depth, visited: visited) {
             return structured
         }
         return mirrorObject(any, depth: depth, visited: visited)
+    }
+
+    /// Returns an error as what a caller can branch on: its domain, its code, and its user info. Its
+    /// description is derived text, and its KVC properties include categories that throw on read.
+    ///
+    /// - Parameters:
+    ///   - error: The error, bridged — a Swift error's domain is its type, its code the case.
+    ///   - depth: The current nesting depth.
+    ///   - visited: The objects already on the path, so a cycle through user info terminates.
+    /// - Returns: An `.object` keyed `domain`, `code`, and — when non-empty — `userInfo`.
+    private static func canonical(
+        error: NSError,
+        depth: Int,
+        visited: Set<ObjectIdentifier>
+    ) -> CanonicalValue {
+        var result: [String: CanonicalValue] = [
+            "domain": .string(error.domain),
+            "code": .int(Int64(error.code))
+        ]
+        if !error.userInfo.isEmpty, depth < maxDepth {
+            result["userInfo"] = canonical(error.userInfo as [String: Any], depth: depth + 1, visited: visited)
+        }
+        return .object(result)
     }
 
     /// Walks the Obj-C property list from the object's class up to (but not including) `NSObject`,

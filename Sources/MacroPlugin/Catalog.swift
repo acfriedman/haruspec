@@ -119,17 +119,30 @@ enum CatalogEmitter {
     /// signature alone.
     private static func derivedOp(_ function: FunctionDeclSyntax) -> String {
         let label = function.name.text
-        let parameters = function.signature.parameterClause.parameters
-        let mapped = parameters.enumerated().map { position, parameter in
+        // A completion block is not generated input: the op hands in a block that signals, and
+        // waits for it. Not across a global-actor hop, which a synchronous start cannot make — such
+        // a requirement keeps the general rule, a pending argument.
+        let completion = function.attributes.isEmpty ? CompletionBlock.of(function) : nil
+        let parameters = Array(function.signature.parameterClause.parameters)
+        let generated = completion == nil ? parameters : parameters.dropLast()
+        let mapped = generated.enumerated().map { position, parameter in
             map(parameter, at: position)
         }
 
         // Parenthesized so a forced cast passed to an IUO parameter (`Product!`) reads as a value,
         // not as a cast the compiler warns will be treated as optional.
-        let call = mapped.enumerated().map { position, argument -> String in
-            let external = parameters[parameters.index(parameters.startIndex, offsetBy: position)].firstName.text
+        var passed = zip(generated, mapped).map { parameter, argument -> String in
+            let external = parameter.firstName.text
             return external == "_" ? "(\(argument.value))" : "\(external): (\(argument.value))"
-        }.joined(separator: ", ")
+        }
+        if let completion, let last = parameters.last {
+            let ignored = completion.arguments.isEmpty
+                ? ""
+                : " \(completion.arguments.map { _ in "_" }.joined(separator: ", ")) in"
+            let signal = "{\(ignored) __delivered() }"
+            passed.append(last.firstName.text == "_" ? signal : "\(last.firstName.text): \(signal)")
+        }
+        let call = passed.joined(separator: ", ")
 
         let effects = function.signature.effectSpecifiers
         let prefix = "\(effects?.throwsClause != nil ? "try? " : "")\(effects?.asyncSpecifier != nil ? "await " : "")"
@@ -145,7 +158,14 @@ enum CatalogEmitter {
         let hops = !function.attributes.isEmpty
         let receiver = hops ? "__sent.value" : "__sut"
         let handOver = hops ? "let __sent = UncheckedHandOver(__sut)\n                " : ""
-        let invocation = "\(handOver)\(discard)\(prefix)\(receiver).\(label)(\(call))"
+        var invocation = "\(handOver)\(discard)\(prefix)\(receiver).\(label)(\(call))"
+        if completion != nil {
+            // The start runs inside the wait, so a throw reaches it rather than `try?`: a refusal
+            // ends the wait, because the block will never run.
+            let isThrows = effects?.throwsClause != nil
+            let start = "\(returnsValue ? "_ = " : "")\(isThrows ? "try " : "")\(receiver).\(label)(\(call))"
+            invocation = "await CompletionDelivery.awaited { __delivered in \(start) }"
+        }
 
         let arguments = mapped.isEmpty
             ? ""

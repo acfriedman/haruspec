@@ -268,4 +268,10 @@ public extension SeamDomain {
     static func oneOf(_ values: Int64...) -> SeamDomain {
         oneOf(values)
     }
+
+    /// Both truth values, `false` first — the domain of a flag, such as whether a synthesized
+    /// completion block's delivery fails.
+    static var bool: SeamDomain {
+        .anyOf([.bool(false), .bool(true)])
+    }
 }

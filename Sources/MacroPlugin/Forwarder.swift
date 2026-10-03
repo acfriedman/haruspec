@@ -114,10 +114,15 @@ enum ForwarderEmitter {
     /// nothing inside the actor. A sync requirement has no hop to make: an actor can only witness it `nonisolated`.
     private static func forwardingMethod(_ function: FunctionDeclSyntax, label: String, timed: Bool) -> String {
         // Forward each parameter under its external argument label (dropping `_`), passing the value
-        // by internal name — reproducing the imported call, IUOs and all, with no unwrap.
+        // by internal name — reproducing the imported call, IUOs and all, with no unwrap. A completion
+        // block is swapped for one that records the delivery, then hands it on.
+        let completion = CompletionBlock.of(function)
         let forwarded = function.signature.parameterClause.parameters.map { param -> String in
             let external = param.firstName.text
-            let internalName = (param.secondName ?? param.firstName).text
+            var internalName = (param.secondName ?? param.firstName).text
+            if internalName == completion?.name {
+                internalName = "__oracleRecording"
+            }
             return external == "_" ? internalName : "\(external): \(internalName)"
         }.joined(separator: ", ")
 
@@ -129,7 +134,11 @@ enum ForwarderEmitter {
 
         let returnType = function.signature.returnClause?.type.trimmedDescription
         let isVoid = returnType == nil || returnType == "Void" || returnType == "()"
-        let innerBody = isVoid ? call : "return \(call)"
+        var innerBody = isVoid ? call : "return \(call)"
+        if let completion {
+            innerBody = recordingBlock(completion, label: "\(label).\(function.name.text)")
+                + "\n" + innerBody
+        }
 
         var body = tracedBody(
             function: function,
@@ -158,6 +167,34 @@ enum ForwarderEmitter {
             + "\(whereClause) {\n\(indent(body))\n    }"
     }
 
+    /// The block the conformer is handed in place of the caller's, which records each delivery and
+    /// runs the caller's block inside it, so whatever the caller does in response nests under it.
+    ///
+    /// - Parameters:
+    ///   - completion: The method's completion block.
+    ///   - label: The method's event label, `"<label>.<method>"`.
+    /// - Returns: A `let __oracleRecording` declaration for the forwarding call to pass.
+    ///
+    /// The delivery is a `call`/`ret` pair labeled `"<label>.<method>.<block>"`, with the block's
+    /// arguments as the call's payload. The recorder is the one in effect when the method was
+    /// called, so a delivery on a thread the capture never reached still lands in its trace. A
+    /// caller's `nil` for an optional block is handed on as `nil`: a conformer may branch on whether
+    /// anyone is listening.
+    private static func recordingBlock(_ completion: CompletionBlock, label: String) -> String {
+        let bound = completion.boundNames.joined(separator: ", ")
+        let parameters = completion.arguments.isEmpty ? "" : " \(bound) in"
+        let eventLabel = "\(label).\(completion.label)"
+        // Spelled, because a closure's parameter types cannot be inferred from a later use.
+        let declaration = "let __oracleRecording: \(completion.localType)"
+        guard completion.isOptional else {
+            let delivery = completion.recordedDelivery(eventLabel: eventLabel, deliver: "\(completion.name)(\(bound))")
+            return "\(declaration) = {\(parameters)\n\(indent(delivery))\n}"
+        }
+        let delivery = completion.recordedDelivery(eventLabel: eventLabel, deliver: "__oracleForward(\(bound))")
+        return "\(declaration) = \(completion.name).map { __oracleForward in {\(parameters)\n"
+            + "\(indent(delivery))\n} }"
+    }
+
     /// The forwarder's witness of a pasted `init` requirement. Conformance demands one, but a
     /// forwarder has nothing to construct — so it traps, naming the two routes that do.
     private static func refusingInit(_ initializer: InitializerDeclSyntax, generatedName: String) -> String {
@@ -177,11 +214,14 @@ enum ForwarderEmitter {
     private static func resolvingInit(_ initializer: InitializerDeclSyntax, wrapped: String) -> String {
         let arguments = initializer.signature.parameterClause.parameters.map { param -> String in
             let external = param.firstName.text
-            let spelled = param.type.trimmedDescription
+            // A block parameter (`clock: @escaping () -> Date`) resolves like any other, by its type
+            // — which `@escaping` is not part of. A metatype expression parenthesizes anything but a
+            // plain name: `any Rating.self` would read as a member of `Rating`.
+            let spelled = spelledWithoutEscaping(param.type)
             let bare = spelled.hasSuffix("!") || spelled.hasSuffix("?") ? String(spelled.dropLast()) : spelled
             let value = bare == "NotificationCenter" || bare == "NSNotificationCenter"
                 ? "__context.notifications"
-                : "__context.resolve(\(bare).self)"
+                : "__context.resolve(\(isPlainName(bare) ? bare : "(\(bare))").self)"
             return external == "_" ? value : "\(external): \(value)"
         }.joined(separator: ", ")
         return "    convenience init(resolving __context: SeamContext, _ __conformer: \(wrapped).Type) {\n"
@@ -231,4 +271,12 @@ enum ForwarderEmitter {
 func hasAsyncGetter(_ binding: PatternBindingSyntax) -> Bool {
     guard case let .accessors(accessors) = binding.accessorBlock?.accessors else { return false }
     return accessors.contains { $0.effectSpecifiers?.asyncSpecifier != nil }
+}
+
+/// Whether `type` is a bare, possibly qualified, name — one `.self` can follow without parentheses.
+///
+/// - Parameter type: A source-spelled type, optionality already stripped.
+/// - Returns: `false` for anything with a keyword, sugar, or arrow in it (`any Rating`, `() -> Date`).
+func isPlainName(_ type: String) -> Bool {
+    type.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." }
 }
