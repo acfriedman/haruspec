@@ -188,6 +188,14 @@ the golden branch, replay the *same* transcript into both branches, and diff. Se
   file in its real module, downstream modules replayed) → **sim fallback** (UI-coupled code runs the
   real target on the simulator — a legitimate faithful tier, not a failure). Same diff engine at every
   rung.
+- 📋 **Composed specs (integration diffing)** — move a spec's cut line outward: a collaborator
+  resolves to its real implementation behind its forwarder instead of a double, so a cluster of
+  classes is diffed against its baseline composition. Catches what unit specs miss (correlated
+  collaborator state, usage the collaborator's spec never sampled, cross-boundary delivery and
+  ordering), and verifies refactors that move responsibility between classes, which unit specs
+  freeze. Interior edges advisory by default; pairwise old/new attribution names interaction bugs.
+  Determinism rides the injected scheduling seams plus symbolic UUID canonicalization; schedule
+  exploration is the open half. Briefing: [`COMPOSED-SPECS.md`](COMPOSED-SPECS.md).
 - 🔬 **Seam-interception catalog** — the load-bearing (but non-blocking) research track that determines
   how much legacy code reaches the no-sim tier. Tracked in [`SEAMS.md`](SEAMS.md); each seam graduated
   to record+replay shrinks the `CANNOT-VERIFY` bucket.

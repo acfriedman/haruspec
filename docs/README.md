@@ -8,5 +8,6 @@ interceptable-seam catalog. These change slowly.
 - [`ROADMAP.md`](ROADMAP.md) — the feature & design ledger (status markers + full rationale per item).
 - [`SEAMS.md`](SEAMS.md) — the interceptable-seam catalog.
 - [`LIMITATIONS.md`](LIMITATIONS.md) — known constraints of shipped code.
+- [`COMPOSED-SPECS.md`](COMPOSED-SPECS.md) — briefing: integration diffing by composing specs (proposal).
 
 These answer *"how does this work / why is it designed this way."*
