@@ -33,9 +33,19 @@ protocol Quoting: AnyObject {
     ) throws
 }
 
+/// The quoter's own queue, injected: its answers are held for the capture and run in order.
+@Haruspec(schedules: .serial)
+protocol QuoterQueue: AnyObject {
+    func async(_ work: @escaping () -> Void)
+}
+
 /// The baseline: refuses an empty code at once, answers everything else later, on its own queue.
 final class LegacyQuoter: Quoting {
-    private let queue = DispatchQueue(label: "quoter.legacy")
+    private let queue: any QuoterQueue
+
+    init(queue: any QuoterQueue) {
+        self.queue = queue
+    }
 
     func quote(_ code: String, completion: @escaping @Sendable (Int, (any Error)?) -> Void) throws {
         guard !code.isEmpty else { throw QuoteRefusal.emptyCode }
@@ -58,7 +68,11 @@ private func answer(_ code: String, _ completion: (Int, (any Error)?) -> Void) {
 
 /// A faithful port: a rewrite with the same channels — the throw, and the block on its own queue.
 final class SwiftQuoter: Quoting {
-    private let queue = DispatchQueue(label: "quoter.legacy")
+    private let queue: any QuoterQueue
+
+    init(queue: any QuoterQueue) {
+        self.queue = queue
+    }
 
     func quote(_ code: String, completion: @escaping @Sendable (Int, (any Error)?) -> Void) throws {
         guard !code.isEmpty else { throw QuoteRefusal.emptyCode }
@@ -78,7 +92,11 @@ final class SynchronousQuoter: Quoting {
 
 /// A port that turns the up-front refusal into an asynchronous failure — same error, wrong channel.
 final class LateRefusingQuoter: Quoting {
-    private let queue = DispatchQueue(label: "quoter.legacy")
+    private let queue: any QuoterQueue
+
+    init(queue: any QuoterQueue) {
+        self.queue = queue
+    }
 
     func quote(_ code: String, completion: @escaping @Sendable (Int, (any Error)?) -> Void) throws {
         queue.async {
@@ -90,7 +108,11 @@ final class LateRefusingQuoter: Quoting {
 
 /// A port that forgets to answer a failure at all.
 final class SilentQuoter: Quoting {
-    private let queue = DispatchQueue(label: "quoter.legacy")
+    private let queue: any QuoterQueue
+
+    init(queue: any QuoterQueue) {
+        self.queue = queue
+    }
 
     func quote(_ code: String, completion: @escaping @Sendable (Int, (any Error)?) -> Void) throws {
         guard !code.isEmpty else { throw QuoteRefusal.emptyCode }
@@ -104,7 +126,11 @@ final class SilentQuoter: Quoting {
 
 /// A port that answers twice.
 final class EchoingQuoter: Quoting {
-    private let queue = DispatchQueue(label: "quoter.legacy")
+    private let queue: any QuoterQueue
+
+    init(queue: any QuoterQueue) {
+        self.queue = queue
+    }
 
     func quote(_ code: String, completion: @escaping @Sendable (Int, (any Error)?) -> Void) throws {
         guard !code.isEmpty else { throw QuoteRefusal.emptyCode }
@@ -180,7 +206,7 @@ final class CompletionBlockTests: XCTestCase {
         Spec<any Quoting>("quoting.completion", derivedFrom: DerivedQuoting.self) {
             Amend("quote").varying("code", over: .oneOf("SAVE10", "NOPE", ""))
         }
-        .system { _ in LegacyQuoter() }
+        .system { context in LegacyQuoter(queue: context.double(DoubleQuoterQueue.self)) }
         .vary {
             Ordering(max: 4)
             Budget(runs: 30)
@@ -203,11 +229,14 @@ final class CompletionBlockTests: XCTestCase {
 
     func testTheForwarderRecordsTheDeliveryWithTheBlocksArguments() async throws {
         let recorder = TraceRecorder(name: "quote")
-        let quoter = TracedQuoting(LegacyQuoter())
+        let context = SeamContext(notifications: NotificationCenter(), cassette: Cassette())
+        let quoter = TracedQuoting(LegacyQuoter(queue: context.double(DoubleQuoterQueue.self)))
 
         await TraceContext.$current.withValue(recorder) {
-            await CompletionDelivery.awaited { delivered in
-                try quoter.quote("SAVE10") { _, _ in delivered() }
+            await WorkBacklog.$current.withValue(context.backlog) {
+                await CompletionDelivery.awaited { delivered in
+                    try quoter.quote("SAVE10") { _, _ in delivered() }
+                }
             }
         }
 
@@ -226,11 +255,14 @@ final class CompletionBlockTests: XCTestCase {
 
     func testARefusedRequestRecordsTheThrowAndNoDelivery() async {
         let recorder = TraceRecorder(name: "refused")
-        let quoter = TracedQuoting(LegacyQuoter())
+        let context = SeamContext(notifications: NotificationCenter(), cassette: Cassette())
+        let quoter = TracedQuoting(LegacyQuoter(queue: context.double(DoubleQuoterQueue.self)))
 
         await TraceContext.$current.withValue(recorder) {
-            await CompletionDelivery.awaited { delivered in
-                try quoter.quote("") { _, _ in delivered() }
+            await WorkBacklog.$current.withValue(context.backlog) {
+                await CompletionDelivery.awaited { delivered in
+                    try quoter.quote("") { _, _ in delivered() }
+                }
             }
         }
 
@@ -246,7 +278,8 @@ final class CompletionBlockTests: XCTestCase {
     }
 
     func testAFaithfulPortIsEquivalent() async {
-        let verdict = await quoting.verify(against: { _ in SwiftQuoter() })
+        let verdict = await quoting
+            .verify(against: { context in SwiftQuoter(queue: context.double(DoubleQuoterQueue.self)) })
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
@@ -262,19 +295,22 @@ final class CompletionBlockTests: XCTestCase {
     }
 
     func testARefusalMovedIntoTheBlockDiverges() async {
-        let verdict = await quoting.verify(against: { _ in LateRefusingQuoter() })
+        let verdict = await quoting
+            .verify(against: { context in LateRefusingQuoter(queue: context.double(DoubleQuoterQueue.self)) })
 
         XCTAssertEqual(verdict.verdict, .diverged, "a throw and a delivered error are different contracts")
     }
 
     func testABlockNeverCalledDiverges() async {
-        let verdict = await quoting.verify(against: { _ in SilentQuoter() })
+        let verdict = await quoting
+            .verify(against: { context in SilentQuoter(queue: context.double(DoubleQuoterQueue.self)) })
 
         XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
     }
 
     func testABlockCalledTwiceDiverges() async {
-        let verdict = await quoting.verify(against: { _ in EchoingQuoter() })
+        let verdict = await quoting
+            .verify(against: { context in EchoingQuoter(queue: context.double(DoubleQuoterQueue.self)) })
 
         XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
     }

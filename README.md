@@ -129,6 +129,23 @@ try await spec.record(to: planURL)  // on main
 await spec.verify(replaying: plan)  // on the PR
 ```
 
+**Threads are collaborators too.** A subject that hands work to a queue, spawns a `Task`, or
+schedules a Combine pipeline takes that queue in its `init`, like any other collaborator.
+Production passes a real `DispatchQueue`. The test target stamps the protocol with the discipline
+it honors, and the capture holds whatever the subject hands it, then runs it after the ops, in
+enqueue order, every run:
+
+```swift
+@Haruspec(schedules: .serial)
+protocol StateQueue: SerialQueueing {
+    func async(_ work: @escaping () -> Void)   // held, run in order
+    func sync(_ work: () -> Void)              // the queue's held work, then inline
+}
+```
+
+Haruspec overrides nothing. A subject that calls GCD, `Task {}`, or `MainActor.run` directly is
+an audit finding (`dispatch`), never a silent green.
+
 **3. Read the verdict.** `EQUIVALENT` means every probe matched under the declared tolerances and
 intent. `DIVERGED` names the first difference and shrinks it. `CANNOT-VERIFY` means the oracle
 refuses to claim coverage it does not have. `UNSTABLE` means replays of the same build disagreed,

@@ -199,29 +199,20 @@ public extension Spec {
         // identity is bound per operation, so every event — and every block or task the op spawns,
         // which the seams carry it into — is attributed to the declared op that caused it.
         await TraceContext.$current.withValue(recorder) {
-            for (position, operation) in order.enumerated() {
-                await TraceContext.$currentOp.withValue(OpIdentity(label: operation.label, position: position)) {
-                    await operation.action(system, context)
+            await WorkBacklog.$current.withValue(context.backlog) {
+                for (position, operation) in order.enumerated() {
+                    await TraceContext.$currentOp.withValue(OpIdentity(label: operation.label, position: position)) {
+                        await operation.action(system, context)
+                    }
                 }
             }
         }
-        // Drain *after* the window, not inside it. Work the ops dispatched carries the recorder the
-        // seam captured at enqueue, so it records whether or not the window is still open — but it has
-        // to have finished, or the snapshot is a race rather than a reading. Drained in rounds: a
-        // quiesced round may leave virtual timers holding a pipeline's deferred tail (a debounce),
-        // which fire only at quiescence — the settled point is a round that releases nothing further.
-        var rounds = 0
-        while true {
-            if await DispatchSeam.quiesce() == false {
-                recorder.marker("⟨haruspec: work still outstanding at snapshot⟩")
-                break
-            }
-            rounds += 1
-            if rounds > SpecDefaults.maxTimerRounds {
-                recorder.marker("⟨haruspec: deferred timers still re-arming at snapshot⟩")
-                break
-            }
-            guard DeferredTimers.fire(for: recorder) else { break }
+        // Drain *after* the window, not inside it. Held work carries the op and cause it was enqueued
+        // under, and runs with the recorder rebound — but it has to have run, or the snapshot is a
+        // reading of a program that has not finished. Delayed work fires on virtual time once nothing
+        // else is ready, so a debounce's deferred tail lands inside the capture too.
+        if await context.backlog.drain(recorder: recorder) == false {
+            recorder.marker("⟨haruspec: scheduled work still held at snapshot⟩")
         }
         // The end-state snapshots: after quiescence (a racing read is not a reading), the harness
         // itself reads each observed property back. Harness-read on both sides by construction — the

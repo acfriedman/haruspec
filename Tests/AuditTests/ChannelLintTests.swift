@@ -135,7 +135,7 @@ final class ChannelLintTests: XCTestCase {
 
         let report = audit([TraceOrigin(label: "F", symbol: "Feed", source: "App/Feed.swift")])
 
-        XCTAssertEqual(Set(report.blindSpots), ["Combine", "Timer / RunLoop", "delayed dispatch"])
+        XCTAssertEqual(Set(report.blindSpots), ["Combine", "Timer / RunLoop", "dispatch"])
     }
 
     /// A class that keeps to the injected center is clean — and only an audit that ran may say so.

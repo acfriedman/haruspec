@@ -5,7 +5,8 @@ import Foundation
 import XCTest
 
 /// The domain a `TraceRecorder` stamps on an event, end to end through the real ladder — `#isolation`
-/// resolved at the recording call site, then the dispatch queue label.
+/// resolved at the recording call site, then the scheduling seam the work was handed to, then a raw
+/// dispatch queue's label.
 ///
 /// These are the tests that would have caught the old `worker-N` scheme: it named every context below
 /// `main` or a first-seen integer, and reused one integer across unrelated domains.
@@ -59,9 +60,9 @@ final class ConcurrencyDomainTests: XCTestCase {
         XCTAssertEqual(observed, [.actor("Ledger", instance: 1), .actor("Ledger", instance: 2)])
     }
 
-    /// The rung below `#isolation`: nonisolated work carries the queue's own label — and the
-    /// discipline stated at creation, which the `DispatchQueue.init` overload registered.
-    func testResolvesNamedDispatchQueuesByLabel() {
+    /// The bottom rung: nonisolated work on a raw queue the subject made itself carries the queue's
+    /// own label, read as serial — the strict direction, since nothing stated the discipline.
+    func testResolvesARawAppQueueByLabelAsSerial() {
         let recorder = TraceRecorder(name: "domains")
         let checkout = DispatchQueue(label: "com.emporium.checkout")
         let analytics = DispatchQueue(label: "com.emporium.analytics", attributes: .concurrent)
@@ -71,7 +72,7 @@ final class ConcurrencyDomainTests: XCTestCase {
 
         let byLabel = domains(of: recorder)
         XCTAssertEqual(byLabel["checkout-work"], .queue("com.emporium.checkout", serial: true))
-        XCTAssertEqual(byLabel["analytics-work"], .queue("com.emporium.analytics", serial: false))
+        XCTAssertEqual(byLabel["analytics-work"], .queue("com.emporium.analytics", serial: true))
     }
 
     /// Work the runtime scheduled with nothing nominal to key on is `.ambient` — explicitly unordered,

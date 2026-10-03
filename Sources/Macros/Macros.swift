@@ -20,6 +20,7 @@ import HaruspecTrace
 ///   - timed: `true` makes the forwarder also record each forwarded call's duration as a signpost
 ///     interval, which is what a spec's timing budgets (``Tolerance/timingBudgets``) compare. For a
 ///     region finer than one call, use ``Haruspec/interval(_:subject:isolation:_:)``.
+///   - schedules: Makes the protocol a thread seam whose work is ordered this way; see below.
 ///
 ///     @Haruspec
 ///     protocol Cart: AnyObject {
@@ -69,6 +70,29 @@ import HaruspecTrace
 /// a spec declares a domain for that key. A required custom type returns the factory the spec
 /// declares with `.generates(_:_:)`, trapping at the first call when none was. Construct one with
 /// `context.double(DoubleInventory.self)`, which also registers it as an injected collaborator.
+///
+/// **A scheduling protocol** (`schedules:`) is the project's own thread seam. Production conforms a
+/// real queue to it (a `DispatchQueue`, the main queue, a task spawner); a subject takes it in its
+/// `init` like any collaborator. The stamp emits only the double, which holds each enqueue in the
+/// capture's ``WorkBacklog`` instead of running it on a thread, and the engine drains the backlog one
+/// item at a time after the ops. Its requirements take one of five shapes, read off the signature:
+///
+///     @Haruspec(schedules: .serial)
+///     protocol CartQueue: SerialQueueing {
+///         func async(_ work: @escaping () -> Void)                     // held, run in order
+///         func after(_ delay: TimeInterval, _ work: @escaping () -> Void) // held on virtual time
+///         func notify(_ group: DispatchGroup, _ work: @escaping () -> Void) // held until the group empties
+///         func sync(_ work: () -> Void)                                 // its held work, then inline
+///     }
+///
+///     @Haruspec(schedules: .concurrent)
+///     protocol Tasks: TaskSpawning {
+///         func spawn(_ operation: @escaping @Sendable () async -> Void)  // an unstructured task, held
+///     }
+///
+/// The discipline is the subject's requirement, so it lives on the type the subject depends on: work
+/// handed to a `.serial` or `.concurrent` protocol records on the domain `.queue(label, serial:)`, and
+/// work handed to a `.main` one records on `.main` and runs on the main thread.
 @attached(peer, names: prefixed(Traced), prefixed(Derived), prefixed(Double))
-public macro Haruspec(_ label: String? = nil, timed: Bool = false) =
+public macro Haruspec(_ label: String? = nil, timed: Bool = false, schedules: ScheduleDiscipline? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "HaruspecMacro")

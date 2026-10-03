@@ -8,76 +8,29 @@ import HaruspecCore
 /// method inside that dynamic scope records to it. Outside a capture window `current` is nil and the
 /// generated code is a cheap nil-check, so instrumentation can ship in production.
 ///
-/// A task-local does not cross a manual thread hop on its own. Swift concurrency inherits it — `Task { }`,
-/// `async let`, task groups, and `DispatchQueue.sync`, which never leaves the thread — but a
-/// `dispatch_async` block runs with no task at all. The GCD preprocessing seam
-/// (`Sources/DispatchSeam/include/haruspec_dispatch.h`) closes that, and `active` is where the two
-/// bindings meet.
+/// A task-local follows Swift concurrency (`async let`, task groups, `sync`, which never leaves the
+/// thread) and nothing else. Work a subject hands off reaches it because the subject hands it to its
+/// own injected scheduling seam: the stamped double holds the work in the capture's ``WorkBacklog``,
+/// and the engine runs it on the capture's own task with these bindings restored.
 public enum TraceContext {
     @TaskLocal public static var current: TraceRecorder?
 
-    private static let threadKey = "com.haruspec.trace.recorder"
-
     /// The recorder actually in effect, and what every capture site reads.
-    ///
-    /// Two bindings, because two mechanisms are needed. The task-local carries the capture window
-    /// through Swift concurrency, which inherits it across `Task { }`, `async let` and task groups. The
-    /// per-thread binding carries it into a block the GCD seam handed to a thread with no task at all —
-    /// the case a task-local structurally cannot reach.
-    ///
-    /// The seam does not rebind the *task*-local: pushing one from inside a run-loop callback that is
-    /// itself nested in an actor-isolated binding violates the task-local stack discipline and traps.
-    /// A thread-local has no such ordering contract, which is the right shape for work that arrives on
-    /// a borrowed thread.
     public static var active: TraceRecorder? {
-        current ?? Thread.current.threadDictionary[threadKey] as? TraceRecorder
+        current
     }
 
-    private static let spawnKey = "com.haruspec.trace.spawnedBy"
-
-    /// The declared op the runner is driving (`OpIdentity`), bound around each op of a capture.
-    ///
-    /// Rides the same two bindings as the recorder: this task-local through Swift concurrency, and
-    /// the thread-local `withThreadRecorder` sets for a block the GCD seam carried across a hop.
+    /// The declared op the runner is driving (`OpIdentity`), bound around each op of a capture, and
+    /// rebound around held work to the op that enqueued it.
     @TaskLocal public static var currentOp: OpIdentity?
-
-    private static let opKey = "com.haruspec.trace.op"
 
     /// The op in effect for an event recorded now — what every recording site stamps on its event.
     public static var activeOp: OpIdentity? {
-        currentOp ?? Thread.current.threadDictionary[opKey] as? OpIdentity
-    }
-
-    /// Binds `recorder` for the duration of `body` on *this thread only*, restoring whatever was there.
-    /// Used by the GCD seam around each wrapped block.
-    ///
-    /// `spawnedBy` is the call that enqueued this work, carried from the enqueue site so the first
-    /// event recorded inside claims it as its cause. Program order carries the rest of the block.
-    /// `op` is the declared op the enqueue ran under, so the block's events are attributed to the
-    /// op that caused them rather than to whichever op the runner has moved on to.
-    static func withThreadRecorder<T>(
-        _ recorder: TraceRecorder,
-        spawnedBy: Int?,
-        op: OpIdentity?,
-        _ body: () -> T
-    ) -> T {
-        let dictionary = Thread.current.threadDictionary
-        let previousRecorder = dictionary[threadKey]
-        let previousSpawn = dictionary[spawnKey]
-        let previousOp = dictionary[opKey]
-        dictionary[threadKey] = recorder
-        dictionary[spawnKey] = spawnedBy
-        dictionary[opKey] = op
-        defer {
-            dictionary[threadKey] = previousRecorder
-            dictionary[spawnKey] = previousSpawn
-            dictionary[opKey] = previousOp
-        }
-        return body()
+        currentOp
     }
 
     /// A cause that has not been claimed yet. A box rather than a value because a task-local cannot be
-    /// cleared once bound, and the edge belongs to the block's *first* event — so consuming has to
+    /// cleared once bound, and the edge belongs to the held work's *first* event — so consuming has to
     /// mutate something the binding merely points at.
     final class SpawnCause: @unchecked Sendable {
         private let lock = NSLock()
@@ -94,19 +47,13 @@ public enum TraceContext {
         }
     }
 
-    /// The task path carries the cause in a task-local, which follows the task across suspension —
-    /// `Thread.current` is unavailable in an async context, and would be the wrong unit anyway.
+    /// The call that enqueued the held work now running, bound by ``WorkBacklog`` around each item.
     @TaskLocal static var pendingSpawnCause: SpawnCause?
 
-    /// Takes the pending spawn cause, if this is the first event since the block began. Consumed rather
-    /// than read: the edge belongs to the block's first event, and program order does the rest.
+    /// Takes the pending spawn cause, if this is the first event since the held work began. Consumed
+    /// rather than read: the edge belongs to the work's first event, and program order does the rest.
     static func consumePendingSpawnCause() -> Int? {
-        let dictionary = Thread.current.threadDictionary
-        if let cause = dictionary[spawnKey] as? Int {
-            dictionary[spawnKey] = nil
-            return cause
-        }
-        return pendingSpawnCause?.take()
+        pendingSpawnCause?.take()
     }
 }
 

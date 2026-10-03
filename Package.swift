@@ -35,8 +35,6 @@ let package = Package(
         .library(name: "Haruspec", targets: ["Haruspec"]),
         .library(name: "HaruspecCore", targets: ["HaruspecCore"]),
         .library(name: "HaruspecTrace", targets: ["HaruspecTrace"]),
-        // The GCD preprocessing seam: a header legacy Obj-C sources are compiled against.
-        .library(name: "HaruspecDispatchSeam", targets: ["HaruspecDispatchSeam"]),
         .library(name: "HaruspecMacros", targets: ["HaruspecMacros"]),
         .library(name: "HaruspecSeams", targets: ["HaruspecSeams"]),
         .library(name: "HaruspecAudit", targets: ["HaruspecAudit"]),
@@ -51,19 +49,12 @@ let package = Package(
 
         .target(name: "HaruspecTrace", dependencies: ["HaruspecCore"], path: "Sources/Trace"),
 
-        // Plain Objective-C on purpose: legacy sources include this header with no Swift interop, and
-        // its three `extern`s resolve at link time against HaruspecTrace's `@_cdecl` entry points.
-        .target(name: "HaruspecDispatchSeam", path: "Sources/DispatchSeam"),
         .target(name: "HaruspecSeams", dependencies: ["HaruspecCore"], path: "Sources/Seams"),
 
         // A genuine Objective-C fixture (test-only, not a product): a legacy `.m`/`.h` singleton the
         // one-shot injectability bootstrap (`SeamSwizzle`) is proven against — real ObjC dispatch, no
         // `dynamic` gymnastics. See the injectability precondition in `docs/SEAMS.md`.
-        .target(
-            name: "LegacyObjC",
-            dependencies: ["HaruspecDispatchSeam"],
-            cSettings: [.define("HARUSPEC_CAPTURE")]
-        ),
+        .target(name: "LegacyObjC"),
 
         .macro(name: "HaruspecMacroPlugin", dependencies: [
             .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
@@ -138,9 +129,6 @@ let package = Package(
             "HaruspecMacros",
             "HaruspecSeams",
             "HaruspecSpec",
-            // Carried by the umbrella so an adopter enabling the GCD seam adds a build setting, not a
-            // link step. The header is reachable to Obj-C sources; nothing imports it from Swift.
-            "HaruspecDispatchSeam",
             // Carried so a persistence-bearing spec adds `import HaruspecCoreData`, not a link step —
             // not re-exported, so the CoreData surface appears only where a spec asks for it.
             "HaruspecCoreData"
@@ -153,9 +141,7 @@ let package = Package(
         ], path: "Tests/AuditTests"),
         .testTarget(name: "HaruspecTraceTests", dependencies: [
             "HaruspecCore",
-            "HaruspecTrace",
-            // The GCD capture gaps are demonstrated against genuine Obj-C, not a Swift imitation of it.
-            "LegacyObjC"
+            "HaruspecTrace"
         ], path: "Tests/TraceTests"),
         .testTarget(name: "HaruspecSeamsTests", dependencies: [
             "HaruspecCore",

@@ -34,8 +34,8 @@ public enum EventTier: String, Codable, Sendable {
 /// The declared op of a spec's ordering an event was recorded under: its label and its position in
 /// the sequence, so two applications of the same op stay distinguishable.
 ///
-/// Bound by the runner around each op it drives and carried into work the op spawns the way the
-/// recorder itself is (task-local through Swift concurrency, thread-local through the GCD seam). So
+/// Bound by the runner around each op it drives and carried into work the op hands off the way the
+/// recorder itself is (task-local, rebound around held work to the op that enqueued it). So
 /// it is the *runner's* op, not anything the subject declares — honest for both sides of a diff by
 /// construction. An event recorded under no op — an end-state snapshot, or work that reached the
 /// recorder without its enqueue's context — carries none.

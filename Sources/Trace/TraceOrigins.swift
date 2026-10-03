@@ -41,8 +41,8 @@ public struct TraceOrigin: Codable, Hashable, Sendable, Comparable {
 ///
 /// A reference type because the union spans several recorders — the golden template, each probe, the
 /// candidate — and the qualification wants all of them. Locked rather than actor-isolated: it is
-/// written from whatever thread a traced method happens to run on, including a block the GCD seam
-/// handed to a thread with no task at all.
+/// written from whatever thread a traced method happens to run on, including a structured child task
+/// running beside its siblings.
 public final class OriginCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var origins: Set<TraceOrigin> = []

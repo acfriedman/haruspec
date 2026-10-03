@@ -132,8 +132,8 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
 - ⏳ **Characterization-test generation** — from captured traces, emit runnable XCTest cases pinning
   current behavior (Feathers-style) for legacy code that has no tests.
 - ✅ **Async / actor capture end-to-end** — a spec drives an `actor` (`Op` actions are async), capture
-  crosses a `dispatch_async` / `Task` hop through the GCD seam, and a trace is read only after the work
-  it describes has drained. Events carry the isolation domain that caused them, and a port that moves
+  crosses a hop the subject hands to its own injected scheduling seam (`@Haruspec(schedules:)`), and a
+  trace is read only after the held work it describes has drained. Events carry the isolation domain that caused them, and a port that moves
   work between domains reports that move rather than a pile of missing and unexpected events.
 - 📋 **`mutating` / struct-method capture**, selective opt-out (`@Untraced`).
 - 📋 **Deeper capture backends** — Combine publishers, `os_signpost`/`OSLogStore` ingestion,

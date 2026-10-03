@@ -62,7 +62,7 @@ USAGE:
   haruspec audit --root <dir> [--verdict <result.json>] [--covering <Sym,Sym>]
       Capture-completeness audit: resolve the covered declarations to source under <dir>, then read
       that source for effect channels the capture cannot see (NotificationCenter.default, Timer,
-      Combine, KVO, delayed dispatch). Exits 4 if any channel is found OR any declaration's source
+      Combine, KVO, dispatch). Exits 4 if any channel is found OR any declaration's source
       cannot be located — both mean the verdict cannot claim it saw everything.
       --verdict <result.json>  audit exactly what that verdict covered (its recorded origins).
       --covering <Sym,Sym>     audit these declarations by name (Obj-C classes, Swift types).

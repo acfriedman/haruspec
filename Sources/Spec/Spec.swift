@@ -55,6 +55,10 @@ public struct SeamContext {
     /// for a constructor parameter no double serves — an isolated store, a scratch directory. Built
     /// fresh each capture, like `notifications` (the built-in resource this generalizes).
     var resourceMakers: [ObjectIdentifier: (SeamContext) -> Any] = [:]
+    /// The work this capture's scheduling doubles were handed, held until the engine drains it. A
+    /// stamped scheduling protocol's double (`@Haruspec(schedules:)`) enqueues here; the capture runs
+    /// it after the ops, and a derived op waiting on a completion block runs it meanwhile.
+    public let backlog = WorkBacklog()
 
     /// Hands a recording double to the subject as an injected collaborator. The act of injection is
     /// the declaration: the double states its own trace label (`TraceLabeled`, emitted on every

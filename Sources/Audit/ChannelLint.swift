@@ -24,7 +24,7 @@ public struct ChannelRule: Sendable, Equatable {
     /// receiver of a message send is an effect leaving through a channel nothing is recording. Legacy
     /// Obj-C is full of the first (`- (instancetype)init { return [self initWithCenter:[… defaultCenter]]; }`),
     /// and gating on it would bury the second. Rules naming a *construct* — `import Combine`, a timer,
-    /// a delayed dispatch — have no such reading and are always a reach.
+    /// a dispatch — have no such reading and are always a reach.
     public let positionDecides: Bool
 
     public init(channel: String, spellings: [String], positionDecides: Bool = false) {
@@ -67,8 +67,8 @@ public struct ChannelFinding: Sendable, Equatable {
 
 public struct ChannelLint: Sendable {
     /// The channels a captured subject must not reach directly. Each is a boundary Haruspec observes
-    /// by *injection* (a notification center, a collaborator) or reaches with a seam (dispatch) — so a
-    /// direct use is precisely a use that routes around the recorder.
+    /// by *injection* (a notification center, a collaborator, a scheduling seam) — so a direct use is
+    /// precisely a use that routes around the recorder.
     public static let denyList: [ChannelRule] = [
         ChannelRule(
             channel: "NotificationCenter.default",
@@ -87,9 +87,31 @@ public struct ChannelLint: Sendable {
             channel: "KVO",
             spellings: ["addObserver:forKeyPath:", "addObserver(forKeyPath:", "observe(\\."]
         ),
+        // Work handed to a thread the project did not seam. A subject hands work off through its own
+        // injected scheduling protocol (`@Haruspec(schedules:)`), whose double holds it for the
+        // capture; a direct GCD call, an unstructured task, or a hop to the main actor runs on a
+        // thread the capture neither reaches nor waits for.
         ChannelRule(
-            channel: "delayed dispatch",
-            spellings: ["dispatch_after", "asyncAfter("]
+            channel: "dispatch",
+            spellings: [
+                "dispatch_async",
+                "dispatch_sync",
+                "dispatch_after",
+                "dispatch_barrier_async",
+                "dispatch_group_async",
+                "dispatch_group_notify",
+                "dispatch_get_main_queue",
+                "dispatch_get_global_queue",
+                "DispatchQueue(",
+                "DispatchQueue.main",
+                "DispatchQueue.global",
+                "asyncAfter(",
+                "Task {",
+                "Task.detached",
+                "MainActor.run",
+                "addOperationWithBlock",
+                "addOperation {"
+            ]
         ),
         // Position decides: a typed context *parameter* is the injection point doing its job (the
         // green path once persistence is handed in); the same names as a receiver, a local, or a

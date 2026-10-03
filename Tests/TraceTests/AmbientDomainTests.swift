@@ -9,25 +9,24 @@ import XCTest
 ///
 /// That is the same failure `worker-N` had, one level up: a field meant to remove scheduling
 /// nondeterminism, reintroducing it.
-final class AmbientDomainTests: XCTestCase {
-    /// A subject that declares nothing.
-    private nonisolated static func record(into recorder: TraceRecorder) {
-        TraceContext.$current.withValue(recorder) { Haruspec.marker("work") }
-    }
+/// A subject that declares nothing.
+private func recordUndeclaredWork(into recorder: TraceRecorder) {
+    TraceContext.$current.withValue(recorder) { Haruspec.marker("work") }
+}
 
+final class AmbientDomainTests: XCTestCase {
     /// Identical work, two calling contexts. Nothing about the subject differs, so nothing about its
     /// recorded domain should either.
     ///
-    /// The main-side caller merely *occupies* main: the standard `resultType:` form of
-    /// `MainActor.run` is the one the seam does not claim, so nothing marks the hop as work handed
-    /// to the main queue. The claimed form (`MainActor.run { … }`) is a different fact — the subject
-    /// delivering onto main — and `.main` is the right answer for it (see `MainActorSeamTests`).
+    /// The main-side caller merely *occupies* main: nothing handed the subject's work to the main
+    /// queue. Work a subject hands to its own main-queue seam is a different fact, and `.main` is the
+    /// right answer for it (see `WorkBacklogTests`).
     func testUnisolatedWorkRecordsTheSameDomainFromAnyCaller() async {
         let fromMain = TraceRecorder(name: "from-main")
-        await MainActor.run(resultType: Void.self) { Self.record(into: fromMain) }
+        await MainActor.run(resultType: Void.self) { recordUndeclaredWork(into: fromMain) }
 
         let fromPool = TraceRecorder(name: "from-pool")
-        await Task.detached { Self.record(into: fromPool) }.value
+        await Task.detached { recordUndeclaredWork(into: fromPool) }.value
 
         XCTAssertEqual(
             fromMain.trace().events.first?.domain,
@@ -93,66 +92,9 @@ final class CausalDomainAttributionTests: XCTestCase {
     }
 }
 
-/// The one happens-before edge the runtime hands over for free: work that arrived by dispatch or task
-/// rather than by being called, and the call that put it there.
+/// The spawn edge survives canonicalization. (The edge itself is read at the enqueue by the
+/// `WorkBacklog`; see `WorkBacklogTests`.)
 final class SpawnEdgeTests: XCTestCase {
-    private func cause(of label: String, in recorder: TraceRecorder) -> Int?? {
-        recorder.trace().events.first { $0.label == label }.map(\.spawnedBy)
-    }
-
-    /// Read at the enqueue, which is the only moment both ends are known — by the time the block runs,
-    /// the call that spawned it may already have returned.
-    func testDispatchedWorkNamesTheCallThatEnqueuedIt() async {
-        let recorder = TraceRecorder(name: "spawn")
-        let queue = DispatchQueue(label: "com.emporium.cart")
-
-        TraceContext.$current.withValue(recorder) {
-            recorder.call("Cart.checkout")
-            queue.async { recorder.marker("reserve-stock") }
-            recorder.ret("Cart.checkout")
-        }
-        let drained = await DispatchSeam.quiesce(timeout: 5)
-        XCTAssertTrue(drained)
-
-        let checkoutSeq = recorder.trace().events.first { $0.label == "Cart.checkout" }?.seq
-        XCTAssertEqual(cause(of: "reserve-stock", in: recorder), checkoutSeq)
-    }
-
-    /// Program order carries the rest: one edge to the block's first event says the whole block
-    /// happens after the enqueue, so a second event inside claims nothing.
-    func testOnlyTheFirstEventInABlockCarriesTheEdge() async {
-        let recorder = TraceRecorder(name: "spawn")
-        let queue = DispatchQueue(label: "com.emporium.cart")
-
-        TraceContext.$current.withValue(recorder) {
-            recorder.call("Cart.checkout")
-            queue.async {
-                recorder.marker("first")
-                recorder.marker("second")
-            }
-            recorder.ret("Cart.checkout")
-        }
-        _ = await DispatchSeam.quiesce(timeout: 5)
-
-        XCTAssertNotNil(cause(of: "first", in: recorder) ?? nil)
-        XCTAssertNil(cause(of: "second", in: recorder) ?? nil)
-    }
-
-    /// An unawaited `Task` is a spawn too, and the task path carries the cause in a task-local rather
-    /// than a thread-local — `Thread.current` is unavailable where that binding has to be made.
-    func testAnUnawaitedTaskAlsoNamesItsCause() async {
-        let recorder = TraceRecorder(name: "spawn-task")
-
-        TraceContext.$current.withValue(recorder) {
-            recorder.call("Cart.checkout")
-            Task { recorder.marker("deferred") }
-            recorder.ret("Cart.checkout")
-        }
-        _ = await DispatchSeam.quiesce(timeout: 5)
-
-        XCTAssertEqual(cause(of: "deferred", in: recorder), recorder.trace().events.first?.seq)
-    }
-
     /// Canonicalization re-densifies every `seq`, and an edge *is* a `seq`. Dropping a kind must move
     /// the edges with it rather than leave them pointing at whichever event inherited the number.
     func testEdgesSurviveCanonicalRenumbering() {
