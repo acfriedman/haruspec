@@ -203,7 +203,7 @@ struct CarrierTimeout: Error {}
 
 final class CompletionBlockTests: XCTestCase {
     private var quoting: BaselinedSpec<any Quoting> {
-        Spec<any Quoting>("quoting.completion", derivedFrom: DerivedQuoting.self) {
+        Spec<any Quoting>("quoting.completion") {
             Amend("quote").varying("code", over: .oneOf("SAVE10", "NOPE", ""))
         }
         .vary {
@@ -214,7 +214,7 @@ final class CompletionBlockTests: XCTestCase {
     }
 
     private var shipping: BaselinedSpec<any Shipping> {
-        Spec<any Shipping>("shipping.completion", derivedFrom: DerivedShipping.self)
+        Spec<any Shipping>("shipping.completion")
             .provides((() -> Int).self) { context in { Int(context.int("Clock.day", default: 1)) } }
             .generates((any Error).self) { _, _ in CarrierTimeout() }
             .vary {

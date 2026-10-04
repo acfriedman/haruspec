@@ -102,11 +102,12 @@ One `import Haruspec` surfaces the macros, capture runtime, seams, and the Spec 
 ## Getting started
 
 **1. Declare a spec.** Name the subject's operations, the effects worth observing, and the input
-domains to sweep. Most of it can be derived from the boundary protocol itself. A spec names no
-implementation: it describes the protocol, and a test chooses the baseline.
+domains to sweep. Over an `@Haruspec` protocol, the operations and their domains derive by default;
+the block amends only what a signature cannot state. A spec names no implementation: it describes
+the protocol, and a test chooses the baseline.
 
 ```swift
-Spec<Cart>("cart", derivedFrom: DerivedCart.self) {
+Spec<Cart>("cart") {
     Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
     Amend("checkout").last()
 }

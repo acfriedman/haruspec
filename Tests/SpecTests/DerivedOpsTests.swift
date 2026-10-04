@@ -146,11 +146,11 @@ final class DerivedOpsTests: XCTestCase {
 
     /// The collapsed spec: the derivation plus its authored residue — the sku values and the `.last()`.
     private func cartSpec(_ name: String) -> Spec<MeteredCart> {
-        Spec<MeteredCart>(name)
-            .operations(derivedFrom: DerivedMeteredCart.self) {
-                Amend("add").varying("sku", over: .oneOf("COFFEE", "MUG"))
-                Amend("total").last()
-            }
+        Spec<MeteredCart>(name) {
+            Amend("add").varying("sku", over: .oneOf("COFFEE", "MUG"))
+            Amend("total").last()
+        }
+        .settled()
     }
 
     // MARK: - Derivation
@@ -182,10 +182,10 @@ final class DerivedOpsTests: XCTestCase {
         XCTAssertEqual(ops[1].arguments[0].typeName, "[String]")
 
         // The model's factory is the declaration, so its fields join the surface un-marked.
-        let spec = Spec<WidgetDock>("dock")
-            .operations(derivedFrom: DerivedWidgetDock.self) {
-                Op("flush") { dock in dock.flush([]) }
-            }
+        let spec = Spec<WidgetDock>("dock") {
+            Op("flush") { dock in dock.flush([]) }
+        }
+        .settled()
         XCTAssertEqual(spec.seamDomains.keys.sorted(), ["Widget.size", "attach.tilt"])
         XCTAssertEqual(spec.derivedDefaultSeams, ["attach.tilt"])
     }
@@ -212,8 +212,40 @@ final class DerivedOpsTests: XCTestCase {
         XCTAssertEqual(span, -10000 ... 10000)
     }
 
+    // MARK: - Derived by default
+
+    func testANamedSpecOverAStampedProtocolDerivesWithNothingAuthored() {
+        let spec = Spec<NarrowKnobs>("knobs").settled()
+
+        XCTAssertEqual(spec.operations.map(\.label), ["warm", "tick", "spin"])
+        XCTAssertEqual(spec.derivedDefaultSeams, ["spin.rate", "tick.count", "warm.level"])
+        XCTAssertTrue(spec.exploreOrdering, "a derived spec explores by default")
+    }
+
+    func testAnAuthoredOpListReplacesOnlyTheDerivedOps() {
+        let spec = Spec<NarrowKnobs>("knobs")
+            .operations {
+                Op("warm") { knobs in knobs.warm(level: 1) }
+            }
+            .settled()
+
+        XCTAssertEqual(spec.operations.map(\.label), ["warm"])
+        XCTAssertTrue(spec.derivedDefaultSeams.isEmpty)
+        XCTAssertFalse(spec.exploreOrdering, "authored ops keep the authored exploration defaults")
+        XCTAssertNotNil(spec.wrapCandidate, "the rest of the stamp still applies")
+    }
+
+    func testTheDerivationSettlesWhenTheSpecIsBound() {
+        let unbound = Spec<NarrowKnobs>("knobs")
+        let bound = unbound.baselined { context in DoubleNarrowKnobs(context) }
+
+        XCTAssertTrue(unbound.operations.isEmpty, "an unbound spec has derived nothing yet")
+        XCTAssertEqual(bound.spec.operations.map(\.label), ["warm", "tick", "spin"])
+        XCTAssertEqual(bound.spec.settled().operations.count, 3, "settling twice derives once")
+    }
+
     func testNarrowWidthsGetSpansTheirTypeCanRepresent() {
-        let spec = Spec<NarrowKnobs>("knobs").operations(derivedFrom: DerivedNarrowKnobs.self)
+        let spec = Spec<NarrowKnobs>("knobs").settled()
 
         guard case let .intMagnitudes(level) = spec.seamDomains["warm.level"],
               case let .intMagnitudes(count) = spec.seamDomains["tick.count"],
@@ -235,11 +267,11 @@ final class DerivedOpsTests: XCTestCase {
     }
 
     func testAmendmentsCarryStructureWithoutReauthoringTheBinding() {
-        let spec = Spec<MeteredCart>("derived.structure")
-            .operations(derivedFrom: DerivedMeteredCart.self) {
-                Amend("add").varying("sku", over: .oneOf("COFFEE")).repeating(0 ... 6).after("setEager")
-                Amend("total").last()
-            }
+        let spec = Spec<MeteredCart>("derived.structure") {
+            Amend("add").varying("sku", over: .oneOf("COFFEE")).repeating(0 ... 6).after("setEager")
+            Amend("total").last()
+        }
+        .settled()
 
         XCTAssertEqual(spec.operations[0].multiplicity, 0 ... 6)
         XCTAssertEqual(spec.operations[0].afters, ["setEager"])
@@ -248,11 +280,11 @@ final class DerivedOpsTests: XCTestCase {
     func testADomainValueIsReusableAcrossAmendments() {
         // Domains are plain values, so a shared vocabulary is a `let`, not a new abstraction.
         let skus: ArgumentDomain<String> = .oneOf("COFFEE", "MUG")
-        let spec = Spec<MeteredCart>("derived.reused")
-            .operations(derivedFrom: DerivedMeteredCart.self) {
-                Amend("add").varying("sku", over: skus)
-                Amend("total").last()
-            }
+        let spec = Spec<MeteredCart>("derived.reused") {
+            Amend("add").varying("sku", over: skus)
+            Amend("total").last()
+        }
+        .settled()
 
         XCTAssertEqual(
             spec.seamDomains.keys.sorted(),
@@ -262,17 +294,17 @@ final class DerivedOpsTests: XCTestCase {
     }
 
     func testAnAuthoredOpReplacesItsDerivedTwinInPlace() {
-        let spec = Spec<MeteredCart>("derived.replace")
-            .operations(derivedFrom: DerivedMeteredCart.self) {
-                Op(
-                    "add",
-                    varying: .oneOf("COFFEE").named("sku"),
-                    .int(1 ... 5).named("quantity")
-                ) { cart, sku, quantity in
-                    cart.add(sku: sku, quantity: quantity)
-                }
-                Amend("total").last()
+        let spec = Spec<MeteredCart>("derived.replace") {
+            Op(
+                "add",
+                varying: .oneOf("COFFEE").named("sku"),
+                .int(1 ... 5).named("quantity")
+            ) { cart, sku, quantity in
+                cart.add(sku: sku, quantity: quantity)
             }
+            Amend("total").last()
+        }
+        .settled()
 
         XCTAssertEqual(spec.operations.map(\.label), ["add", "setEager", "total"], "position is kept")
         XCTAssertEqual(

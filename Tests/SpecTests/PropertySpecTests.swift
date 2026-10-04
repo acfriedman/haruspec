@@ -77,7 +77,7 @@ final class DerivedPropertyTests: XCTestCase {
     }
 
     func testTheDerivedSpecObservesAndSnapshotsIt() async {
-        let spec = Spec<any Meter>("meter", derivedFrom: DerivedMeter.self)
+        let spec = Spec<any Meter>("meter").settled()
 
         XCTAssertEqual(spec.observedProperties.map(\.label), ["Meter.reading"])
 

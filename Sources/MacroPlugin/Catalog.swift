@@ -6,9 +6,9 @@ import SwiftSyntaxMacros
 /// Emits a spec's op catalog from the boundary protocol: one `DerivedOp` per method requirement,
 /// with the binding written mechanically and each parameter mapped by type heuristic — integers and
 /// floats to engine-default domains, `Bool` to both values, a custom type to its `SeamGenerated`
-/// factory, and `String` (or anything unmappable) left *pending*, to trap at spec construction with
-/// the declaration to write. The authored residue arrives later, as `Amend(...)` amendments in
-/// `.operations(derivedFrom:)`.
+/// factory, and `String` (or anything unmappable) left *pending*, to trap when a spec is bound, with
+/// the declaration to write. A spec over the protocol adopts it by default, through the forwarder's
+/// `derivedCatalog`; the authored residue arrives as `Amend(...)` amendments in the spec's init block.
 ///
 /// Property requirements derive as **observed properties** (`DerivedProperty`) rather than ops:
 /// state is snapshot at the capture boundary, not driven as calls.
@@ -75,10 +75,6 @@ enum CatalogEmitter {
                 [
         \(entries.joined(separator: ",\n"))
                 ]
-            }
-
-            static var derivedForwarder: (any StampedForwarder.Type)? {
-                \(forwarder).self
             }
         \(systemEntry)\(propertiesEntry)
         }

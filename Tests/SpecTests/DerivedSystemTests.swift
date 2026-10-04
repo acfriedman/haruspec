@@ -141,7 +141,7 @@ final class SwiftRegister: Register {
 final class DerivedSystemTests: XCTestCase {
     /// The collapsed spec: one entry point, no construction closure, no `.vary` — the authored residue alone.
     private var spec: Spec<Kiosk> {
-        Spec<Kiosk>("kiosk.derived", derivedFrom: DerivedKiosk.self) {
+        Spec<Kiosk>("kiosk.derived") {
             Amend("total").last()
         }
     }
@@ -162,16 +162,20 @@ final class DerivedSystemTests: XCTestCase {
     }
 
     func testADerivedSpecExploresAtTheDefaultsWithoutAVaryBlock() {
-        XCTAssertTrue(spec.exploreOrdering, "ordering variation is half the point of deriving")
-        XCTAssertEqual(spec.maxOrderings, SpecDefaults.derivedOrderingMax)
-        XCTAssertEqual(spec.explorationBudget, SpecDefaults.derivedBudget)
+        let settled = spec.settled()
+
+        XCTAssertTrue(settled.exploreOrdering, "ordering variation is half the point of deriving")
+        XCTAssertEqual(settled.maxOrderings, SpecDefaults.derivedOrderingMax)
+        XCTAssertEqual(settled.explorationBudget, SpecDefaults.derivedBudget)
     }
 
     func testAnExplicitVaryOverridesTheDerivedDefaults() {
+        // The derivation settles at binding, after every `.vary` the spec declares.
         let tuned = spec.vary {
             Ordering(max: 4)
             Budget(runs: 40)
         }
+        .settled()
 
         XCTAssertEqual(tuned.maxOrderings, 4)
         XCTAssertEqual(tuned.explorationBudget, 40)
@@ -216,7 +220,7 @@ final class DerivedSystemTests: XCTestCase {
         // The persistence-bearing-subject shape: the injected state is a resource (.provides), built
         // fresh per capture for isolation, and observed through the subject's own read op — which is
         // what makes hidden state comparable surface.
-        let spec = Spec<Register>("register.derived", derivedFrom: DerivedRegister.self)
+        let spec = Spec<Register>("register.derived")
             .provides(TallyBook.self) { _ in TallyBook() }
             .vary {
                 Ordering(max: 4)

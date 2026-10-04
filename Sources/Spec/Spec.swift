@@ -24,11 +24,14 @@ public protocol SeamDouble: TraceLabeled {
 }
 
 /// A generated forwarder's registry entry (`@Haruspec` emits the conformance on its
-/// `Traced<Protocol>`): which boundary it forwards, and how to wrap a conformer of it. This is how a
-/// spec over `any Cart` records through `TracedCart` without naming it.
+/// `Traced<Protocol>`): which boundary it forwards, how to wrap a conformer of it, and the op catalog
+/// derived beside it. This is how a spec over `any Cart` records through `TracedCart`, and drives
+/// `DerivedCart`'s ops, without naming either.
 public protocol StampedForwarder: AnyObject {
     /// The existential the forwarder wraps, `(any Cart).self`.
     static var forwardedBoundary: Any.Type { get }
+    /// The op catalog the same stamp derived, `DerivedCart.self`.
+    static var derivedCatalog: any DerivedOperations.Type { get }
     /// Wraps a conformer in the forwarder, so the one wrap serves a build however it was made.
     ///
     /// - Parameter conformer: The build to wrap, possibly already wrapped.
@@ -287,17 +290,22 @@ public func Budget(runs: Int) -> Variation {
 public struct Spec<S> {
     public let name: String
 
-    /// Constructs a conformer through the boundary's pasted `init` — set by
-    /// `.operations(derivedFrom:)` when the catalog derives construction, and what
-    /// `baselined(on:)` and `check(_:)` build by type. `nil` when construction has to be
-    /// authored.
+    /// Constructs a conformer through the boundary's pasted `init` — set when the derivation settles
+    /// from a catalog that derives construction, and what `baselined(on:)` and `check(_:)` build by
+    /// type. `nil` when construction has to be authored.
     var makeConformer: ((SeamContext, Any.Type) -> S)?
     /// Wraps every build in the capture boundary before it is driven — the stamped protocol's
     /// forwarder, so the baseline and a port authored by closure record through the same class.
-    /// Set from a derived catalog; `nil` finds the forwarder by census at the first capture, and is
-    /// identity when `S` is not a stamped protocol.
+    /// Set when the derivation settles; `nil` finds the forwarder by census at the first capture, and
+    /// is identity when `S` is not a stamped protocol.
     var wrapCandidate: ((S) -> S)?
 
+    /// The amendments to the ops derived from `S`'s stamp, applied when the spec is bound.
+    var amendments: [OperationOverride<S>] = []
+    /// Whether `.operations` authored the op list, so the derivation supplies everything but ops.
+    var authorsOperations = false
+    /// Whether the derivation has settled (see ``settled()``), so binding twice derives once.
+    var isSettled = false
     var operations: [Op<S>] = []
     var tolerances: Tolerance = .strict
     var seamDomains: [String: SeamDomain] = [:]
@@ -325,25 +333,62 @@ public struct Spec<S> {
     /// Total differential runs this spec may spend, declared via `Budget(runs:)`. `nil` lets each axis
     /// take its own size (`maxOrderings` × `SpecDefaults.variantCount`).
     var explorationBudget: Int?
-    /// Op-scoped keys whose domains the engine supplied rather than the author — set by
-    /// `.operations(derivedFrom:)`, rendered on every verdict so a green from a defaulted surface
+    /// Op-scoped keys whose domains the engine supplied rather than the author — set when the
+    /// derivation settles, rendered on every verdict so a green from a defaulted surface
     /// says so.
     var derivedDefaultSeams: Set<String> = []
     /// The boundary properties this spec observes (see `Observed`): each one is snapshot at the end
     /// of every capture — the state contract, which gates always.
     var observedProperties: [Observed<S>] = []
 
-    public init(_ name: String) {
+    /// Creates a spec whose ops derive from `S`'s `@Haruspec` stamp, amended by `build`.
+    ///
+    /// - Parameters:
+    ///   - name: The spec's name, unique within the catalog.
+    ///   - build: Amendments to the derived ops; empty leaves the derivation as stamped.
+    /// - Precondition: A non-empty `build` needs a stamped `S` and no authored `.operations`; both
+    ///   trap when the spec is bound.
+    ///
+    /// Generation is derived by default: one op per protocol requirement, bindings and type-heuristic
+    /// domains written mechanically. The block holds only what a signature cannot state —
+    /// `Amend("applyPromo").varying("code", over: .oneOf(…))` fills a pending domain or tightens a
+    /// default, `Amend("checkout").last()` adds structure, and a full `Op` replaces its derived twin
+    /// when the binding itself must differ:
+    ///
+    ///     Spec<Cart>("cart") {
+    ///         Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
+    ///         Amend("checkout").last()
+    ///     }
+    ///
+    /// The derivation settles when the spec is bound (`baselined(on:)`), so an authored
+    /// `.operations { … }` can still replace the derived ops. Names no implementation — a test binds
+    /// the baseline with ``baselined(on:)``.
+    public init(
+        _ name: String,
+        @OperationOverridesBuilder<S> overriding build: () -> [OperationOverride<S>] = { [] }
+    ) {
         self.name = name
+        amendments = build()
     }
 
-    /// The interactions to drive, as labeled ops with optional ordering constraints.
+    /// The interactions to drive, as labeled ops with optional ordering constraints — authored in
+    /// place of the derived ops, while construction and observed properties still derive.
+    ///
+    /// - Precondition: The spec declares no amendments; amending derived ops and authoring the list
+    ///   are exclusive.
     ///
     /// Typed op arguments declare their domains here rather than in `.vary`, so this is where they join
     /// the declared surface. Order between `.operations` and `.vary` doesn't matter — both write the
     /// same dictionary, and a collision between the two traps rather than letting one silently win.
     public func operations(@OperationsBuilder<S> _ build: () -> [Op<S>]) -> Spec<S> {
-        adopting(build())
+        precondition(
+            amendments.isEmpty,
+            "spec '\(name)' amends derived ops and authors its own — keep the amendments and drop "
+                + ".operations, or author every op there and drop the amendments"
+        )
+        var copy = adopting(build())
+        copy.authorsOperations = true
+        return copy
     }
 
     /// The one merge for an op list, authored or derived: fold each op's declared argument domains,

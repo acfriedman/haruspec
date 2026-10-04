@@ -39,7 +39,7 @@ public extension Spec {
     ///   carries the center and recording doubles to inject.
     /// - Returns: The bound spec.
     func baselined(on make: @escaping (SeamContext) -> S) -> BaselinedSpec<S> {
-        BaselinedSpec(spec: self, baseline: make)
+        BaselinedSpec(spec: settled(), baseline: make)
     }
 
     /// Returns this spec bound to the baseline `initializer` builds, every parameter resolved per
@@ -60,11 +60,12 @@ public extension Spec {
     ///
     /// - Parameter conformer: The baseline's type; it must conform to the boundary protocol.
     /// - Returns: The bound spec.
-    /// - Precondition: The spec derives construction (`derivedFrom:` a catalog whose protocol pastes
-    ///   its `init`); otherwise the trap says to bind a closure instead. A non-conformer traps at the
+    /// - Precondition: The spec derives construction (its stamped protocol pastes its `init`);
+    ///   otherwise the trap says to bind a closure instead. A non-conformer traps at the
     ///   first capture, naming the extension to write.
     func baselined(on conformer: Any.Type) -> BaselinedSpec<S> {
-        baselined(on: constructing(conformer))
+        let spec = settled()
+        return spec.baselined(on: spec.constructing(conformer))
     }
 
     /// Returns the derived construction of `conformer`.

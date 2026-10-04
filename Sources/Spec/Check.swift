@@ -78,8 +78,8 @@ public extension BaselinedSpec {
     ///   - directory: Where the HTML report goes; Haruspec's temp `HaruspecReports` folder when `nil`.
     /// - Returns: The verdict.
     /// - Throws: `SpecCatalog.CheckFailure` unless the build earned `expected`.
-    /// - Precondition: The spec derives construction (`derivedFrom:` a catalog whose protocol pastes
-    ///   its `init`); otherwise the trap says to author the build with the closure form. A
+    /// - Precondition: The spec derives construction (its stamped protocol pastes its `init`);
+    ///   otherwise the trap says to author the build with the closure form. A
     ///   non-conformer traps naming the extension to write.
     @discardableResult
     func check(

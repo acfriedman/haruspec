@@ -70,7 +70,8 @@ enum ForwarderEmitter {
         // wrapped conformer's isolation — the conformer's own thread-safety is the conformer's, as it
         // always was, and the compiler would otherwise refuse to carry `self` across that hop.
         // `StampedForwarder`: the class-list census that finds a boundary's forwarder, so every spec
-        // over `any <Protocol>` is wrapped by it without naming it. `wrap` is idempotent — a
+        // over `any <Protocol>` is wrapped by it, and derives the catalog it names, without naming
+        // either. `wrap` is idempotent — a
         // conformer the derived construction already wrapped is handed back as is.
         let conformances = "NSObject, \(protoName), TraceLabeled, StampedForwarder, @unchecked Sendable"
         let source = """
@@ -79,6 +80,7 @@ enum ForwarderEmitter {
             init(_ wrapped: \(wrapped)) { __wrapped = wrapped; super.init() }
             nonisolated var traceLabel: String { \(quotedLiteral(label)) }
             static var forwardedBoundary: Any.Type { (\(wrapped)).self }
+            static var derivedCatalog: any DerivedOperations.Type { Derived\(protoName).self }
             static func wrap(_ conformer: Any) -> Any? {
                 if let forwarder = conformer as? \(generatedName) { return forwarder }
                 return (conformer as? \(wrapped)).map { \(generatedName)($0) }

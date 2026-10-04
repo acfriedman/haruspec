@@ -152,7 +152,7 @@ final class OffMainDepot: Depot, @unchecked Sendable {
 
 final class SchedulingStampTests: XCTestCase {
     private var spec: BaselinedSpec<any Depot> {
-        Spec<any Depot>("depot.scheduled", derivedFrom: DerivedDepot.self)
+        Spec<any Depot>("depot.scheduled")
             .vary {
                 Ordering(max: 4)
                 Budget(runs: 30)

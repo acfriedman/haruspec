@@ -70,14 +70,22 @@ enum StampedForwarderRegistry {
     /// - Parameter _: The spec's system type, `(any Cart).self`.
     /// - Returns: A function that wraps a build in the forwarder, or hands it back unchanged.
     static func wrap<S>(_: S.Type) -> (S) -> S {
-        guard let forwarder = all.first(where: { ObjectIdentifier($0.forwardedBoundary) == ObjectIdentifier(S.self) })
-        else {
+        guard let forwarder = forwarder(for: S.self) else {
             return { $0 }
         }
         return wrap(S.self, through: forwarder)
     }
 
-    /// The wrap for a spec over `S` through a forwarder already in hand, as a derived catalog names it.
+    /// The stamped forwarder for `S`, which also names the stamp's derived catalog.
+    ///
+    /// - Parameter _: The spec's system type, `(any Cart).self`.
+    /// - Returns: The generated `Traced<Protocol>`, or `nil` when `S` is not a stamped protocol's
+    ///   existential.
+    static func forwarder<S>(for _: S.Type) -> (any StampedForwarder.Type)? {
+        all.first { ObjectIdentifier($0.forwardedBoundary) == ObjectIdentifier(S.self) }
+    }
+
+    /// The wrap for a spec over `S` through a forwarder already in hand.
     ///
     /// - Parameters:
     ///   - _: The spec's system type, `(any Cart).self`.

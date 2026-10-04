@@ -85,16 +85,13 @@ protocol Gate: AnyObject {
 
 final class HaruspecStampTests: XCTestCase {
     func testTheSubjectChecksWithItsCollaboratorResolvedToTheStampedDouble() async throws {
-        let verdict = try await Spec<Turnstile>(
-            "turnstile.stamped",
-            derivedFrom: DerivedTurnstile.self
-        )
-        .vary {
-            Ordering(max: 3)
-            Budget(runs: 30)
-        }
-        .baselined(on: TurnstileManager.self)
-        .check(SwiftTurnstile.self)
+        let verdict = try await Spec<Turnstile>("turnstile.stamped")
+            .vary {
+                Ordering(max: 3)
+                Budget(runs: 30)
+            }
+            .baselined(on: TurnstileManager.self)
+            .check(SwiftTurnstile.self)
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
@@ -107,7 +104,7 @@ final class HaruspecStampTests: XCTestCase {
     }
 
     func testTheCollaboratorChecksAsASubjectWithNothingRestamped() async {
-        let verdict = await Spec<Chime>("chime.stamped", derivedFrom: DerivedChime.self)
+        let verdict = await Spec<Chime>("chime.stamped")
             .vary {
                 Ordering(max: 3)
                 Budget(runs: 30)

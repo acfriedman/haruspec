@@ -35,7 +35,7 @@ public struct Qualification: Codable, Sendable, Equatable {
     /// `TraceOrigin`). This is the audit's denominator made explicit: the files a completeness check
     /// has to read, and — where `source` is nil — the reached behavior it structurally cannot read.
     public let origins: [TraceOrigin]
-    /// Seams whose domains the engine defaulted (`.operations(derivedFrom:)`) rather than the author
+    /// Seams whose domains the engine defaulted (a derived op's argument) rather than the author
     /// declared. Rendered per seam, so a green over a defaulted surface says so — the honesty line
     /// that makes derived specs safe to offer. `nil` on verdicts serialized before the field existed;
     /// rendering treats that as none.

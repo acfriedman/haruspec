@@ -4,14 +4,15 @@ import HaruspecSeams
 
 // The op list derived from the boundary protocol, so the mechanical two-thirds of an `.operations`
 // block — method bindings and type-heuristic domains — stop being authored. `@Haruspec` on the
-// protocol emits a `Derived<Proto>` catalog; `.operations(derivedFrom:)` adopts it, and the authored
-// residue is only what a signature cannot state: semantic values ("SAVE10"), and structure (`.last()`).
+// protocol emits a `Derived<Proto>` catalog; a spec over the protocol adopts it by default, found
+// through the stamp's forwarder, and the authored residue is only what a signature cannot state:
+// semantic values ("SAVE10"), and structure (`.last()`).
 //
 // The collapse is only safe if it cannot manufacture a silent green, so it refuses where it cannot be
 // honest. A `String` argument gets no default — random strings explore only the nothing-matches
-// branch — and an unresolved argument traps at spec construction naming the exact declaration to
-// write. A domain the engine did supply is marked on the verdict ("derived default"), so a green from
-// an all-derived spec says so.
+// branch — and an unresolved argument traps when the spec is bound, naming the exact declaration
+// to write. A domain the engine did supply is marked on the verdict ("derived default"), so a green
+// from an all-derived spec says so.
 
 /// A derived op catalog — what `@Haruspec` emits as a peer of the boundary protocol.
 public protocol DerivedOperations {
@@ -28,9 +29,6 @@ public protocol DerivedOperations {
     /// The boundary's observed properties, one per `var` requirement — the derivation's half of
     /// `.observes(_:)`. Empty when the protocol declares none.
     static var derivedProperties: [DerivedProperty<System>] { get }
-    /// The stamped forwarder every build records through, the generated `Traced<Protocol>` — named by the catalog
-    /// so a spec need not census the process for it. `nil` sends the spec to that census.
-    static var derivedForwarder: (any StampedForwarder.Type)? { get }
 }
 
 public extension DerivedOperations {
@@ -40,10 +38,6 @@ public extension DerivedOperations {
 
     static var derivedProperties: [DerivedProperty<System>] {
         []
-    }
-
-    static var derivedForwarder: (any StampedForwarder.Type)? {
-        nil
     }
 }
 
@@ -415,7 +409,7 @@ extension DerivedOp {
 
 // MARK: - The override block
 
-/// One entry in an `.operations(derivedFrom:)` block: amend a derived op, or replace it wholesale
+/// One entry in a spec's amendment block: amend a derived op, or replace it wholesale
 /// with an authored `Op` (the escape hatch for a binding the derivation cannot write).
 public enum OperationOverride<S> {
     case amend(Amend)
@@ -438,23 +432,64 @@ public enum OperationOverride<S> {
 
 // MARK: - Adoption
 
-public extension Spec {
-    /// Adopts a protocol's derived op catalog, with the authored residue as overrides.
+extension Spec {
+    /// Returns the spec with its derivation settled: the ops derived from `S`'s stamp, amended by
+    /// the init's block.
     ///
-    /// Everything mechanical comes from the derivation: one op per requirement, bindings, and
-    /// type-heuristic domains (marked "derived default" on the verdict). The block holds only what a
-    /// signature cannot state — `Amend("applyPromo").varying("code", over: .oneOf(…))` fills a
-    /// pending domain or tightens a default, `Amend("checkout").last()` adds structure, and a full
-    /// `Op` replaces its derived twin when the binding itself must differ. Ops keep protocol
-    /// declaration order; an override naming no derived op traps, so a typo cannot silently add a
-    /// second op.
-    func operations<D: DerivedOperations>(
-        derivedFrom _: D.Type,
-        @OperationOverridesBuilder<S> overriding build: () -> [OperationOverride<S>] = { [] }
-    ) -> Spec<S> where D.System == S {
+    /// - Returns: The settled spec.
+    /// - Precondition: A spec with amendments is over a stamped protocol's existential.
+    ///
+    /// The one place a spec is bound, `baselined(on:)`, settles it; a settled spec comes back
+    /// unchanged, and authored ops stand in for the derived ones. Everything mechanical comes from the derivation: one
+    /// op per requirement, bindings, and type-heuristic domains (marked "derived default" on the
+    /// verdict). Ops keep protocol declaration order; an amendment naming no derived op traps, so a
+    /// typo cannot silently add a second op.
+    func settled() -> Spec<S> {
+        guard !isSettled else {
+            return self
+        }
+        var copy = self
+        copy.isSettled = true
+        guard let forwarder = StampedForwarderRegistry.forwarder(for: S.self) else {
+            precondition(
+                amendments.isEmpty,
+                "spec '\(name)' amends derived ops, but \(S.self) carries no @Haruspec stamp to derive "
+                    + "them from — stamp the protocol, or author the ops: .operations { … }"
+            )
+            return copy
+        }
+        copy.wrapCandidate = StampedForwarderRegistry.wrap(S.self, through: forwarder)
+        return copy.deriving(from: forwarder.derivedCatalog)
+    }
+
+    /// Returns the spec adopting `D`'s ops, recovering the `D.System == S` the forwarder census
+    /// cannot state statically.
+    private func deriving<D: DerivedOperations>(from _: D.Type) -> Spec<S> {
+        guard let spec = self as? Spec<D.System>, let derived = spec.adopting(D.self) as? Spec<S> else {
+            preconditionFailure("\(D.self) derives \(D.System.self), not \(S.self) — file a bug")
+        }
+        return derived
+    }
+
+    /// Returns the spec adopting `D`'s construction, observed properties, and — unless the spec
+    /// authored its own — ops, amended.
+    private func adopting<D: DerivedOperations>(_: D.Type) -> Spec<S> where D.System == S {
+        var copy = authorsOperations ? self : adoptingOps(of: D.self)
+        copy.makeConformer = D.derivedSystem
+        // The protocol's `var` requirements become observed properties, snapshot at every capture
+        // boundary. An authored `.observes` of the same label already holds the slot.
+        let authored = Set(observedProperties.map(\.label))
+        copy.observedProperties += D.derivedProperties.filter { !authored.contains($0.label) }.map { property in
+            Observed(property.label, property.read)
+        }
+        return copy
+    }
+
+    /// Returns the spec adopting `D`'s ops, with the amendments applied.
+    private func adoptingOps<D: DerivedOperations>(of _: D.Type) -> Spec<S> where D.System == S {
         var slots = D.derivedOps.map { Slot.derived($0) }
         let labels = D.derivedOps.map(\.label)
-        for override in build() {
+        for override in amendments {
             switch override {
             case let .amend(amendment):
                 guard let index = labels.firstIndex(of: amendment.label) else {
@@ -483,17 +518,9 @@ public extension Spec {
         }
         var copy = adopting(ops)
         copy.derivedDefaultSeams = derivedDefaults
-        if let forwarder = D.derivedForwarder {
-            copy.wrapCandidate = StampedForwarderRegistry.wrap(S.self, through: forwarder)
-        }
-        // The protocol's `var` requirements become observed properties, snapshot at every capture
-        // boundary.
-        copy.observedProperties += D.derivedProperties.map { property in
-            Observed(property.label, property.read)
-        }
-        // Derived specs explore by default: ordering variation and a bounded budget are part of what
+        // Derived ops explore by default: ordering variation and a bounded budget are part of what
         // "derive it" means, so `.vary` becomes the override site rather than the on-switch. An
-        // explicit `.vary` — before or after — wins.
+        // explicit `.vary` wins; authored ops keep the authored defaults.
         if !copy.exploreOrdering {
             copy.exploreOrdering = true
             copy.maxOrderings = SpecDefaults.derivedOrderingMax
@@ -505,34 +532,6 @@ public extension Spec {
     }
 }
 
-public extension Spec {
-    /// The collapsed spec: name, derived catalog, and authored residue in one entry point. Names no
-    /// implementation — a test binds the baseline with ``baselined(on:)``, built and wrapped along the
-    /// same path its ports are checked through.
-    ///
-    /// - Parameters:
-    ///   - name: The spec's name, unique within the catalog.
-    ///   - source: The derived catalog, as `@Haruspec` generated it from the boundary protocol.
-    ///   - build: Amendments to the derived ops; empty leaves the catalog as derived.
-    ///
-    /// Exploration runs at the derived defaults, and `.vary` overrides them. The whole spec for a
-    /// derived catalog reads:
-    ///
-    ///     Spec<Cart>("cart", derivedFrom: DerivedCart.self) {
-    ///         Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
-    ///         Amend("checkout").last()
-    ///     }
-    init<D: DerivedOperations>(
-        _ name: String,
-        derivedFrom source: D.Type,
-        @OperationOverridesBuilder<S> overriding build: () -> [OperationOverride<S>] = { [] }
-    ) where D.System == S {
-        self.init(name)
-        makeConformer = D.derivedSystem
-        self = operations(derivedFrom: source, overriding: build)
-    }
-}
-
 private enum Slot<S> {
     case derived(DerivedOp<S>)
     case replaced(Op<S>)
@@ -540,5 +539,5 @@ private enum Slot<S> {
 
 private func unknownLabel(_ label: String, in labels: [String]) -> String {
     "'\(label)' matches no derived op — the derivation declares \(labels.joined(separator: ", ")). "
-        + "An op the protocol doesn't declare belongs in a plain .operations block"
+        + "An op the protocol doesn't declare means authoring every op in .operations"
 }
