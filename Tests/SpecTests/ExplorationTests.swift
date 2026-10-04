@@ -51,7 +51,6 @@ final class ExplorationTests: XCTestCase {
     /// Five ops, four of them repeatable — a space far larger than any cap, so sampling is in play.
     private func wideSpec(budget: Int? = nil, orderingMax: Int = 100) -> Spec<PromoCart> {
         var spec = Spec<PromoCart>("promo-cart.exploration")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -73,7 +72,7 @@ final class ExplorationTests: XCTestCase {
     // MARK: - Budget
 
     func testABudgetBoundsTheRunsSpentAcrossBothAxes() async throws {
-        let verdict = await wideSpec(budget: 40).verify(against: makeRefactor)
+        let verdict = await wideSpec(budget: 40).baselined(on: makeGood).verify(candidate: makeRefactor)
         let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertLessThanOrEqual(exploration.runs, 40)
@@ -82,7 +81,7 @@ final class ExplorationTests: XCTestCase {
     }
 
     func testAnUndeclaredBudgetKeepsTheDefaultSurface() async throws {
-        let verdict = await wideSpec(orderingMax: 8).verify(against: makeRefactor)
+        let verdict = await wideSpec(orderingMax: 8).baselined(on: makeGood).verify(candidate: makeRefactor)
         let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertEqual(exploration.orderingsExplored, 8)
@@ -118,7 +117,6 @@ final class ExplorationTests: XCTestCase {
         // Two free ops and a pinned `checkout` → exactly 2 orderings. Resolving the budget against
         // `Ordering(max: 100)` instead would spend a 200-run budget on 22 runs.
         let spec = Spec<PromoCart>("promo-cart.narrow")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -131,8 +129,9 @@ final class ExplorationTests: XCTestCase {
                 Ordering(max: 100, repeating: 1)
                 Budget(runs: 200)
             }
+            .baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: makeRefactor)
+        let verdict = await spec.verify(candidate: makeRefactor)
         let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertEqual(exploration.orderingsExplored, 2)
@@ -145,7 +144,6 @@ final class ExplorationTests: XCTestCase {
         // Four runs over `.int(1 ... 20)`. Uniform sampling would hit 20 about a fifth of the time;
         // boundary-first reaches it on the second variant, by construction.
         let spec = Spec<PromoCart>("promo-cart.edge")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -156,8 +154,9 @@ final class ExplorationTests: XCTestCase {
                 Seam("coffeeQty", .int(1 ... 20))
                 Budget(runs: 4)
             }
+            .baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: { context in TopOfRangeBugCart(center: context.notifications) })
+        let verdict = await spec.verify { context in TopOfRangeBugCart(center: context.notifications) }
 
         XCTAssertEqual(verdict.verdict, .diverged)
         XCTAssertEqual(
@@ -266,7 +265,6 @@ final class ExplorationTests: XCTestCase {
         // Eight ops applied up to twice: hundreds of millions of orderings over a few thousand
         // reachable states. Walking them stops at the limit and reports a bound; counting is instant.
         let spec = Spec<PromoCart>("promo-cart.wide")
-            .system(makeGood)
             .operations {
                 Op("a") { $0.addItem(priceCents: 1, qty: 1) }
                 Op("b") { $0.addItem(priceCents: 2, qty: 1) }
@@ -305,7 +303,7 @@ final class ExplorationTests: XCTestCase {
     // MARK: - Reporting
 
     func testTheVerdictSaysWhatFractionItSwept() async throws {
-        let verdict = await wideSpec(orderingMax: 6).verify(against: makeRefactor)
+        let verdict = await wideSpec(orderingMax: 6).baselined(on: makeGood).verify(candidate: makeRefactor)
         let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertFalse(exploration.isExhaustive)
@@ -319,15 +317,15 @@ final class ExplorationTests: XCTestCase {
 
     func testAnExhaustiveRunSaysAllRatherThanAFraction() async throws {
         let spec = Spec<PromoCart>("promo-cart.exhaustive")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { $0.addItem(priceCents: 999, qty: 2) }
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
             .vary { Ordering(max: 100, repeating: 1) }
+            .baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: makeRefactor)
+        let verdict = await spec.verify(candidate: makeRefactor)
         let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertTrue(exploration.isExhaustive)
@@ -337,7 +335,7 @@ final class ExplorationTests: XCTestCase {
     func testAVerdictArtifactWithoutAnExplorationIsRefused() async throws {
         // Pre-release stance: no tolerant decoders, no migrations. An artifact predating the
         // budget fails to decode loudly — the fix is re-recording, not coercion.
-        let verdict = await wideSpec(orderingMax: 2).verify(against: makeRefactor)
+        let verdict = await wideSpec(orderingMax: 2).baselined(on: makeGood).verify(candidate: makeRefactor)
         var json = try JSONSerialization.jsonObject(with: verdict.jsonData()) as? [String: Any] ?? [:]
         json.removeValue(forKey: "exploration")
 

@@ -202,19 +202,19 @@ struct CarrierTimeout: Error {}
 // MARK: - Tests
 
 final class CompletionBlockTests: XCTestCase {
-    private var quoting: Spec<any Quoting> {
+    private var quoting: BaselinedSpec<any Quoting> {
         Spec<any Quoting>("quoting.completion", derivedFrom: DerivedQuoting.self) {
             Amend("quote").varying("code", over: .oneOf("SAVE10", "NOPE", ""))
         }
-        .system { context in LegacyQuoter(queue: context.double(DoubleQuoterQueue.self)) }
         .vary {
             Ordering(max: 4)
             Budget(runs: 30)
         }
+        .baselined { context in LegacyQuoter(queue: context.double(DoubleQuoterQueue.self)) }
     }
 
-    private var shipping: Spec<any Shipping> {
-        Spec<any Shipping>("shipping.completion", derivedFrom: DerivedShipping.self, baseline: LegacyShipper.self)
+    private var shipping: BaselinedSpec<any Shipping> {
+        Spec<any Shipping>("shipping.completion", derivedFrom: DerivedShipping.self)
             .provides((() -> Int).self) { context in { Int(context.int("Clock.day", default: 1)) } }
             .generates((any Error).self) { _, _ in CarrierTimeout() }
             .vary {
@@ -223,6 +223,7 @@ final class CompletionBlockTests: XCTestCase {
                 Ordering(max: 4)
                 Budget(runs: 40)
             }
+            .baselined(on: LegacyShipper.self)
     }
 
     // MARK: The forwarder records the delivery
@@ -279,13 +280,13 @@ final class CompletionBlockTests: XCTestCase {
 
     func testAFaithfulPortIsEquivalent() async {
         let verdict = await quoting
-            .verify(against: { context in SwiftQuoter(queue: context.double(DoubleQuoterQueue.self)) })
+            .verify { context in SwiftQuoter(queue: context.double(DoubleQuoterQueue.self)) }
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
 
     func testAnAnswerMovedOntoTheCallersThreadDiverges() async {
-        let verdict = await quoting.verify(against: { _ in SynchronousQuoter() })
+        let verdict = await quoting.verify { _ in SynchronousQuoter() }
 
         XCTAssertEqual(verdict.verdict, .diverged, "where the block runs is contract")
         XCTAssertTrue(
@@ -296,21 +297,21 @@ final class CompletionBlockTests: XCTestCase {
 
     func testARefusalMovedIntoTheBlockDiverges() async {
         let verdict = await quoting
-            .verify(against: { context in LateRefusingQuoter(queue: context.double(DoubleQuoterQueue.self)) })
+            .verify { context in LateRefusingQuoter(queue: context.double(DoubleQuoterQueue.self)) }
 
         XCTAssertEqual(verdict.verdict, .diverged, "a throw and a delivered error are different contracts")
     }
 
     func testABlockNeverCalledDiverges() async {
         let verdict = await quoting
-            .verify(against: { context in SilentQuoter(queue: context.double(DoubleQuoterQueue.self)) })
+            .verify { context in SilentQuoter(queue: context.double(DoubleQuoterQueue.self)) }
 
         XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
     }
 
     func testABlockCalledTwiceDiverges() async {
         let verdict = await quoting
-            .verify(against: { context in EchoingQuoter(queue: context.double(DoubleQuoterQueue.self)) })
+            .verify { context in EchoingQuoter(queue: context.double(DoubleQuoterQueue.self)) }
 
         XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
     }
@@ -344,13 +345,13 @@ final class CompletionBlockTests: XCTestCase {
     }
 
     func testASweptErrorSlotReachesTheFailureBranch() async {
-        let verdict = await shipping.verify(against: { context in
+        let verdict = await shipping.verify { context in
             TrustingShipper(
                 rating: context.double(DoubleRating.self),
                 center: context.notifications,
                 clock: context.resolve((() -> Int).self)
             )
-        })
+        }
 
         XCTAssertEqual(verdict.verdict, .diverged, "only a failing rating tells the ports apart")
     }

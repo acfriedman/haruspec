@@ -16,9 +16,8 @@ private final class Greeter {
 }
 
 final class CategoricalSeamTests: XCTestCase {
-    private func spec(recording: @escaping (String) -> Void) -> Spec<Greeter> {
+    private func spec(recording: @escaping (String) -> Void) -> BaselinedSpec<Greeter> {
         Spec<Greeter>("greeter.categorical")
-            .system { _ in Greeter() }
             .operations {
                 Op("greet") { sut, seams in
                     let salutation = seams.string("salutation", default: "hello")
@@ -27,6 +26,7 @@ final class CategoricalSeamTests: XCTestCase {
                 }
             }
             .vary { Seam("salutation", .oneOf("hello", "hola", "bonjour")) }
+            .baselined { _ in Greeter() }
     }
 
     func testEveryDeclaredValueIsReachable() async {
@@ -60,7 +60,6 @@ final class CategoricalSeamTests: XCTestCase {
     func testTheGoldenProbeReadsTheDeclaredDomainNotTheOpDefault() async {
         var seen: Set<String> = []
         let pinned = Spec<Greeter>("greeter.pinned")
-            .system { _ in Greeter() }
             .operations {
                 Op("greet") { sut, seams in
                     let salutation = seams.string("salutation", default: "undeclared")
@@ -69,6 +68,7 @@ final class CategoricalSeamTests: XCTestCase {
                 }
             }
             .vary { Seam("salutation", .oneOf("only")) }
+            .baselined { _ in Greeter() }
         _ = await pinned.record()
 
         XCTAssertEqual(seen, ["only"])
@@ -77,7 +77,6 @@ final class CategoricalSeamTests: XCTestCase {
     func testIntSetsVaryOverExactlyTheDeclaredValues() async {
         var seen: Set<Int64> = []
         let spec = Spec<Greeter>("greeter.ints")
-            .system { _ in Greeter() }
             .operations {
                 Op("greet") { sut, seams in
                     let qty = seams.int("qty", default: 0)
@@ -86,6 +85,7 @@ final class CategoricalSeamTests: XCTestCase {
                 }
             }
             .vary { Seam("qty", .oneOf([0, 7, 999])) }
+            .baselined { _ in Greeter() }
         _ = await spec.record()
 
         XCTAssertEqual(seen, [0, 7, 999], "a categorical int must not fill the gaps between values")

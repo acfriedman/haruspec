@@ -37,10 +37,9 @@ final class SwiftKioskOnTally: Kiosk {
 }
 
 final class InitializerBuildTests: XCTestCase {
-    /// No derivation: the baseline is declared by its initializer, as a hand-wired spec would.
+    /// No derivation: each test binds the baseline by its initializer, as a hand-wired suite would.
     private var spec: Spec<Kiosk> {
         Spec<Kiosk>("kiosk.initializers")
-            .system(KioskManager.init(printer:center:))
             .operations {
                 Op("ring", varying: .int(0 ... 50).named("amount")) { kiosk, amount in kiosk.ring(amount: Int(amount)) }
                 Op("total") { kiosk in _ = kiosk.total() }.last()
@@ -52,7 +51,10 @@ final class InitializerBuildTests: XCTestCase {
     }
 
     func testAPortWithItsOwnDependenciesChecksFromItsInitializer() async throws {
-        let verdict = try await spec.provides(TallyBook.init).check(SwiftKioskOnTally.init(printer:center:book:))
+        let verdict = try await spec
+            .provides(TallyBook.init)
+            .baselined(on: KioskManager.init(printer:center:))
+            .check(SwiftKioskOnTally.init(printer:center:book:))
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
@@ -62,7 +64,10 @@ final class InitializerBuildTests: XCTestCase {
         let unannotated = { (printer: ReceiptPrinting?, center: NotificationCenter?, book: TallyBook!) in
             SwiftKioskOnTally(printer: printer!, center: center!, book: book)
         }
-        let verdict = try await spec.provides(TallyBook.init).check(unannotated)
+        let verdict = try await spec
+            .provides(TallyBook.init)
+            .baselined(on: KioskManager.init(printer:center:))
+            .check(unannotated)
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
@@ -71,15 +76,19 @@ final class InitializerBuildTests: XCTestCase {
         // An unannotated Obj-C initializer imports as `init!`, returning an optional.
         let verdict = try await spec
             .provides { () -> TallyBook? in TallyBook() }
+            .baselined(on: KioskManager.init(printer:center:))
             .check(SwiftKioskOnTally.init(printer:center:book:))
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
 
     func testAContextBuildsFromAnInitializer() async {
-        let candidate = await spec.provides(TallyBook.init).verify("SwiftKioskOnTally") { context in
-            context.build(SwiftKioskOnTally.init(printer:center:book:))
-        }
+        let candidate = await spec
+            .provides(TallyBook.init)
+            .baselined(on: KioskManager.init(printer:center:))
+            .verify("SwiftKioskOnTally") { context in
+                context.build(SwiftKioskOnTally.init(printer:center:book:))
+            }
 
         XCTAssertEqual(candidate.verdict.verdict, .equivalent)
     }

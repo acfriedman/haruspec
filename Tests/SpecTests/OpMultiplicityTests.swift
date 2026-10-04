@@ -104,15 +104,15 @@ final class OpMultiplicityTests: XCTestCase {
 
     func testTheSpecReportsTheSummedDenominator() async {
         let spec = Spec<PromoCart>("promo-cart.ranged")
-            .system { GoodCart(center: $0.notifications) }
             .operations {
                 Op("add") { $0.addItem(priceCents: 999, qty: 2) }.repeating(0 ... 2)
                 Op("promo") { $0.applyPromo() }.repeating(0 ... 2)
                 Op("checkout") { _ = $0.checkout() }.last()
             }
             .vary { Ordering(max: 100) }
+            .baselined { GoodCart(center: $0.notifications) }
 
-        let available = spec.availableOrderings()
+        let available = spec.spec.availableOrderings()
 
         // Nine shapes here, not eight: `checkout` is pinned at one, so no shape is empty and
         // `[checkout]` alone — a checkout on a cart nothing was ever added to — counts.
@@ -120,7 +120,7 @@ final class OpMultiplicityTests: XCTestCase {
         XCTAssertEqual(available.count, 19)
         XCTAssertTrue(available.exact)
 
-        let verdict = await spec.verify(against: { RefactorCart(center: $0.notifications) })
+        let verdict = await spec.verify { RefactorCart(center: $0.notifications) }
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
 }

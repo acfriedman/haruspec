@@ -3,13 +3,14 @@ import HaruspecCore
 import HaruspecSeams
 import HaruspecTrace
 
-// A typed, result-builder API for describing *how to interrogate* a system under test — the one thing a
+// A typed, result-builder API for describing *how to interrogate* a boundary — the one thing a
 // developer authors. The SUT stays oracle-agnostic (plain notifications / KVO + optional deliberate
-// markers); the Spec, and only the Spec, knows the oracle. Machinery (recorder, interceptor,
-// context, replay, diff) is hidden behind `spec.verify(against:)`.
+// markers); the Spec, and only the Spec, knows the oracle. A spec names no implementation: a test
+// binds one as the baseline with `.baselined(on:)`, and the binding hides the machinery (recorder,
+// interceptor, context, replay, diff) behind `verify(candidate:)` and `check(_:)`.
 //
-// Prototype: proves the ergonomics on a decoupled checkout, with call-ordering variation as the headline
-// (stateful/model-based differential testing — the baseline branch *is* the model).
+// Stateful/model-based differential testing, with call-ordering variation as the headline: the
+// baseline a test binds *is* the model.
 
 /// A generated recording double's construction contract (`@Haruspec` emits the conformance on its
 /// `Double<Protocol>`): built from the capture's context, so its synthesized returns read generated
@@ -285,18 +286,11 @@ public func Budget(runs: Int) -> Variation {
 /// reads declaratively without losing Swift's type-checking, autocomplete, or rename-safety.
 public struct Spec<S> {
     public let name: String
-    var makeSystem: (SeamContext) -> S = { _ in
-        fatalError(
-            "this spec has no system factory — author it (.system { context in … }), or let the "
-                + "derivation supply it: paste the baseline's init into the @Haruspec protocol and "
-                + "its catalog emits the wiring (collaborators resolve to their stamped doubles, "
-                + "NotificationCenter to the capture's)"
-        )
-    }
 
-    /// Constructs a conformer through the boundary's pasted `init` and wraps it — set by
+    /// Constructs a conformer through the boundary's pasted `init` — set by
     /// `.operations(derivedFrom:)` when the catalog derives construction, and what
-    /// `check(_ conformer:)` runs. `nil` when construction has to be authored.
+    /// `baselined(on:)` and `check(_:)` build by type. `nil` when construction has to be
+    /// authored.
     var makeConformer: ((SeamContext, Any.Type) -> S)?
     /// Wraps every build in the capture boundary before it is driven — the stamped protocol's
     /// forwarder, so the baseline and a port authored by closure record through the same class.
@@ -317,9 +311,6 @@ public struct Spec<S> {
     /// Which of `seamDomains` came from a typed op argument — so a `Seam(_:_:)` that collides with one
     /// traps instead of quietly redefining an argument's domain from a distance.
     var argumentSeams: Set<String> = []
-    /// The builds a catalog can enumerate, declared via `.candidates { }`. Empty for a spec whose
-    /// suite checks each build inline (`check(_:expecting:_:)`), which is the ordinary case.
-    var candidates: [Candidate<S>] = []
     /// Channels the spec accepts as uncaptured for every candidate, via `.accepts(uncaptured:)` —
     /// merged into each verification's intent where the audit resolves declarations.
     var acceptedBlindSpots: [String] = []
@@ -344,14 +335,6 @@ public struct Spec<S> {
 
     public init(_ name: String) {
         self.name = name
-    }
-
-    /// How to construct the system under test. Seams are injected here — including the observation
-    /// `NotificationCenter` (`SeamContext.notifications`) and any recording collaborator doubles a
-    /// legacy singleton was made injectable to accept. A boundary the SUT reaches without a declared,
-    /// injected seam is unobserved by construction (there is no runtime interception to fall back on).
-    public func system(_ make: @escaping (SeamContext) -> S) -> Spec<S> {
-        var copy = self; copy.makeSystem = make; return copy
     }
 
     /// The interactions to drive, as labeled ops with optional ordering constraints.

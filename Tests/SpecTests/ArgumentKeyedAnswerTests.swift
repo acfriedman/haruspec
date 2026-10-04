@@ -58,18 +58,18 @@ final class ReorderedRestock: Restock {
 }
 
 final class ArgumentKeyedAnswerTests: XCTestCase {
-    private var spec: Spec<Restock> {
+    private var spec: BaselinedSpec<Restock> {
         Spec<Restock>("restock.argument-keyed")
-            .system(LegacyRestock.init(shelf:center:))
             .operations { Op("report") { $0.report() } }
             .vary {
                 Seam("Shelf.stock", .int(0 ... 9))
                 Budget(runs: 30)
             }
+            .baselined(on: LegacyRestock.init(shelf:center:))
     }
 
     func testAPortAskingInAnotherOrderGetsTheSameAnswers() async {
-        let verdict = await spec.verify(against: { $0.build(ReorderedRestock.init(shelf:center:)) })
+        let verdict = await spec.verify { $0.build(ReorderedRestock.init(shelf:center:)) }
 
         // The calls moved, and that is all that differs: no value, here or downstream.
         let kinds = Set(verdict.result.diff.divergences.map(\.kind))

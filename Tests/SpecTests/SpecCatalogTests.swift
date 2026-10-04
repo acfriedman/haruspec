@@ -27,16 +27,21 @@ private struct PromoCartSpec: SpecProviding {
 
     var spec: Spec<PromoCart> {
         Spec<PromoCart>(name)
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { $0.addItem(priceCents: 999, qty: 3) }
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .candidates {
-                Candidate("RefactorCart", makeRefactor)
-                Candidate("RoundBugCart", expecting: .diverged, makeRoundBug)
-            }
+    }
+}
+
+private extension PromoCartSpec {
+    /// The binding a test target writes over the declaration: the baseline, then the ports.
+    var bound: BaselinedSpec<PromoCart> {
+        baselined(on: makeGood).candidates {
+            Candidate("RefactorCart", makeRefactor)
+            Candidate("RoundBugCart", expecting: .diverged, makeRoundBug)
+        }
     }
 }
 
@@ -46,14 +51,14 @@ final class SpecCatalogTests: XCTestCase {
             .appendingPathComponent("catalog-\(UUID().uuidString)", isDirectory: true)
     }
 
-    private func cart(_ name: String) -> Spec<PromoCart> {
+    private func cart(_ name: String) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>(name)
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { $0.addItem(priceCents: 999, qty: 3) }
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
+            .baselined(on: makeGood)
             .candidates {
                 Candidate("RefactorCart", makeRefactor)
                 Candidate("RoundBugCart", expecting: .diverged, makeRoundBug)
@@ -149,15 +154,15 @@ final class SpecCatalogTests: XCTestCase {
 
     // MARK: Declaring specs by conformance
 
-    func testACatalogTakesConformingDeclarationsDirectly() {
-        let declared = SpecCatalog(PromoCartSpec(), PromoCartSpec(name: "promo-cart.second"))
+    func testACatalogTakesBoundConformingDeclarationsDirectly() {
+        let declared = SpecCatalog(PromoCartSpec().bound, PromoCartSpec(name: "promo-cart.second").bound)
 
         XCTAssertEqual(declared.migrationCases, catalog().migrationCases)
     }
 
     func testAConformingDeclarationErasesToTheSameEntry() {
-        let viaProtocol = SpecCatalog(PromoCartSpec())
-        let viaEntry = SpecCatalog(PromoCartSpec().spec.entry())
+        let viaProtocol = SpecCatalog(PromoCartSpec().bound)
+        let viaEntry = SpecCatalog(PromoCartSpec().bound.entry())
 
         XCTAssertEqual(viaProtocol.entries.first?.name, viaEntry.entries.first?.name)
         XCTAssertEqual(viaProtocol.entries.first?.candidateNames, viaEntry.entries.first?.candidateNames)

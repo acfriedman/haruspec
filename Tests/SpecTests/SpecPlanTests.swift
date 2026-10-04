@@ -97,9 +97,8 @@ private func makeGreedy(_ ctx: SeamContext) -> PromoCart {
 final class SpecPlanTests: XCTestCase {
     /// The authored spec — identical source on the "base" and "branch" side, as it would be in git.
     /// Only the factory differs per test, standing in for what a checkout does to the code under it.
-    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Spec<PromoCart> {
+    private func cart(system: @escaping (SeamContext) -> PromoCart) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.plan")
-            .system(system)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -111,6 +110,7 @@ final class SpecPlanTests: XCTestCase {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 10)
             }
+            .baselined(on: system)
     }
 
     private func planURL(_ name: String) -> URL {
@@ -225,7 +225,6 @@ final class SpecPlanTests: XCTestCase {
 
         // The branch renamed an op: its recorded probes are unreplayable input, not skippable noise.
         let drifted = Spec<PromoCart>("promo-cart.plan")
-            .system(makeRefactor)
             .operations {
                 Op("addEspresso") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -233,6 +232,7 @@ final class SpecPlanTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
+            .baselined(on: makeRefactor)
 
         let verdict = await drifted.verify(replaying: plan)
         XCTAssertEqual(

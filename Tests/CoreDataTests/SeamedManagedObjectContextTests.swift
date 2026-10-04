@@ -58,17 +58,18 @@ private final class NoteStore {
 final class SeamedManagedObjectContextTests: XCTestCase {
     private func spec(recording: @escaping (Bool) -> Void) -> Spec<NoteStore> {
         Spec<NoteStore>("notestore.coredata")
-            .system { seams in
-                NoteStore(context: SeamedManagedObjectContext.inMemory(model: model, seams: seams))
-            }
             .operations {
                 Op("cache") { sut in recording(sut.cache("hello")) }
             }
     }
 
+    private func store(_ seams: SeamContext) -> NoteStore {
+        NoteStore(context: SeamedManagedObjectContext.inMemory(model: model, seams: seams))
+    }
+
     func testTheFailureSweepIsOnByDefault() async {
         var outcomes: Set<Bool> = []
-        _ = await spec(recording: { outcomes.insert($0) }).record()
+        _ = await spec(recording: { outcomes.insert($0) }).baselined(on: store).record()
 
         XCTAssertEqual(
             outcomes,
@@ -81,6 +82,7 @@ final class SeamedManagedObjectContextTests: XCTestCase {
         var outcomes: Set<Bool> = []
         _ = await spec(recording: { outcomes.insert($0) })
             .vary { Seam(SeamedManagedObjectContext.saveFailureSeam, .anyOf([.bool(false)])) }
+            .baselined(on: store)
             .record()
 
         XCTAssertEqual(outcomes, [true], "an authored Seam pins the reading, so saves never fail")
@@ -92,9 +94,6 @@ final class SeamedManagedObjectContextTests: XCTestCase {
         // real), so any count above 1 is a leak between the record's many probes.
         var counts: Set<Int> = []
         let spec = Spec<NoteStore>("notestore.isolated")
-            .system { seams in
-                NoteStore(context: SeamedManagedObjectContext.inMemory(model: model, seams: seams))
-            }
             .operations {
                 Op("cache") { sut in
                     sut.cache("hello")
@@ -104,6 +103,9 @@ final class SeamedManagedObjectContextTests: XCTestCase {
             .vary {
                 Ordering(repeating: 1)
                 Seam(SeamedManagedObjectContext.saveFailureSeam, .anyOf([.bool(false)]))
+            }
+            .baselined { seams in
+                NoteStore(context: SeamedManagedObjectContext.inMemory(model: model, seams: seams))
             }
         _ = await spec.record()
 

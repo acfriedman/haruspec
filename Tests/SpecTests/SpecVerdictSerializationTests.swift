@@ -18,9 +18,8 @@ private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
 }
 
 final class SpecVerdictSerializationTests: XCTestCase {
-    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Spec<PromoCart> {
+    private func cart(system: @escaping (SeamContext) -> PromoCart) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.artifact")
-            .system(system)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -32,6 +31,7 @@ final class SpecVerdictSerializationTests: XCTestCase {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 10)
             }
+            .baselined(on: system)
     }
 
     private func divergedVerdict() async -> SpecVerdict {

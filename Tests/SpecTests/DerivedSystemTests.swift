@@ -6,7 +6,7 @@ import HaruspecSeams
 import HaruspecTrace
 import XCTest
 
-// The `.system` closure, derived. The pasted protocol carries the baseline's init requirement, so
+// The baseline's construction, derived. The pasted protocol carries the baseline's init requirement, so
 // the forwarder can mirror it and wire it: collaborators resolve to their synthesized doubles by
 // conformance (the stamped collaborator protocol *refines* the boundary — conformance is the
 // registry), the NotificationCenter parameter takes the capture's isolated center. With ops and
@@ -139,9 +139,9 @@ final class SwiftRegister: Register {
 }
 
 final class DerivedSystemTests: XCTestCase {
-    /// The collapsed spec: one entry point, no `.system`, no `.vary` — the authored residue alone.
+    /// The collapsed spec: one entry point, no construction closure, no `.vary` — the authored residue alone.
     private var spec: Spec<Kiosk> {
-        Spec<Kiosk>("kiosk.derived", derivedFrom: DerivedKiosk.self, baseline: KioskManager.self) {
+        Spec<Kiosk>("kiosk.derived", derivedFrom: DerivedKiosk.self) {
             Amend("total").last()
         }
     }
@@ -156,7 +156,7 @@ final class DerivedSystemTests: XCTestCase {
         let verdict = try await spec.vary {
             Ordering(max: 4)
             Budget(runs: 60)
-        }.check(SwiftKiosk.self)
+        }.baselined(on: KioskManager.self).check(SwiftKiosk.self)
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
@@ -183,19 +183,19 @@ final class DerivedSystemTests: XCTestCase {
         let verdict = await spec.vary {
             Ordering(max: 4)
             Budget(runs: 60)
-        }.verify(against: { context in
+        }.baselined(on: KioskManager.self).verify { context in
             SwiftKiosk(
                 printer: context.double(DoublePrinter.self),
                 center: context.notifications
             )
-        })
+        }
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
 
     func testAPureSwiftContinuousRoundTripRunsOnTheDerivedSystem() async throws {
         // The continuous shape, Swift to Swift: record the plan from the derived system, replay it
-        // against the same build — no Obj-C anywhere, no `.system`, no `.vary`. This is the spec a
+        // against the same build — no Obj-C anywhere, no construction closure, no `.vary`. This is the spec a
         // Swift-only subject ships to CI.
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("kiosk-derived-\(UUID().uuidString).haruspec-plan")
@@ -203,7 +203,7 @@ final class DerivedSystemTests: XCTestCase {
         let bounded = spec.vary {
             Ordering(max: 4)
             Budget(runs: 60)
-        }
+        }.baselined(on: KioskManager.self)
 
         _ = try await bounded.record(to: url)
         let verdict = try await bounded.verify(replayingContentsOf: url)
@@ -216,16 +216,17 @@ final class DerivedSystemTests: XCTestCase {
         // The persistence-bearing-subject shape: the injected state is a resource (.provides), built
         // fresh per capture for isolation, and observed through the subject's own read op — which is
         // what makes hidden state comparable surface.
-        let spec = Spec<Register>("register.derived", derivedFrom: DerivedRegister.self, baseline: RegisterManager.self)
+        let spec = Spec<Register>("register.derived", derivedFrom: DerivedRegister.self)
             .provides(TallyBook.self) { _ in TallyBook() }
             .vary {
                 Ordering(max: 4)
                 Budget(runs: 60)
             }
+            .baselined(on: RegisterManager.self)
 
-        let verdict = await spec.verify(against: { context in
+        let verdict = await spec.verify { context in
             SwiftRegister(book: context.resolve(TallyBook.self), center: context.notifications)
-        })
+        }
 
         XCTAssertEqual(
             verdict.verdict,

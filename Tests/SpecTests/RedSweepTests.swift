@@ -49,9 +49,8 @@ private func makeLoudAndQuiet(_ ctx: SeamContext) -> PromoCart {
 }
 
 final class RedSweepTests: XCTestCase {
-    private func cart() -> Spec<PromoCart> {
+    private func cart() -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.red-sweep")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -63,10 +62,11 @@ final class RedSweepTests: XCTestCase {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 10)
             }
+            .baselined(on: makeGood)
     }
 
     func testALoudBugDoesNotHideAQuietOne() async throws {
-        let verdict = await cart().verify(against: makeLoudAndQuiet)
+        let verdict = await cart().verify(candidate: makeLoudAndQuiet)
         XCTAssertEqual(verdict.verdict, .diverged)
 
         let cases = try XCTUnwrap(verdict.failingCases, "a live red carries every failing case")

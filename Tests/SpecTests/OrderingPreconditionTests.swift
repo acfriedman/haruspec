@@ -20,9 +20,8 @@ private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
 
 final class OrderingPreconditionTests: XCTestCase {
     /// A space far past any cap, with nothing declared about ordering — the "unchanged behavior" control.
-    private func unconstrainedSpec(orderingMax: Int) -> Spec<PromoCart> {
+    private func unconstrainedSpec(orderingMax: Int) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.unconstrained")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { $0.addItem(priceCents: 999, qty: 2) }
                 Op("addMug") { $0.addItem(priceCents: 499, qty: 1) }
@@ -30,6 +29,7 @@ final class OrderingPreconditionTests: XCTestCase {
                 Op("checkout") { _ = $0.checkout() }.last()
             }
             .vary { Ordering(max: orderingMax) }
+            .baselined(on: makeGood)
     }
 
     // MARK: - Hard gates vs soft preconditions
@@ -147,7 +147,6 @@ final class OrderingPreconditionTests: XCTestCase {
 
     func testTheVerdictSaysHowMuchOfTheSweepWasOutOfOrder() async throws {
         let spec = Spec<PromoCart>("promo-cart.preconditions")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { $0.addItem(priceCents: 999, qty: 2) }
                 Op("addMug") { $0.addItem(priceCents: 499, qty: 1) }
@@ -156,8 +155,9 @@ final class OrderingPreconditionTests: XCTestCase {
                 Op("checkout") { _ = $0.checkout() }.last()
             }
             .vary { Ordering(max: 40) }
+            .baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: makeRefactor)
+        let verdict = await spec.verify(candidate: makeRefactor)
         let exploration = try XCTUnwrap(verdict.exploration)
         let outOfOrder = try XCTUnwrap(exploration.outOfOrderExplored)
 
@@ -168,7 +168,7 @@ final class OrderingPreconditionTests: XCTestCase {
 
     func testASweepWithNoPreconditionsReportsNoOutOfOrderStratum() async throws {
         let spec = unconstrainedSpec(orderingMax: 6)
-        let verdict = await spec.verify(against: makeRefactor)
+        let verdict = await spec.verify(candidate: makeRefactor)
         let exploration = try XCTUnwrap(verdict.exploration)
 
         XCTAssertEqual(exploration.outOfOrderExplored, 0)
@@ -218,7 +218,7 @@ final class OrderingPreconditionTests: XCTestCase {
     func testAnArtifactPredatingTheOutOfOrderStratumIsRefused() async throws {
         // Pre-release stance: no tolerant decoders, no migrations. An artifact from before the
         // sample was stratified fails to decode — the fix is re-recording, not coercion.
-        let verdict = await unconstrainedSpec(orderingMax: 2).verify(against: makeRefactor)
+        let verdict = await unconstrainedSpec(orderingMax: 2).verify(candidate: makeRefactor)
         var json = try JSONSerialization.jsonObject(with: verdict.jsonData()) as? [String: Any] ?? [:]
         var exploration = json["exploration"] as? [String: Any] ?? [:]
         exploration.removeValue(forKey: "outOfOrderExplored")

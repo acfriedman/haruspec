@@ -78,12 +78,11 @@ final class DerivedPropertyTests: XCTestCase {
 
     func testTheDerivedSpecObservesAndSnapshotsIt() async {
         let spec = Spec<any Meter>("meter", derivedFrom: DerivedMeter.self)
-            .system { _ in TickingMeter() }
 
         XCTAssertEqual(spec.observedProperties.map(\.label), ["Meter.reading"])
 
         let trace = await spec.capture(
-            make: spec.makeSystem,
+            make: { _ in TickingMeter() },
             order: spec.operations,
             cassette: Cassette()
         )
@@ -92,9 +91,8 @@ final class DerivedPropertyTests: XCTestCase {
 }
 
 final class PropertySpecTests: XCTestCase {
-    private func drawerSpec() -> Spec<any Drawer> {
+    private func drawerSpec() -> BaselinedSpec<any Drawer> {
         Spec<any Drawer>("till")
-            .system { _ in LegacyDrawer() }
             .operations {
                 Op("ring") { (till: any Drawer) in till.ring(amount: 7) }
             }
@@ -102,18 +100,19 @@ final class PropertySpecTests: XCTestCase {
                 Observed("Drawer.count") { $0.count },
                 Observed("Drawer.total") { $0.total }
             )
+            .baselined { _ in LegacyDrawer() }
     }
 
     /// A port with no stored counterparts: the snapshots alone carry the state contract to green.
     func testAComputedPortIsEquivalentOnSnapshotsAlone() async {
-        let verdict = await drawerSpec().verify(against: { _ in ComputedDrawer() })
+        let verdict = await drawerSpec().verify { _ in ComputedDrawer() }
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
 
     /// The snapshot is the gate: a wrong end state is red, and the divergence names the property.
     func testASnapshotCatchesAWrongEndState() async {
-        let verdict = await drawerSpec().verify(against: { _ in OverchargingDrawer() })
+        let verdict = await drawerSpec().verify { _ in OverchargingDrawer() }
 
         XCTAssertEqual(verdict.verdict, .diverged)
         XCTAssertTrue(verdict.diff.divergences.contains {
@@ -124,7 +123,7 @@ final class PropertySpecTests: XCTestCase {
     /// The verdict names the observed properties whose snapshots gated, so a green is legible as
     /// exactly that.
     func testTheQualificationCarriesThePropertiesLine() async {
-        let verdict = await drawerSpec().verify(against: { _ in ComputedDrawer() })
+        let verdict = await drawerSpec().verify { _ in ComputedDrawer() }
 
         XCTAssertEqual(verdict.qualification.observedProperties, "Drawer.count, Drawer.total — snapshots gate")
     }

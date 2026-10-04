@@ -52,13 +52,13 @@ final class DiffScopeTests: XCTestCase {
             .deletingLastPathComponent()
     }
 
-    private func abacus(system: @escaping (SeamContext) -> Abacus) -> Spec<Abacus> {
+    private func abacus(system: @escaping (SeamContext) -> Abacus) -> BaselinedSpec<Abacus> {
         Spec<Abacus>("abacus.diffscope")
-            .system(system)
             .operations {
                 Op("ring", varying: .oneOf(1, 2, 3)) { $0.ring(amount: $1) }
                 Op("total") { _ = $0.total() }.last()
             }
+            .baselined(on: system)
     }
 
     private func equivalentVerdict() async -> SpecVerdict {

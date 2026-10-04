@@ -33,21 +33,25 @@ private final class PadUser {
 }
 
 final class ResourceDefaultTests: XCTestCase {
-    private func spec(collecting resolved: @escaping (ScratchPad) -> Void) -> Spec<PadUser> {
+    private func spec() -> Spec<PadUser> {
         Spec<PadUser>("pad.default")
-            .system { seams in
-                let user = PadUser(pad: seams.resolve(ScratchPad.self))
-                resolved(user.pad)
-                return user
-            }
             .operations {
                 Op("touch") { _ in }
             }
     }
 
+    /// Builds the baseline, handing `resolved` each pad the capture resolves.
+    private func padUser(collecting resolved: @escaping (ScratchPad) -> Void) -> (SeamContext) -> PadUser {
+        { seams in
+            let user = PadUser(pad: seams.resolve(ScratchPad.self))
+            resolved(user.pad)
+            return user
+        }
+    }
+
     func testAPackagedDefaultServesAnUnprovidedResource() async {
         var resolved: [ScratchPad] = []
-        _ = await spec(collecting: { resolved.append($0) }).record()
+        _ = await spec().baselined(on: padUser(collecting: { resolved.append($0) })).record()
 
         XCTAssertFalse(resolved.isEmpty)
         XCTAssertFalse(resolved.contains { $0 is AuthoredPad }, "nothing authored, so the default provider builds")
@@ -55,8 +59,9 @@ final class ResourceDefaultTests: XCTestCase {
 
     func testAProvidedResourceBeatsThePackagedDefault() async {
         var resolved: [ScratchPad] = []
-        _ = await spec(collecting: { resolved.append($0) })
+        _ = await spec()
             .provides(ScratchPad.self) { _ in AuthoredPad() }
+            .baselined(on: padUser(collecting: { resolved.append($0) }))
             .record()
 
         XCTAssertFalse(resolved.isEmpty)
@@ -68,12 +73,12 @@ final class ResourceDefaultTests: XCTestCase {
         // both declared values get explored with nothing authored.
         var tilts: Set<Bool> = []
         let spec = Spec<PadUser>("pad.sweep")
-            .system { seams in PadUser(pad: seams.resolve(ScratchPad.self)) }
             .operations {
                 Op("tilt") { _, seams in
                     tilts.insert(seams.bool("ScratchPad.tilt", default: false))
                 }
             }
+            .baselined { seams in PadUser(pad: seams.resolve(ScratchPad.self)) }
         _ = await spec.record()
 
         XCTAssertEqual(tilts, [false, true])
@@ -84,13 +89,13 @@ final class ResourceDefaultTests: XCTestCase {
         // sweep leaking past the authored declaration.
         var tilts: Set<Bool> = []
         let spec = Spec<PadUser>("pad.pinned")
-            .system { seams in PadUser(pad: seams.resolve(ScratchPad.self)) }
             .operations {
                 Op("tilt") { _, seams in
                     tilts.insert(seams.bool("ScratchPad.tilt", default: false))
                 }
             }
             .vary { Seam("ScratchPad.tilt", .anyOf([.bool(false)])) }
+            .baselined { seams in PadUser(pad: seams.resolve(ScratchPad.self)) }
         _ = await spec.record()
 
         XCTAssertEqual(tilts, [false])
@@ -98,7 +103,7 @@ final class ResourceDefaultTests: XCTestCase {
 
     func testTheDefaultBuildsAFreshResourcePerCapture() async {
         var resolved: [ScratchPad] = []
-        _ = await spec(collecting: { resolved.append($0) }).record()
+        _ = await spec().baselined(on: padUser(collecting: { resolved.append($0) })).record()
 
         XCTAssertEqual(
             Set(resolved.map(ObjectIdentifier.init)).count,

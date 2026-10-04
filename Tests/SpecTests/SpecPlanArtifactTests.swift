@@ -13,9 +13,8 @@ private func makeGood(_ ctx: SeamContext) -> PromoCart {
 }
 
 final class SpecPlanArtifactTests: XCTestCase {
-    private func cart() -> Spec<PromoCart> {
+    private func cart() -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.artifact")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -27,6 +26,7 @@ final class SpecPlanArtifactTests: XCTestCase {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 10)
             }
+            .baselined(on: makeGood)
     }
 
     private func artifactURL(_ name: String, suffix: String = "json") -> URL {

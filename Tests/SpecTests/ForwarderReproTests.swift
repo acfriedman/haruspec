@@ -139,7 +139,6 @@ final class ReproSwiftPort: ReproCart {
 final class ForwarderReproTests: XCTestCase {
     func testForwarderBaselineVsFaithfulPortIsEquivalent() async {
         let spec = Spec<ReproCart>("cart.repro")
-            .system { context in ReproLegacyManager(notifications: context.notifications) }
             .operations {
                 Op("addCoffee") { sut, seams in
                     sut.add(ReproProduct(sku: "COFFEE", price: 1299), quantity: Int(seams.int("coffeeQty", default: 2)))
@@ -165,8 +164,9 @@ final class ForwarderReproTests: XCTestCase {
                 Seam("mugQty", .int(1 ... 5))
                 Ordering(max: 50)
             }
+            .baselined { context in ReproLegacyManager(notifications: context.notifications) }
 
-        let verdict = await spec.verify(against: { context in ReproSwiftPort(notifications: context.notifications) })
+        let verdict = await spec.verify { context in ReproSwiftPort(notifications: context.notifications) }
         print("=== FORWARDER REPRO ===")
         print(verdict.report())
         print("=== FORWARDER REPRO END ===")

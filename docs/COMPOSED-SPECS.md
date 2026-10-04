@@ -41,7 +41,7 @@ resolution policy, not a new engine, and three properties of the codebase make i
   plan's dependency set (`PlanProvenance.swift`). With B live, its files join the set, so a PR that
   touches only B replays the composed spec.
 
-A hand-wired version should already be expressible through `.system { … }` with a `Traced<P>`
+A hand-wired version should already be expressible through `.baselined { … }` with a `Traced<P>`
 around a real collaborator. It is untested.
 
 ## Value proposition

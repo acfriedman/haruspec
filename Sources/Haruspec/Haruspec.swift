@@ -7,7 +7,7 @@
 // and gets the whole engine: the `@Haruspec` stamp; runtime capture
 // (`TraceRecorder`, `RecordingNotificationCenter`, the `Haruspec.marker` / `Haruspec.interval`
 // signposts); the record-once/replay-into-both seam harness (`Cassette` + the injected value seams);
-// and the `Spec { … }.verify(against:)` DSL — no more juggling HaruspecCore + HaruspecTrace +
+// and the `Spec { … }.baselined(on:)` DSL — no more juggling HaruspecCore + HaruspecTrace +
 // HaruspecMacros + HaruspecSeams + HaruspecSpec.
 //
 // This target is re-export only: it holds no logic, so the package's "engine first, dependency-free

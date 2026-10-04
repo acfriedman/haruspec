@@ -81,12 +81,12 @@ final class StabilityTests: XCTestCase {
 
     /// One probe, no exploration: each replay pass is exactly one capture, so the drift counter maps
     /// 1:1 onto passes and the expected outcome grouping is exact.
-    private func spec(system: @escaping (SeamContext) -> Totaling) -> Spec<Totaling> {
+    private func spec(system: @escaping (SeamContext) -> Totaling) -> BaselinedSpec<Totaling> {
         Spec<Totaling>("stability.subject")
-            .system(system)
             .operations {
                 Op("total") { subject, _ in subject.total() }
             }
+            .baselined(on: system)
     }
 
     private func steadyPlan() async -> SpecPlan {

@@ -147,7 +147,6 @@ final class DerivedOpsTests: XCTestCase {
     /// The collapsed spec: the derivation plus its authored residue — the sku values and the `.last()`.
     private func cartSpec(_ name: String) -> Spec<MeteredCart> {
         Spec<MeteredCart>(name)
-            .system(makeGood)
             .operations(derivedFrom: DerivedMeteredCart.self) {
                 Amend("add").varying("sku", over: .oneOf("COFFEE", "MUG"))
                 Amend("total").last()
@@ -237,7 +236,6 @@ final class DerivedOpsTests: XCTestCase {
 
     func testAmendmentsCarryStructureWithoutReauthoringTheBinding() {
         let spec = Spec<MeteredCart>("derived.structure")
-            .system(makeGood)
             .operations(derivedFrom: DerivedMeteredCart.self) {
                 Amend("add").varying("sku", over: .oneOf("COFFEE")).repeating(0 ... 6).after("setEager")
                 Amend("total").last()
@@ -251,7 +249,6 @@ final class DerivedOpsTests: XCTestCase {
         // Domains are plain values, so a shared vocabulary is a `let`, not a new abstraction.
         let skus: ArgumentDomain<String> = .oneOf("COFFEE", "MUG")
         let spec = Spec<MeteredCart>("derived.reused")
-            .system(makeGood)
             .operations(derivedFrom: DerivedMeteredCart.self) {
                 Amend("add").varying("sku", over: skus)
                 Amend("total").last()
@@ -266,7 +263,6 @@ final class DerivedOpsTests: XCTestCase {
 
     func testAnAuthoredOpReplacesItsDerivedTwinInPlace() {
         let spec = Spec<MeteredCart>("derived.replace")
-            .system(makeGood)
             .operations(derivedFrom: DerivedMeteredCart.self) {
                 Op(
                     "add",
@@ -293,9 +289,9 @@ final class DerivedOpsTests: XCTestCase {
         let spec = cartSpec("derived.equivalent").vary {
             Ordering(max: 4)
             Budget(runs: 160)
-        }
+        }.baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: makeGood)
+        let verdict = await spec.verify(candidate: makeGood)
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
     }
@@ -304,9 +300,9 @@ final class DerivedOpsTests: XCTestCase {
         let spec = cartSpec("derived.edge").vary {
             Ordering(max: 4)
             Budget(runs: 160)
-        }
+        }.baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: makeTopOfDomainBug)
+        let verdict = await spec.verify(candidate: makeTopOfDomainBug)
 
         XCTAssertEqual(
             verdict.verdict,
@@ -319,9 +315,9 @@ final class DerivedOpsTests: XCTestCase {
         let spec = cartSpec("derived.negative").vary {
             Ordering(max: 4)
             Budget(runs: 160)
-        }
+        }.baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: makeNegativeBlind)
+        let verdict = await spec.verify(candidate: makeNegativeBlind)
 
         XCTAssertEqual(
             verdict.verdict,
@@ -336,9 +332,9 @@ final class DerivedOpsTests: XCTestCase {
         let spec = cartSpec("derived.marked").vary {
             Ordering(max: 2)
             Budget(runs: 60)
-        }
+        }.baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: makeGood)
+        let verdict = await spec.verify(candidate: makeGood)
 
         XCTAssertEqual(verdict.qualification.derivedDefaults, ["add.quantity", "setEager.eager"])
         XCTAssertTrue(

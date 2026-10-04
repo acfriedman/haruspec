@@ -22,7 +22,6 @@ private func port(_ make: @escaping (NotificationCenter) -> some PromoCart) -> (
 private struct PromoCartSpec: SpecProviding {
     var spec: Spec<PromoCart> {
         Spec<PromoCart>("promo-cart.check")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -38,17 +37,19 @@ private struct PromoCartSpec: SpecProviding {
 }
 
 final class CheckTests: XCTestCase {
+    private let subject = PromoCartSpec().baselined(on: makeGood)
+
     private func scratch() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("check-\(UUID().uuidString)", isDirectory: true)
     }
 
     func testASpecThatDeclaresNoCandidatesStillChecksAPort() async throws {
-        try await PromoCartSpec().check("RefactorCart", reportsIn: scratch(), port(RefactorCart.init))
+        try await subject.check("RefactorCart", reportsIn: scratch(), port(RefactorCart.init))
     }
 
     func testACounterexamplePassesByDivergingExactlyAsTheTestDeclares() async throws {
-        try await PromoCartSpec().check(
+        try await subject.check(
             "RoundBugCart",
             expecting: .diverged,
             reportsIn: scratch(),
@@ -59,7 +60,7 @@ final class CheckTests: XCTestCase {
     func testAnUnmetExpectationThrowsSayingWhichWayItWasSupposedToGo() async {
         await XCTAssertThrowsErrorAsync {
             // Declared as a counterexample, but it is in fact a faithful port.
-            try await PromoCartSpec().check(
+            try await subject.check(
                 "RefactorCart",
                 expecting: .diverged,
                 reportsIn: scratch(),
@@ -76,7 +77,7 @@ final class CheckTests: XCTestCase {
 
     func testAFaithfulPortThatRegressesFailsTheCheck() async {
         await XCTAssertThrowsErrorAsync {
-            try await PromoCartSpec()
+            try await subject
                 .check("RoundBugCart", reportsIn: scratch(), port(RoundBugCart.init))
         } handler: { error in
             XCTAssertTrue(
@@ -91,7 +92,7 @@ final class CheckTests: XCTestCase {
 
     func testTheReportIsWrittenUnderTheNameTheCheckGaveIt() async {
         let directory = scratch()
-        let verdict = await PromoCartSpec().spec
+        let verdict = await subject
             .verify("RefactorCart", reportsIn: directory, port(RefactorCart.init))
 
         XCTAssertEqual(verdict.actual, .equivalent)

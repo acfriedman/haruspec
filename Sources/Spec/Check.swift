@@ -2,23 +2,30 @@ import Foundation
 import HaruspecCore
 import HaruspecSeams
 
-// The one call a migration test makes: interrogate *this* build against the spec's baseline, print the
+// The one call a migration test makes: interrogate *this* build against the bound baseline, print the
 // verdict, and throw unless it earned the one the test declares. The build is an argument rather than
 // part of the declaration — which port exists today is a fact about the migration's progress, not about
 // how the system is interrogated, and `expecting: .diverged` is an assertion ("the seeded bug still
 // bites") that reads as a test name rather than as a line in a spec.
 //
-// Decoupling costs nothing underneath: `verify(against:)` already takes a bare `(SeamContext) -> S`, so
-// all this layer adds is the name the report is written under and the expectation to hold it to. One
-// `@Test` per build is what the test runner wants anyway — a real case name, an individual re-run, and
-// per-build traits, none of which survive a parameterized run over candidate name strings.
+// Decoupling costs nothing underneath: `verify(candidate:declaring:)` already takes a bare
+// `(SeamContext) -> S`, so all this layer adds is the name the report is written under and the
+// expectation to hold it to. One `@Test` per build is what the test runner wants anyway — a real case
+// name, an individual re-run, and per-build traits, none of which survive a parameterized run over
+// candidate name strings.
 
-public extension Spec {
-    /// Verifies one build against this spec's baseline, returning the verdict paired with the expectation
-    /// it was held to. `name` titles the console banner and the HTML report written to `reportsIn`
-    /// (Haruspec's temp `HaruspecReports` folder by default). `declaring` is this build's intent —
-    /// the deltas *this port* is meant to produce — which lives here, next to the build it describes,
-    /// because a declaration on the spec would leak one port's excuses to every other candidate.
+public extension BaselinedSpec {
+    /// Verifies one build against the bound baseline, returning the verdict paired with the
+    /// expectation it was held to. The intent lives with the build because a declaration on the spec
+    /// would leak one port's excuses to every other candidate.
+    ///
+    /// - Parameters:
+    ///   - name: The build's title on the console banner and the HTML report.
+    ///   - expected: The verdict the build should earn.
+    ///   - intent: The deltas this build is meant to produce; `.none` asks for parity.
+    ///   - directory: Where the HTML report goes; Haruspec's temp `HaruspecReports` folder when `nil`.
+    ///   - make: Builds a fresh candidate per capture from the capture's context.
+    /// - Returns: The verdict with the expectation it was held to.
     func verify(
         _ name: String,
         expecting expected: TraceDiff.Verdict = .equivalent,
@@ -26,7 +33,7 @@ public extension Spec {
         reportsIn directory: URL? = nil,
         _ make: @escaping (SeamContext) -> S
     ) async -> CandidateVerdict {
-        let verdict = await verify(against: make, declaring: intent)
+        let verdict = await verify(candidate: make, declaring: intent)
         return CandidateVerdict(
             name: name,
             expected: expected,
@@ -35,10 +42,18 @@ public extension Spec {
         )
     }
 
-    /// The whole body of a migration test case: verify this build, print its report, and throw unless it
-    /// earned `expected`. The test asserts nothing itself, because there is nothing left to decide.
-    /// Returned (discardably) so a test can additionally pin what rode along with the verdict — a
-    /// qualification line, a declared blind spot — without running the campaign twice.
+    /// Verifies one build, prints its report, and throws unless it earned `expected` — the whole
+    /// body of a migration test case. The verdict comes back so a test can additionally pin what rode
+    /// along with it without running the campaign twice.
+    ///
+    /// - Parameters:
+    ///   - name: The build's title on the console banner and the HTML report.
+    ///   - expected: The verdict the build must earn.
+    ///   - intent: The deltas this build is meant to produce; `.none` asks for parity.
+    ///   - directory: Where the HTML report goes; Haruspec's temp `HaruspecReports` folder when `nil`.
+    ///   - make: Builds a fresh candidate per capture from the capture's context.
+    /// - Returns: The verdict.
+    /// - Throws: `SpecCatalog.CheckFailure` unless the build earned `expected`.
     @discardableResult
     func check(
         _ name: String,
@@ -52,16 +67,20 @@ public extension Spec {
         return candidate.verdict
     }
 
-    /// `check(_:expecting:declaring:reportsIn:_:)` for a build the spec can construct itself: the
-    /// conformer is built through the boundary's pasted `init` — collaborators resolved to their
-    /// doubles, the capture's center injected — and wrapped in the forwarder, exactly as the
-    /// baseline is. The report is titled by the type unless `named` says otherwise.
+    /// Verifies a conformer the spec constructs itself, built and wrapped exactly as a baseline bound
+    /// by type is, and throws unless it earned `expected`.
     ///
-    /// - Precondition: The spec must derive construction (`derivedFrom:` a catalog whose protocol
-    ///   pastes its `init` and carries `@Haruspec`); otherwise author the build with the
-    ///   closure form. The type must conform to the boundary protocol — a spec generic over
-    ///   `any Proto` cannot demand that statically, so a non-conformer traps naming the extension
-    ///   to write.
+    /// - Parameters:
+    ///   - conformer: The port's type; it must conform to the boundary protocol.
+    ///   - name: The report's title; the type's name when `nil`.
+    ///   - expected: The verdict the build must earn.
+    ///   - intent: The deltas this build is meant to produce; `.none` asks for parity.
+    ///   - directory: Where the HTML report goes; Haruspec's temp `HaruspecReports` folder when `nil`.
+    /// - Returns: The verdict.
+    /// - Throws: `SpecCatalog.CheckFailure` unless the build earned `expected`.
+    /// - Precondition: The spec derives construction (`derivedFrom:` a catalog whose protocol pastes
+    ///   its `init`); otherwise the trap says to author the build with the closure form. A
+    ///   non-conformer traps naming the extension to write.
     @discardableResult
     func check(
         _ conformer: Any.Type,
@@ -70,46 +89,13 @@ public extension Spec {
         declaring intent: Intent = .none,
         reportsIn directory: URL? = nil
     ) async throws -> SpecVerdict {
-        guard let construct = makeConformer else {
-            preconditionFailure(
-                "spec '\(self.name)' derives no construction, so it cannot build \(conformer) — paste the "
-                    + "init into the @Haruspec protocol, or author the build: "
-                    + "check(\"\(conformer)\") { context in … }"
-            )
-        }
-        return try await check(
+        try await check(
             name ?? String(describing: conformer),
             expecting: expected,
             declaring: intent,
-            reportsIn: directory
-        ) { construct($0, conformer) }
-    }
-}
-
-public extension SpecProviding {
-    /// Verifies one build against this declaration's baseline and throws unless it earned `expected` —
-    /// the whole body of a migration test case, called on the spec type itself.
-    @discardableResult
-    func check(
-        _ name: String,
-        expecting expected: TraceDiff.Verdict = .equivalent,
-        declaring intent: Intent = .none,
-        reportsIn directory: URL? = nil,
-        _ make: @escaping (SeamContext) -> System
-    ) async throws -> SpecVerdict {
-        try await spec.check(name, expecting: expected, declaring: intent, reportsIn: directory, make)
-    }
-
-    /// Verifies a build the spec constructs itself — see `Spec.check(_:named:expecting:declaring:reportsIn:)`.
-    @discardableResult
-    func check(
-        _ conformer: Any.Type,
-        named name: String? = nil,
-        expecting expected: TraceDiff.Verdict = .equivalent,
-        declaring intent: Intent = .none,
-        reportsIn directory: URL? = nil
-    ) async throws -> SpecVerdict {
-        try await spec.check(conformer, named: name, expecting: expected, declaring: intent, reportsIn: directory)
+            reportsIn: directory,
+            spec.constructing(conformer)
+        )
     }
 }
 

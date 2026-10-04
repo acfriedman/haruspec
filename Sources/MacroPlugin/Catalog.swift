@@ -29,8 +29,8 @@ enum CatalogEmitter {
         let (entries, properties) = derivedEntries(of: proto, labelRoot: label)
 
         // With a pasted init requirement, construction derives: the forwarder's `init(resolving:_:)`
-        // builds any conformer from its metatype, so `.system { }` and the candidate's construction
-        // closure both collapse into the catalog.
+        // builds any conformer from its metatype, so the baseline's and the candidate's construction
+        // closures both collapse into the catalog.
         let forwarder = "Traced\(protoName)"
         var systemEntry = ""
         let hasPastedInit = proto.memberBlock.members.contains { $0.decl.is(InitializerDeclSyntax.self) }

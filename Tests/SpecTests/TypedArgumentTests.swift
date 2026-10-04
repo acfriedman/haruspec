@@ -76,7 +76,6 @@ final class TypedArgumentTests: XCTestCase {
 
     private func addSpec(_ name: String) -> Spec<TypedCart> {
         Spec<TypedCart>(name)
-            .system(makeGood)
             .operations {
                 Op("add", varying: .oneOf("COFFEE", "MUG", "BEANS"), .int(1 ... 20)) { cart, sku, quantity in
                     cart.add(sku: sku, quantity: quantity)
@@ -96,7 +95,6 @@ final class TypedArgumentTests: XCTestCase {
 
     func testANamedArgumentKeysAndPrintsUnderThatName() {
         let spec = Spec<TypedCart>("typed.named")
-            .system(makeGood)
             .operations {
                 Op(
                     "add",
@@ -112,7 +110,6 @@ final class TypedArgumentTests: XCTestCase {
 
     func testTheStringFormStillWorksAlongsideTheTypedOne() {
         let spec = Spec<TypedCart>("typed.mixed")
-            .system(makeGood)
             .operations {
                 Op("add", varying: .oneOf("COFFEE", "MUG")) { cart, sku in
                     cart.add(sku: sku, quantity: 1)
@@ -132,7 +129,7 @@ final class TypedArgumentTests: XCTestCase {
     func testATypedArgumentIsActuallySweptOverItsDomain() async {
         let spec = addSpec("typed.sweep").vary { Ordering(max: 4, repeating: 2) }
         let recording = Cassette()
-        _ = await spec.capture(make: spec.makeSystem, order: spec.explorationOrder(), cassette: recording)
+        _ = await spec.capture(make: makeGood, order: spec.explorationOrder(), cassette: recording)
         let plan = spec.explorationPlan(golden: recording.snapshot())
 
         let quantities = Set(plan.cassettes(forOrdering: 0).flatMap { cassette in
@@ -153,17 +150,17 @@ final class TypedArgumentTests: XCTestCase {
     }
 
     func testABugAtTheTopOfATypedArgumentsRangeIsCaught() async {
-        let spec = addSpec("typed.catch").vary { Ordering(max: 2, repeating: 2) }
+        let spec = addSpec("typed.catch").vary { Ordering(max: 2, repeating: 2) }.baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: makeTopOfRangeBug)
+        let verdict = await spec.verify(candidate: makeTopOfRangeBug)
 
         XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
     }
 
     func testASweptTypedArgumentEarnsDomainCoverageWhenItHolds() async {
-        let spec = addSpec("typed.coverage").vary { Ordering(max: 2, repeating: 2) }
+        let spec = addSpec("typed.coverage").vary { Ordering(max: 2, repeating: 2) }.baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: makeGood)
+        let verdict = await spec.verify(candidate: makeGood)
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
         XCTAssertEqual(verdict.coverage.domainExercised, ["add.0", "add.1"])
@@ -171,7 +168,6 @@ final class TypedArgumentTests: XCTestCase {
 
     func testACounterexampleNamesTheArgumentRatherThanAStringKey() async {
         let spec = Spec<TypedCart>("typed.counterexample")
-            .system(makeGood)
             .operations {
                 Op(
                     "add",
@@ -183,8 +179,9 @@ final class TypedArgumentTests: XCTestCase {
                 Op("total") { _ = $0.total() }.last()
             }
             .vary { Ordering(max: 2, repeating: 2) }
+            .baselined(on: makeGood)
 
-        let verdict = await spec.verify(against: makeTopOfRangeBug)
+        let verdict = await spec.verify(candidate: makeTopOfRangeBug)
 
         XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
         XCTAssertTrue(
@@ -197,7 +194,6 @@ final class TypedArgumentTests: XCTestCase {
 
     func testThreeArgumentsTravelAsOneGeneratedVector() {
         let spec = Spec<TypedCart>("typed.three")
-            .system(makeGood)
             .operations {
                 Op(
                     "add",

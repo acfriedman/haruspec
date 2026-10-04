@@ -506,47 +506,22 @@ public extension Spec {
 }
 
 public extension Spec {
-    /// The collapsed spec: name, derived catalog, baseline, and authored residue in one entry point.
-    /// The baseline is built and wrapped along the same path `check(SwiftCart.self)` runs a port
-    /// through, so the two sides differ in nothing but the conformer.
+    /// The collapsed spec: name, derived catalog, and authored residue in one entry point. Names no
+    /// implementation — a test binds the baseline with ``baselined(on:)``, built and wrapped along the
+    /// same path its ports are checked through.
     ///
     /// - Parameters:
     ///   - name: The spec's name, unique within the catalog.
     ///   - source: The derived catalog, as `@Haruspec` generated it from the boundary protocol.
-    ///   - baseline: The legacy type the candidates are compared against.
     ///   - build: Amendments to the derived ops; empty leaves the catalog as derived.
-    /// - Precondition: The catalog derives construction — a pasted `init` requirement and a forwarder
-    ///   sibling; a protocol without one authors `.system { }` and uses ``init(_:derivedFrom:overriding:)``.
-    ///   `baseline` conforms to the boundary protocol; one that does not traps at the first capture,
-    ///   naming the extension to write.
     ///
     /// Exploration runs at the derived defaults, and `.vary` overrides them. The whole spec for a
     /// derived catalog reads:
     ///
-    ///     Spec<Cart>("cart.objc-to-swift", derivedFrom: DerivedCart.self, baseline: CartManager.self) {
+    ///     Spec<Cart>("cart", derivedFrom: DerivedCart.self) {
     ///         Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
     ///         Amend("checkout").last()
     ///     }
-    init<D: DerivedOperations>(
-        _ name: String,
-        derivedFrom source: D.Type,
-        baseline: Any.Type,
-        @OperationOverridesBuilder<S> overriding build: () -> [OperationOverride<S>] = { [] }
-    ) where D.System == S {
-        self.init(name, derivedFrom: source, overriding: build)
-        guard let derived = D.derivedSystem else {
-            preconditionFailure(
-                "\(D.self) derives no construction, so it cannot build \(baseline) — paste the "
-                    + "baseline's init into the @Haruspec protocol, or author .system { context in … } "
-                    + "and drop `baseline:`"
-            )
-        }
-        self = system { derived($0, baseline) }
-    }
-
-    /// The collapsed spec with construction authored: name, derived catalog, and the authored
-    /// residue, with `.system { }` still to follow. For a protocol that pastes its `init`, prefer
-    /// `init(_:derivedFrom:baseline:overriding:)`.
     init<D: DerivedOperations>(
         _ name: String,
         derivedFrom source: D.Type,

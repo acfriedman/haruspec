@@ -13,11 +13,10 @@ final class LegacyGauge: Gauge {
     }
 }
 
-@Continuous
+@Continuous(baseline: LegacyGauge.init)
 struct GaugeSpec: SpecProviding {
     var spec: Spec<Gauge> {
         Spec<Gauge>("gauge.continuous")
-            .system { _ in LegacyGauge() }
             .operations { Op("read") { gauge in _ = gauge.reading() } }
     }
 }
@@ -26,7 +25,7 @@ struct GaugeSpec: SpecProviding {
 struct ContinuousMacroTests {
     @Test
     func theEmittedSuiteRunsNothingWithoutAMode() {
-        #expect(GaugeSpec().continuousModes(environment: [:]).isEmpty)
+        #expect(GaugeSpec().baselined(on: LegacyGauge.init).continuousModes(environment: [:]).isEmpty)
         #expect(ContinuousSuite(GaugeSpecContinuous.self)?.path == "GaugeSpecContinuous")
     }
 }

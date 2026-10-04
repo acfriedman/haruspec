@@ -210,7 +210,7 @@ enum ForwarderEmitter {
     /// the capture's notification center for a `NotificationCenter`, the conformance-matched
     /// synthesized double for a collaborator boundary — and the conformer is built through the
     /// requirement itself, then wrapped. What this cannot resolve, `resolve` reports at spec
-    /// construction with the authored `.system { }` spelled out.
+    /// construction with the authored `.baselined { }` spelled out.
     private static func resolvingInit(_ initializer: InitializerDeclSyntax, wrapped: String) -> String {
         let arguments = initializer.signature.parameterClause.parameters.map { param -> String in
             let external = param.firstName.text

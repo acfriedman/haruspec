@@ -52,9 +52,8 @@ final class AuditGateTests: XCTestCase {
             .deletingLastPathComponent()
     }
 
-    private func ledger(system: @escaping (SeamContext) -> AuditedLedger) -> Spec<AuditedLedger> {
+    private var ledger: Spec<AuditedLedger> {
         Spec<AuditedLedger>("audit.ledger")
-            .system(system)
             .operations {
                 Op("add") { ledger, seams in
                     ledger.add(cents: Int(seams.int("cents", default: 500)))
@@ -69,8 +68,8 @@ final class AuditGateTests: XCTestCase {
     // MARK: - The gate
 
     func testAnUndeclaredBypassAbstainsNamingTheChannel() async {
-        let verdict = await ledger(system: makeBypassingLedger)
-            .verify(against: makeBypassingLedger)
+        let verdict = await ledger.baselined(on: makeBypassingLedger)
+            .verify(candidate: makeBypassingLedger)
             .audited(against: packageRoot, declaring: .none)
 
         XCTAssertEqual(
@@ -88,9 +87,10 @@ final class AuditGateTests: XCTestCase {
     }
 
     func testAnAuditFindsTheCheckoutAboveTheCallingFile() async {
-        let verdict = await ledger(system: makeBypassingLedger)
+        let verdict = await ledger
             .accepts(uncaptured: "NotificationCenter.default")
-            .verify(against: makeBypassingLedger)
+            .baselined(on: makeBypassingLedger)
+            .verify(candidate: makeBypassingLedger)
             .audited()
 
         XCTAssertEqual(verdict.qualification.blindSpots, ["NotificationCenter.default (declared)"])
@@ -107,9 +107,10 @@ final class AuditGateTests: XCTestCase {
         // The declaration lives on the spec; the audit is invoked explicitly on the returned verdict.
         // The two audit paths (env-driven inside the verify, explicit afterwards) must resolve the
         // same acceptances, so the acceptance rides the verdict to wherever the audit happens.
-        let verdict = await ledger(system: makeBypassingLedger)
+        let verdict = await ledger
             .accepts(uncaptured: "NotificationCenter.default")
-            .verify(against: makeBypassingLedger)
+            .baselined(on: makeBypassingLedger)
+            .verify(candidate: makeBypassingLedger)
             .audited(against: packageRoot)
 
         XCTAssertEqual(verdict.verdict, .equivalent, "a declared channel does not gate\n\(verdict.report())")
@@ -117,8 +118,8 @@ final class AuditGateTests: XCTestCase {
     }
 
     func testADeclaredBlindSpotReturnsToGreenAndStaysNamed() async {
-        let verdict = await ledger(system: makeBypassingLedger)
-            .verify(against: makeBypassingLedger)
+        let verdict = await ledger.baselined(on: makeBypassingLedger)
+            .verify(candidate: makeBypassingLedger)
             .audited(
                 against: packageRoot,
                 declaring: Intent { Accepts(uncaptured: "NotificationCenter.default") }
@@ -134,8 +135,8 @@ final class AuditGateTests: XCTestCase {
     }
 
     func testDeclaringOneChannelSaysNothingAboutAnother() async {
-        let verdict = await ledger(system: makeBypassingLedger)
-            .verify(against: makeBypassingLedger)
+        let verdict = await ledger.baselined(on: makeBypassingLedger)
+            .verify(candidate: makeBypassingLedger)
             .audited(against: packageRoot, declaring: Intent { Accepts(uncaptured: "Timer / RunLoop") })
 
         XCTAssertEqual(verdict.verdict, .cannotVerify)
@@ -149,7 +150,7 @@ final class AuditGateTests: XCTestCase {
         // `.accepts(uncaptured:)` is the subject-fact form: the bypass lives in the baseline's own
         // sources, so no check site should have to repeat it. The merge is what the env-driven path
         // feeds the audit (`collectingOrigins`); the verdict shape it produces is pinned end to end.
-        let spec = ledger(system: makeBypassingLedger).accepts(uncaptured: "NotificationCenter.default")
+        let spec = ledger.accepts(uncaptured: "NotificationCenter.default")
 
         XCTAssertEqual(
             spec.mergingAcceptances(into: .none).acceptedBlindSpots,
@@ -162,7 +163,8 @@ final class AuditGateTests: XCTestCase {
         )
 
         let verdict = await spec
-            .verify(against: makeBypassingLedger)
+            .baselined(on: makeBypassingLedger)
+            .verify(candidate: makeBypassingLedger)
             .audited(against: packageRoot, declaring: spec.mergingAcceptances(into: .none))
 
         XCTAssertEqual(verdict.verdict, .equivalent)
@@ -170,8 +172,8 @@ final class AuditGateTests: XCTestCase {
     }
 
     func testTheFirstAuditWinsSoExplicitAndEnvDrivenCompose() async {
-        let once = await ledger(system: makeBypassingLedger)
-            .verify(against: makeBypassingLedger)
+        let once = await ledger.baselined(on: makeBypassingLedger)
+            .verify(candidate: makeBypassingLedger)
             .audited(against: packageRoot)
         let twice = once.audited(against: packageRoot)
 
@@ -187,9 +189,8 @@ final class AuditGateTests: XCTestCase {
 
     private func announcingLedger(
         make: @escaping (SeamContext) -> AuditedLedger
-    ) -> Spec<AuditedLedger> {
+    ) -> BaselinedSpec<AuditedLedger> {
         Spec<AuditedLedger>("audit.announcing-ledger")
-            .system(make)
             .operations {
                 Op("add") { ledger, seams in
                     ledger.add(cents: Int(seams.int("cents", default: 500)))
@@ -199,6 +200,7 @@ final class AuditGateTests: XCTestCase {
             .vary {
                 Seam("cents", .int(1 ... 100))
             }
+            .baselined(on: make)
     }
 
     func testAnInjectedCollaboratorsSourcesAreTheFixturesNotTheSubjects() async {
@@ -210,7 +212,7 @@ final class AuditGateTests: XCTestCase {
             AnnouncingLedger(center: ctx.notifications, announcer: ctx.double(DoubleAnnouncing.self))
         }
         let verdict = await announcingLedger(make: injected)
-            .verify(against: injected)
+            .verify(candidate: injected)
             .audited(against: packageRoot)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
@@ -228,7 +230,7 @@ final class AuditGateTests: XCTestCase {
             AnnouncingLedger(center: ctx.notifications, announcer: DoubleAnnouncing(ctx))
         }
         let verdict = await announcingLedger(make: bare)
-            .verify(against: bare)
+            .verify(candidate: bare)
             .audited(against: packageRoot)
 
         XCTAssertEqual(verdict.verdict, .cannotVerify)
@@ -238,8 +240,8 @@ final class AuditGateTests: XCTestCase {
     // MARK: - The clean case, and what "clean" is allowed to mean
 
     func testACleanSubjectClaimsAuditedOnlyAfterReadingItsSource() async {
-        let verdict = await ledger(system: makeInjectedLedger)
-            .verify(against: makeRestructuredLedger)
+        let verdict = await ledger.baselined(on: makeInjectedLedger)
+            .verify(candidate: makeRestructuredLedger)
             .audited(against: packageRoot, declaring: .none)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
@@ -247,8 +249,8 @@ final class AuditGateTests: XCTestCase {
     }
 
     func testAnAuditOverNoDeclarationsClaimsNothing() async {
-        let verdict = await ledger(system: makeInjectedLedger)
-            .verify(against: makeRestructuredLedger)
+        let verdict = await ledger.baselined(on: makeInjectedLedger)
+            .verify(candidate: makeRestructuredLedger)
             .noting(origins: [])
             .audited(against: packageRoot, declaring: .none)
 
@@ -259,8 +261,8 @@ final class AuditGateTests: XCTestCase {
     }
 
     func testAnUnreadableDeclarationGatesLikeABypass() async {
-        let verdict = await ledger(system: makeInjectedLedger)
-            .verify(against: makeRestructuredLedger)
+        let verdict = await ledger.baselined(on: makeInjectedLedger)
+            .verify(candidate: makeRestructuredLedger)
             .noting(origins: [TraceOrigin(label: "AuditedLedger", symbol: "LedgerThatMoved", source: nil)])
             .audited(against: packageRoot, declaring: .none)
 
@@ -281,7 +283,7 @@ final class AuditGateTests: XCTestCase {
     }
 
     func testAVerifyRunWithNoConfiguredRootLeavesTheVerdictUnaudited() async {
-        let verdict = await ledger(system: makeBypassingLedger).verify(against: makeBypassingLedger)
+        let verdict = await ledger.baselined(on: makeBypassingLedger).verify(candidate: makeBypassingLedger)
 
         XCTAssertNil(
             verdict.qualification.blindSpots,

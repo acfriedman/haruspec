@@ -3,7 +3,7 @@ import HaruspecCore
 import HaruspecSeams
 import HaruspecTrace
 
-// The Continuous (PR) shape: one class, two *builds*. The Campaign shape (`verify(against:)`) diffs two
+// The Continuous (PR) shape: one class, two *builds*. The Campaign shape (`verify(candidate:)`) diffs two
 // implementations coexisting as types in one build; a PR has only one — base and branch are separate
 // checkouts. `record()` runs on the base build and pins the whole explored input surface (call
 // orderings × seam cassettes) together with the golden trace each input produced. `verify(replaying:)`
@@ -178,25 +178,26 @@ public extension SpecPlan {
 
 // MARK: - Record / verify across builds
 
-public extension Spec {
-    /// Runs this spec's system across the whole explored surface (call orderings × seam cassettes)
-    /// and pins every (input, golden trace) pair into a `SpecPlan`. Run on the **base** build; the
-    /// first probe is the declared order under the golden cassette — the representative run.
-    func record() async -> SpecPlan {
+extension Spec {
+    /// Records the plan of `baseline`'s behavior across the explored surface.
+    ///
+    /// - Parameter baseline: Builds a fresh baseline per capture.
+    /// - Returns: The plan, named for the spec.
+    func record(baseline: (SeamContext) -> S) async -> SpecPlan {
         let recording = Cassette(recordingPreferring: goldenReadings)
-        _ = await capture(make: makeSystem, order: explorationOrder(), cassette: recording)
+        _ = await capture(make: baseline, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
 
-        // The same resolved surface `verify(against:)` explores — one budget, spent identically on
+        // The same resolved surface `verify(candidate:)` explores — one budget, spent identically on
         // both sides of the build boundary, so the plan's size is the dial the author declared.
         let plan = explorationPlan(golden: golden)
 
         let declaredLabels = operations.map(\.label)
-        var probes = await [probe(order: operations, cassette: golden)]
+        var probes = await [probe(baseline, order: operations, cassette: golden)]
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index)
                 where !(order.map(\.label) == declaredLabels && cassette.tracks == golden.tracks) {
-                await probes.append(probe(order: order, cassette: cassette))
+                await probes.append(probe(baseline, order: order, cassette: cassette))
             }
         }
 
@@ -211,45 +212,42 @@ public extension Spec {
         )
     }
 
-    /// `record()` and writes the plan artifact.
-    @discardableResult
-    func record(to url: URL) async throws -> SpecPlan {
-        let plan = await record()
-        try plan.write(to: url)
-        return plan
-    }
-
-    /// Cross-build verify: replays every probe's recorded inputs into the **current** build's system and
-    /// diffs against the stored golden traces. Divergence semantics match `verify(against:)` except
-    /// at the exit: no shrink (shrunk orderings have no recorded golden to compare against). Like it,
-    /// a red walks every probe, reporting the richest failing case and carrying every one
-    /// (`FailingCases`); intent-declared deltas are absorbed and the residual
-    /// collateral gates. Inputs the current build
-    /// can't reproduce (a renamed/removed op, a seam read past the recording) downgrade an otherwise
-    /// EQUIVALENT verdict to CANNOT-VERIFY via `.unrecorded` coverage gaps.
+    /// Replays `plan` into `build` `replays` times and qualifies the first pass by their agreement.
     ///
-    /// The whole replay runs `replays` times (see `Stability.defaultReplays`), and every pass must
-    /// reach the same verdict with the same divergence inventory — disagreement flips the verdict to
-    /// UNSTABLE and carries the run-to-run delta rather than either pass (see `Stability`). The
-    /// passes are sequential and share nothing but the immutable plan; run 1's verdict is the
-    /// representative the artifact keeps.
+    /// - Parameters:
+    ///   - plan: A plan recorded on the base build.
+    ///   - build: Builds a fresh current-build system per capture.
+    ///   - intent: The deltas the change is meant to produce; `.none` asks for parity.
+    ///   - replays: How many passes must agree; at least one.
+    /// - Returns: The first pass's verdict, qualified by the agreement across passes.
     func verify(
         replaying plan: SpecPlan,
-        declaring intent: Intent = .none,
-        replays: Int = Stability.defaultReplays
+        into build: (SeamContext) -> S,
+        declaring intent: Intent,
+        replays: Int
     ) async -> SpecVerdict {
         precondition(replays >= 1, "verify(replaying:) needs at least one replay pass, got \(replays)")
         return await collectingOrigins(declaring: intent) {
             var passes: [SpecVerdict] = []
             for _ in 0 ..< replays {
-                await passes.append(verifyOnce(replaying: plan, declaring: intent))
+                await passes.append(verifyOnce(replaying: plan, into: build, declaring: intent))
             }
             return passes[0].qualified(by: .measured(over: passes))
         }
     }
 
-    /// One replay pass — the primitive `verify(replaying:)` repeats and compares.
-    private func verifyOnce(replaying plan: SpecPlan, declaring intent: Intent) async -> SpecVerdict {
+    /// Runs one replay pass, the primitive the replay verify repeats and compares.
+    ///
+    /// - Parameters:
+    ///   - plan: A plan recorded on the base build.
+    ///   - build: Builds a fresh current-build system per capture.
+    ///   - intent: The deltas the change is meant to produce; `.none` asks for parity.
+    /// - Returns: This pass's verdict.
+    private func verifyOnce(
+        replaying plan: SpecPlan,
+        into build: (SeamContext) -> S,
+        declaring intent: Intent
+    ) async -> SpecVerdict {
         let surface = replaySurface(of: plan)
 
         var replays: [Cassette] = []
@@ -261,7 +259,7 @@ public extension Spec {
         for probe in surface.replayable {
             let replay = Cassette(replaying: probe.cassette)
             let current = await capture(
-                make: makeSystem,
+                make: build,
                 order: probe.ordering.compactMap { surface.opsByLabel[$0] },
                 cassette: replay
             )
@@ -367,22 +365,23 @@ public extension Spec {
         )
     }
 
-    /// `verify(replaying:)` against a plan artifact on disk.
-    func verify(
-        replayingContentsOf url: URL,
-        declaring intent: Intent = .none,
-        replays: Int = Stability.defaultReplays
-    ) async throws -> SpecVerdict {
-        try await verify(replaying: SpecPlan(contentsOf: url), declaring: intent, replays: replays)
-    }
-
     // MARK: - Machinery
 
-    /// One golden probe: replays `cassette` into the base system on `order` and pins the trace with
-    /// the cassette as the base system left it, so a replay answers each call as it was answered.
-    private func probe(order: [Op<S>], cassette: CassetteData) async -> SpecProbe {
+    /// Replays `cassette` into the base system on `order` and pins the trace with the cassette as the
+    /// base system left it, so a replay answers each call as it was answered.
+    ///
+    /// - Parameters:
+    ///   - baseline: Builds a fresh base system per capture.
+    ///   - order: The op sequence to drive.
+    ///   - cassette: The seam readings to replay.
+    /// - Returns: The probe: ordering, the cassette as consumed, and the golden trace.
+    private func probe(
+        _ baseline: (SeamContext) -> S,
+        order: [Op<S>],
+        cassette: CassetteData
+    ) async -> SpecProbe {
         let replay = Cassette(replaying: cassette)
-        let trace = await capture(make: makeSystem, order: order, cassette: replay)
+        let trace = await capture(make: baseline, order: order, cassette: replay)
         return SpecProbe(ordering: order.map(\.label), cassette: replay.snapshot(), golden: trace)
     }
 }

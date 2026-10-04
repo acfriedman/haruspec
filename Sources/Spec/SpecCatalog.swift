@@ -1,16 +1,16 @@
 import Foundation
 import HaruspecCore
 
-// Everything above this point is generic over the system under test, so `Spec<Cart>` and
-// `Spec<Checkout>` cannot sit in one array. `SpecEntry` erases that parameter down to what
+// A bound spec is generic over the system under test, so `BaselinedSpec<Cart>` and
+// `BaselinedSpec<Checkout>` cannot sit in one array. `SpecEntry` erases that parameter down to what
 // tooling actually needs — a name, the candidates it declares, and how to run them — which is what
 // lets an app hold a *catalog* of specs and drive them all from one place.
 //
-// Two shapes, and the first is the one that scales. `SpecProviding`'s own `check(_:expecting:_:)` lets
-// a spec carry its *own* suite in its own file, so a project with fifty specs keeps no central list — a
-// new spec is a new file and nothing else. `SpecCatalog` is the alternative for a project that would
-// rather drive everything from one place: it flattens differently-typed specs into plain
-// `spec/candidate` strings, at the cost of declaring `.candidates` and a line to remember per spec.
+// Two shapes, and the first is the one that scales. A suite binding its spec (`.baselined(on:)`) and
+// calling `check(_:expecting:_:)` carries its *own* tests in its own file, so a project with fifty specs
+// keeps no central list — a new spec is a new file and nothing else. `SpecCatalog` is the alternative for
+// a project that would rather drive everything from one place: it flattens differently-typed bindings
+// into plain `spec/candidate` strings, at the cost of declaring `.candidates` and a line per spec.
 
 /// Declares one spec by conformance — the same shape SwiftUI asks of a `View`: a type whose
 /// whole job is to answer one property. `System` is inferred from the return type, so an author
@@ -20,20 +20,13 @@ import HaruspecCore
 ///         var spec: Spec<Cart> { … }
 ///     }
 ///
-/// Conforming is what lets a catalog take the declarations directly (`SpecCatalog(CartMigration())`)
-/// rather than each caller remembering to erase with `.entry()`.
+/// The declaration names no implementation; a test binds the baseline with ``Spec/baselined(on:)``.
 public protocol SpecProviding {
     associatedtype System
     var spec: Spec<System> { get }
 }
 
-public extension SpecProviding {
-    /// Erases this declaration for a `SpecCatalog`. Not on the protocol itself: the signature
-    /// mentions no associated type, so it stays callable on `any SpecProviding`.
-    func entry() -> SpecEntry {
-        spec.entry()
-    }
-
+public extension BaselinedSpec {
     /// The continuous side to run, or empty — which is what keeps an ordinary test run untouched.
     ///
     /// A plan path following the `<spec>.plan.json[.gz]` convention also scopes the mode to the
@@ -49,7 +42,7 @@ public extension SpecProviding {
         }
         if let path = environment[ContinuousRun.planPathKey],
            let planSpec = ContinuousRun.specName(inPlanPath: path),
-           planSpec != spec.name {
+           planSpec != name {
             return []
         }
         return [mode]
@@ -95,14 +88,14 @@ public extension SpecProviding {
             guard let run = try ContinuousRun.fromEnvironment(environment), mode == run.mode else {
                 throw SpecCatalog.CheckFailure(description: "no \(ContinuousMode.environmentKey) set")
             }
-            outcome = await spec.runContinuous(run, suite: suite)
+            outcome = await runContinuous(run, suite: suite)
         } catch let failure as SpecCatalog.CheckFailure {
             throw failure
         } catch {
             throw SpecCatalog.CheckFailure(description: "\(error)")
         }
         SpecCatalog.report(
-            "\(spec.name) · \(mode.rawValue)",
+            "\(name) · \(mode.rawValue)",
             outcome.summary,
             htmlReportPath: outcome.htmlReportPath
         )
@@ -121,8 +114,10 @@ public struct SpecEntry {
     let runContinuous: (ContinuousRun, ContinuousSuite?) async -> ContinuousOutcome
 }
 
-public extension Spec {
-    /// Erases this spec for a `SpecCatalog`.
+public extension BaselinedSpec {
+    /// Erases this binding for a `SpecCatalog`.
+    ///
+    /// - Returns: The entry, named for the spec and listing its declared candidates.
     func entry() -> SpecEntry {
         SpecEntry(
             name: name,
@@ -149,13 +144,13 @@ public struct SpecCatalog {
         self.init(entries)
     }
 
-    /// The usual spelling: hand the catalog the declarations themselves.
-    public init(_ providers: [any SpecProviding]) {
-        self.init(providers.map { $0.entry() })
-    }
-
-    public init(_ providers: any SpecProviding...) {
-        self.init(providers.map { $0.entry() })
+    /// The usual spelling: hand the catalog the bound specs themselves, each over its own system.
+    ///
+    /// - Parameter specs: The bindings, in catalog order.
+    public init<each System>(_ specs: repeat BaselinedSpec<each System>) {
+        var entries: [SpecEntry] = []
+        repeat entries.append((each specs).entry())
+        self.init(entries)
     }
 
     // MARK: Migration

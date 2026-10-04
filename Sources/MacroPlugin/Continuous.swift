@@ -11,20 +11,25 @@ import SwiftSyntaxMacros
 /// ordinary run. It names itself, so the census records which suite to run locally.
 public struct ContinuousMacro: PeerMacro {
     public static func expansion(
-        of _: AttributeSyntax,
+        of attribute: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
         in _: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
         guard let spec = declaration.as(StructDeclSyntax.self) else {
             throw MacroError("@Continuous can only be attached to a struct conforming to SpecProviding")
         }
+        guard case let .argumentList(arguments) = attribute.arguments,
+              let baseline = arguments.first(where: { $0.label?.text == "baseline" })?.expression else {
+            throw MacroError("@Continuous needs the baseline CI watches: @Continuous(baseline: LegacyType.self)")
+        }
         let name = spec.name.text
+        let subject = "\(name)().baselined(on: \(baseline.trimmedDescription))"
         return [
             """
             struct \(raw: name)Continuous {
-                @Testing.Test(arguments: \(raw: name)().continuousModes())
+                @Testing.Test(arguments: \(raw: subject).continuousModes())
                 func continuousRunHolds(_ mode: ContinuousMode) async throws {
-                    try await \(raw: name)().checkContinuous(mode, in: Self.self)
+                    try await \(raw: subject).checkContinuous(mode, in: Self.self)
                 }
             }
             """

@@ -208,7 +208,6 @@ final class SpecPrototypeTests: XCTestCase {
     /// The entire authored surface — this is all a developer writes. No recorder, interceptor, or context.
     private func cart() -> Spec<PromoCart> {
         Spec<PromoCart>("promo-cart")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -219,23 +218,23 @@ final class SpecPrototypeTests: XCTestCase {
     }
 
     func testSpecPrototype() async {
-        let base = cart() // declared order only
-        let explored = base.vary { Ordering(max: 50) } // + call-ordering variation
+        let base = cart().baselined(on: makeGood) // declared order only
+        let explored = cart().vary { Ordering(max: 50) }.baselined(on: makeGood) // + call-ordering variation
 
         print("=== SCENARIO PROTOTYPE ===")
 
         print("\n── 1. Good vs Refactor · orderings explored → EQUIVALENT ──")
-        let refactor = await explored.verify(against: makeRefactor)
+        let refactor = await explored.verify(candidate: makeRefactor)
         print(refactor.report())
         XCTAssertEqual(refactor.verdict, .equivalent)
 
         print("\n── 2. Good vs OrderBug · declared order only → EQUIVALENT (bug hidden) ──")
-        let single = await base.verify(against: makeOrderBug)
+        let single = await base.verify(candidate: makeOrderBug)
         print(single.report())
         XCTAssertEqual(single.verdict, .equivalent, "the usual order never triggers the order bug")
 
         print("\n── 3. Good vs OrderBug · orderings explored → DIVERGED (caught) ──")
-        let caught = await explored.verify(against: makeOrderBug)
+        let caught = await explored.verify(candidate: makeOrderBug)
         print(caught.report())
         XCTAssertEqual(caught.verdict, .diverged, "exploring orderings finds the order-dependent regression")
         XCTAssertNotNil(caught.failingOrder)
@@ -244,18 +243,18 @@ final class SpecPrototypeTests: XCTestCase {
     }
 
     func testArgParameterizationCatchesValueBug() async {
-        let base = cart() // golden coffeeQty = 10 → subtotal 9990 (benign)
-        let swept = base.vary { Seam("coffeeQty", .int(1 ... 20)) }
+        let base = cart().baselined(on: makeGood) // golden coffeeQty = 10 → subtotal 9990 (benign)
+        let swept = cart().vary { Seam("coffeeQty", .int(1 ... 20)) }.baselined(on: makeGood)
 
         print("=== ARG PARAMETERIZATION ===")
 
         print("\n── Good vs RoundBug · fixed qty (10) → EQUIVALENT (bug hidden) ──")
-        let fixed = await base.verify(against: makeRoundBug)
+        let fixed = await base.verify(candidate: makeRoundBug)
         print(fixed.report())
         XCTAssertEqual(fixed.verdict, .equivalent, "9990 is a multiple of 10 — truncation == rounding here")
 
         print("\n── Good vs RoundBug · coffeeQty swept over 1...20 → DIVERGED (caught) ──")
-        let caught = await swept.verify(against: makeRoundBug)
+        let caught = await swept.verify(candidate: makeRoundBug)
         print(caught.report())
         XCTAssertEqual(caught.verdict, .diverged, "some quantity makes truncation ≠ rounding")
 
@@ -265,14 +264,13 @@ final class SpecPrototypeTests: XCTestCase {
     /// The spec declares *no* `.observe(...)` allowlist, so capture is all-notifications by default.
     private func analyticsCart() -> Spec<AnalyticsCart> {
         Spec<AnalyticsCart>("analytics-cart")
-            .system(makeTracking)
             .operations { Op("add") { $0.addItem() } }
     }
 
     /// Capture-all default: a channel the spec never listed (`AnalyticsDidTrack`) is still watched,
     /// so a candidate that drops it diverges as a `missingEvent` — no `.observe` call, no blind spot.
     func testCaptureAllDefaultSurfacesUnlistedDroppedNotification() async {
-        let verdict = await analyticsCart().verify(against: makeSilent)
+        let verdict = await analyticsCart().baselined(on: makeTracking).verify(candidate: makeSilent)
         XCTAssertEqual(
             verdict.verdict,
             .diverged,
@@ -290,7 +288,8 @@ final class SpecPrototypeTests: XCTestCase {
         // Via the `.ignore(notifications:)` convenience …
         let viaConvenience = await analyticsCart()
             .ignore(notifications: ["AnalyticsDidTrack"])
-            .verify(against: makeSilent)
+            .baselined(on: makeTracking)
+            .verify(candidate: makeSilent)
         XCTAssertEqual(
             viaConvenience.verdict,
             .equivalent,
@@ -300,7 +299,8 @@ final class SpecPrototypeTests: XCTestCase {
         // … and equivalently via the raw tolerance field.
         let viaTolerance = await analyticsCart()
             .tolerate(Tolerance(ignoredNotificationNames: ["AnalyticsDidTrack"]))
-            .verify(against: makeSilent)
+            .baselined(on: makeTracking)
+            .verify(candidate: makeSilent)
         XCTAssertEqual(
             viaTolerance.verdict,
             .equivalent,

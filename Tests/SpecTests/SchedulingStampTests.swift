@@ -151,12 +151,13 @@ final class OffMainDepot: Depot, @unchecked Sendable {
 // MARK: - Tests
 
 final class SchedulingStampTests: XCTestCase {
-    private var spec: Spec<any Depot> {
-        Spec<any Depot>("depot.scheduled", derivedFrom: DerivedDepot.self, baseline: LegacyDepot.self)
+    private var spec: BaselinedSpec<any Depot> {
+        Spec<any Depot>("depot.scheduled", derivedFrom: DerivedDepot.self)
             .vary {
                 Ordering(max: 4)
                 Budget(runs: 30)
             }
+            .baselined(on: LegacyDepot.self)
     }
 
     // MARK: The double holds the work
@@ -217,9 +218,9 @@ final class SchedulingStampTests: XCTestCase {
     }
 
     func testHeldWorkRecordsOnTheDomainItWasHandedTo() async {
-        let trace = await spec.capture(
-            make: spec.makeSystem,
-            order: spec.operations.filter { $0.label == "post" },
+        let trace = await spec.spec.capture(
+            make: spec.baseline,
+            order: spec.spec.operations.filter { $0.label == "post" },
             cassette: Cassette()
         )
 

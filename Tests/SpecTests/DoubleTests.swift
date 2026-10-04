@@ -90,10 +90,17 @@ private final class SilentGauge: Gauge {
     }
 }
 
+private func makeMeteredGauge(_ ctx: SeamContext) -> Gauge {
+    MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
+}
+
+private func makeSilentGauge(_ ctx: SeamContext) -> Gauge {
+    SilentGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
+}
+
 final class DoubleTests: XCTestCase {
     private func gauge(sweepingThreshold: Bool = false) -> Spec<Gauge> {
         var spec = Spec<Gauge>("double.gauge")
-            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self)) }
             .operations {
                 Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
                     gauge.add(value: Int(value))
@@ -113,9 +120,7 @@ final class DoubleTests: XCTestCase {
     }
 
     func testAGeneratedDoubleNeedsNoAuthoredImplementation() async {
-        let verdict = await gauge().verify(against: { ctx in
-            MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
-        })
+        let verdict = await gauge().baselined(on: makeMeteredGauge).verify(candidate: makeMeteredGauge)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertTrue(
@@ -129,9 +134,8 @@ final class DoubleTests: XCTestCase {
     }
 
     func testASynthesizedReturnSweepsWhenTheSpecDeclaresItsDomain() async {
-        let verdict = await gauge(sweepingThreshold: true).verify(against: { ctx in
-            MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
-        })
+        let verdict = await gauge(sweepingThreshold: true).baselined(on: makeMeteredGauge)
+            .verify(candidate: makeMeteredGauge)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertGreaterThan(
@@ -145,9 +149,7 @@ final class DoubleTests: XCTestCase {
         // tariff() -> Fee has no zero: the .generates factory builds it from seam reads, so the
         // surcharge lands in the payload deterministically. lastFee() -> Fee? defaults nil and
         // history() -> [Int] defaults empty with no declaration at all — "repeated" stays false.
-        let verdict = await gauge().verify(against: { ctx in
-            MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
-        })
+        let verdict = await gauge().baselined(on: makeMeteredGauge).verify(candidate: makeMeteredGauge)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
     }
@@ -157,9 +159,8 @@ final class DoubleTests: XCTestCase {
             .vary {
                 Seam("Metering.tariff.cents", .int(1 ... 9))
             }
-            .verify(against: { ctx in
-                MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
-            })
+            .baselined(on: makeMeteredGauge)
+            .verify(candidate: makeMeteredGauge)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertGreaterThan(
@@ -173,17 +174,15 @@ final class DoubleTests: XCTestCase {
     /// definition, and its field domains travel with it — swept and reported with no `.vary` at all.
     func testAModelsOwnGeneratorTravelsWithItsDomains() async {
         let spec = Spec<Gauge>("double.gauge.conformance")
-            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self)) }
             .operations {
                 Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
                     gauge.add(value: Int(value))
                 }
             }
             .generates(Fee.self)
+            .baselined(on: makeMeteredGauge)
 
-        let verdict = await spec.verify(against: { ctx in
-            MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
-        })
+        let verdict = await spec.verify(candidate: makeMeteredGauge)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertGreaterThan(
@@ -197,7 +196,6 @@ final class DoubleTests: XCTestCase {
     /// `Seam` on the type-scoped key wins over the generator's domain in either declaration order.
     func testASpecNarrowsAModelFieldWithAnExplicitSeam() async {
         let verdict = await Spec<Gauge>("double.gauge.narrowed")
-            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self)) }
             .operations {
                 Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
                     gauge.add(value: Int(value))
@@ -207,9 +205,8 @@ final class DoubleTests: XCTestCase {
                 Seam("Fee.cents", .int(7 ... 7))
             }
             .generates(Fee.self)
-            .verify(against: { ctx in
-                MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
-            })
+            .baselined(on: makeMeteredGauge)
+            .verify(candidate: makeMeteredGauge)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertGreaterThan(verdict.qualification.seamPositions["Fee.cents"] ?? 0, 0)
@@ -220,16 +217,14 @@ final class DoubleTests: XCTestCase {
     /// registered by the argument itself (no `.generates` call anywhere).
     func testAGeneratedModelAsAnOpArgument() async {
         let spec = Spec<Gauge>("double.gauge.argument")
-            .system { ctx in MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self)) }
             .operations {
                 Op("charge", varying: .generated(Fee.self), .int(0 ... 10).named("bump")) { gauge, fee, bump in
                     gauge.add(value: fee.cents + Int(bump))
                 }
             }
+            .baselined(on: makeMeteredGauge)
 
-        let verdict = await spec.verify(against: { ctx in
-            MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
-        })
+        let verdict = await spec.verify(candidate: makeMeteredGauge)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertGreaterThan(
@@ -245,9 +240,7 @@ final class DoubleTests: XCTestCase {
     }
 
     func testDroppingTheBoundaryCallDiverges() async {
-        let verdict = await gauge().verify(against: { ctx in
-            SilentGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
-        })
+        let verdict = await gauge().baselined(on: makeMeteredGauge).verify(candidate: makeSilentGauge)
 
         XCTAssertEqual(verdict.verdict, .diverged, "sink traffic gates: the drop is a missing Metering.record")
     }

@@ -11,7 +11,7 @@ import XCTest
 //   HaruspecTrace    — Haruspec.marker / Haruspec.interval, TraceRecorder, RecordingNotificationCenter, ManualClock
 //   HaruspecCore     — Tolerance, TraceDiff.Verdict
 //   HaruspecSeams    — Cassette, Seam, SeamClock, SeamDomain
-//   HaruspecSpec — Spec / Op / Seam / Ordering / .verify(against:)
+//   HaruspecSpec — Spec / Op / Seam / Ordering / .baselined(on:)
 //
 // It is also the empirical proof of the name-collision decision: this file calls both
 // `Haruspec.marker(...)` (the re-exported `enum Haruspec` from HaruspecTrace) AND uses the `Spec`
@@ -86,15 +86,15 @@ final class UmbrellaImportTests: XCTestCase {
     /// end-to-end. Also exercises the seam-value and ordering variation builders.
     func testSingleImportSurfacesSpecDSL() async {
         let spec = Spec<Cart>("umbrella-cart")
-            .system(makeGood)
             .operations {
                 Op("add") { cart, seams in cart.add(cents: 999, qty: Int(seams.int("qty", default: 2))) }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
             .tolerate(.strict) // ← Tolerance (HaruspecCore)
             .vary { Ordering(max: 10); Seam("qty", .int(1 ... 5)) } // ← Ordering / Seam / SeamDomain
+            .baselined(on: makeGood)
 
-        let verdict: SpecVerdict = await spec.verify(against: makeRefactor)
+        let verdict: SpecVerdict = await spec.verify(candidate: makeRefactor)
         let outcome: TraceDiff.Verdict = verdict.verdict // ← TraceDiff.Verdict (HaruspecCore)
         XCTAssertEqual(outcome, .equivalent, "a behavior-preserving refactor is EQUIVALENT")
         XCTAssertTrue(verdict.diff.divergences.isEmpty) // ← TraceDiff (HaruspecCore)
@@ -104,9 +104,9 @@ final class UmbrellaImportTests: XCTestCase {
     /// the visual companion to `report()`, self-contained enough to open over `file://`.
     func testHTMLReportIsReExported() async throws {
         let verdict = await Spec<Cart>("umbrella-html")
-            .system(makeGood)
             .operations { Op("checkout") { _ = $0.checkout() } }
-            .verify(against: makeRefactor)
+            .baselined(on: makeGood)
+            .verify(candidate: makeRefactor)
 
         let scenarioHTML: String = verdict.htmlReport() // ← SpecVerdict.htmlReport (HaruspecSpec)
         let diffHTML: String = verdict.diff.htmlReport() // ← TraceDiff.htmlReport (HaruspecCore)

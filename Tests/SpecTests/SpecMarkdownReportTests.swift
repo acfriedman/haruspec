@@ -91,9 +91,8 @@ private func makeGreedy(_ ctx: SeamContext) -> PromoCart {
 }
 
 final class SpecMarkdownReportTests: XCTestCase {
-    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Spec<PromoCart> {
+    private func cart(system: @escaping (SeamContext) -> PromoCart) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.markdown")
-            .system(system)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -105,6 +104,7 @@ final class SpecMarkdownReportTests: XCTestCase {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 10)
             }
+            .baselined(on: system)
     }
 
     func testDivergedMarkdownRendersTablesAndCounterexample() async {
@@ -280,7 +280,6 @@ final class SpecMarkdownReportTests: XCTestCase {
     func testOpDriftAbstentionNamesTheDrift() async {
         let plan = await cart(system: makeGood).record()
         let drifted = Spec<PromoCart>("promo-cart.markdown")
-            .system(makeRefactor)
             .operations {
                 Op("addEspresso") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -288,6 +287,7 @@ final class SpecMarkdownReportTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
+            .baselined(on: makeRefactor)
 
         let verdict = await drifted.verify(replaying: plan)
         XCTAssertEqual(verdict.verdict, .cannotVerify)

@@ -32,16 +32,19 @@ final class OpIdentityCaptureTests: XCTestCase {
         }
     }
 
+    private static func makeSubject(_ context: SeamContext) -> Subject {
+        Subject(queue: context.double(DoubleOpsQueue.self))
+    }
+
     func testEventsCarryTheOpTheyWereRecordedUnderAcrossTheQueueHop() async {
         let spec = Spec<Subject>("ops")
-            .system { context in Subject(queue: context.double(DoubleOpsQueue.self)) }
             .operations {
                 Op("first") { $0.act("first") }
                 Op("second") { $0.act("second") }
             }
             .observes(Observed("Subject.count") { $0.count })
 
-        let trace = await spec.capture(make: spec.makeSystem, order: spec.operations, cassette: Cassette())
+        let trace = await spec.capture(make: Self.makeSubject, order: spec.operations, cassette: Cassette())
         // An observed property records a series; the end-state snapshot is its last event.
         let ops = Dictionary(trace.events.map { ($0.label, $0.op) }, uniquingKeysWith: { _, last in last })
 
@@ -58,14 +61,13 @@ final class OpIdentityCaptureTests: XCTestCase {
 
     func testObservedStateIsSampledAtEverySettledPoint() async {
         let spec = Spec<Subject>("ops")
-            .system { context in Subject(queue: context.double(DoubleOpsQueue.self)) }
             .operations {
                 Op("first") { $0.act("first") }
                 Op("second") { $0.act("second") }
             }
             .observes(Observed("Subject.count") { $0.count })
 
-        let trace = await spec.capture(make: spec.makeSystem, order: spec.operations, cassette: Cassette())
+        let trace = await spec.capture(make: Self.makeSubject, order: spec.operations, cassette: Cassette())
         let samples = trace.events.filter { $0.label == "Subject.count" }
 
         XCTAssertEqual(samples.map(\.payload), [0, 1, 2, 2], "construction, each op, then the end state")
@@ -74,11 +76,10 @@ final class OpIdentityCaptureTests: XCTestCase {
 
     func testARepeatedOpIsTwoIdentities() async {
         let spec = Spec<Subject>("ops")
-            .system { context in Subject(queue: context.double(DoubleOpsQueue.self)) }
             .operations { Op("act") { $0.act("act") } }
         let order = [spec.operations[0], spec.operations[0]]
 
-        let trace = await spec.capture(make: spec.makeSystem, order: order, cassette: Cassette())
+        let trace = await spec.capture(make: Self.makeSubject, order: order, cassette: Cassette())
         let positions = trace.events.filter { $0.label == "act-sync" }.map(\.op?.position)
         XCTAssertEqual(positions, [0, 1])
     }

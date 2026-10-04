@@ -79,7 +79,6 @@ private func makeRoundBug(_ ctx: SeamContext) -> Till {
 final class SpecHTMLReportTests: XCTestCase {
     private func till() -> Spec<Till> {
         Spec<Till>("promo-till")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -97,8 +96,8 @@ final class SpecHTMLReportTests: XCTestCase {
     }
 
     func testDivergedSpecLeadsWithCounterexample() async {
-        let swept = till().vary { Seam("coffeeQty", .int(1 ... 20)) }
-        let verdict = await swept.verify(against: makeRoundBug)
+        let swept = till().vary { Seam("coffeeQty", .int(1 ... 20)) }.baselined(on: makeGood)
+        let verdict = await swept.verify(candidate: makeRoundBug)
         XCTAssertEqual(verdict.verdict, .diverged)
 
         let html = verdict.htmlReport()
@@ -112,7 +111,7 @@ final class SpecHTMLReportTests: XCTestCase {
     }
 
     func testEquivalentSpecRendersCleanPanel() async {
-        let verdict = await till().verify(against: makeGood)
+        let verdict = await till().baselined(on: makeGood).verify(candidate: makeGood)
         XCTAssertEqual(verdict.verdict, .equivalent)
         let html = verdict.htmlReport()
         assertSelfContained(html)

@@ -54,7 +54,7 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   Demonstrated end-to-end by `CartServiceV3` (a loyalty feature carrying a collateral dropped
   notification).
 - ✅ **Continuous (PR) shape — cross-build golden-master** — the two-*builds* analog of the Spec
-  DSL's two-*types* `verify(against:)`: `record()` on the base build pins the whole explored surface
+  DSL's two-*types* `verify(candidate:)`: `record()` on the base build pins the whole explored surface
   (call orderings × seam cassettes, each with its golden trace) into a serializable `SpecPlan`;
   `verify(replaying:)` on the changed build replays the *identical* inputs into current code and diffs
   against the stored goldens. `SpecVerdict` now routes through `VerificationResult` (coverage-aware,

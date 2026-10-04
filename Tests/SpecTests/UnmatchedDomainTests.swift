@@ -10,9 +10,8 @@ import XCTest
 /// runtime. Getting it wrong produced a green banner over a spec that swept nothing, and claimed the
 /// full seam-variant count while generating identical cassettes.
 final class UnmatchedDomainTests: XCTestCase {
-    private func spec(_ name: String, varying key: String) -> Spec<PromoCart> {
+    private func spec(_ name: String, varying key: String) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>(name)
-            .system { GoodCart(center: $0.notifications) }
             .operations {
                 Op("add") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("qty", default: 2)))
@@ -20,6 +19,7 @@ final class UnmatchedDomainTests: XCTestCase {
                 Op("checkout") { _ = $0.checkout() }.last()
             }
             .vary { Seam(key, .int(1 ... 20)) }
+            .baselined { GoodCart(center: $0.notifications) }
     }
 
     private func makeRefactor(_ context: SeamContext) -> PromoCart {
@@ -27,7 +27,7 @@ final class UnmatchedDomainTests: XCTestCase {
     }
 
     func testADomainNothingReadsCannotBeVerifiedOver() async {
-        let verdict = await spec("unmatched.typo", varying: "qtyy").verify(against: makeRefactor)
+        let verdict = await spec("unmatched.typo", varying: "qtyy").verify(candidate: makeRefactor)
 
         XCTAssertEqual(
             verdict.verdict,
@@ -38,7 +38,7 @@ final class UnmatchedDomainTests: XCTestCase {
     }
 
     func testTheMatchingKeyStillVerifiesCleanly() async {
-        let verdict = await spec("unmatched.correct", varying: "qty").verify(against: makeRefactor)
+        let verdict = await spec("unmatched.correct", varying: "qty").verify(candidate: makeRefactor)
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
         XCTAssertTrue(verdict.coverage.unmatchedDomains.isEmpty)
@@ -46,7 +46,7 @@ final class UnmatchedDomainTests: XCTestCase {
     }
 
     func testTheGapIsNamedInTheReport() async {
-        let report = await spec("unmatched.report", varying: "qtyy").verify(against: makeRefactor).report()
+        let report = await spec("unmatched.report", varying: "qtyy").verify(candidate: makeRefactor).report()
 
         XCTAssertTrue(report.contains("declared domain matched nothing: qtyy"), report)
     }
@@ -55,7 +55,7 @@ final class UnmatchedDomainTests: XCTestCase {
         // The variant count came from "did the spec declare any domain", which a typo satisfies. The
         // budget then bought 64 generations of the same cassette and the verdict called them variants.
         let explored = await spec("unmatched.variants", varying: "qtyy")
-            .verify(against: makeRefactor).exploration
+            .verify(candidate: makeRefactor).exploration
 
         XCTAssertEqual(explored.variantsPerOrdering, 1, "nothing can vary, so there is one input")
         XCTAssertFalse(explored.summary.contains("seam variants"), explored.summary)
@@ -63,14 +63,14 @@ final class UnmatchedDomainTests: XCTestCase {
 
     func testADomainSweptOverNothingReportsZeroRatherThanStayingSilent() async {
         // The report only appended the domain clause above 0%, which hid exactly the damning case.
-        let report = await spec("unmatched.zero", varying: "qtyy").verify(against: makeRefactor).report()
+        let report = await spec("unmatched.zero", varying: "qtyy").verify(candidate: makeRefactor).report()
 
         XCTAssertTrue(report.contains("domain-swept 0%"), report)
     }
 
     func testTheUnmatchedKeyCountsAgainstTheDeclaredSurface() async {
         // Leaving it out would report a fraction of a surface quietly smaller than the spec describes.
-        let verdict = await spec("unmatched.fraction", varying: "qtyy").verify(against: makeRefactor)
+        let verdict = await spec("unmatched.fraction", varying: "qtyy").verify(candidate: makeRefactor)
 
         XCTAssertTrue(verdict.coverage.declared.contains("qtyy"))
         XCTAssertFalse(verdict.coverage.exercised.contains("qtyy"))
@@ -80,15 +80,15 @@ final class UnmatchedDomainTests: XCTestCase {
     func testATypedArgumentCannotProduceThisGapAtAll() async {
         // There is no key to mistype: `.operations` harvests the domain against the key the read uses.
         let typed = Spec<PromoCart>("unmatched.typed")
-            .system { GoodCart(center: $0.notifications) }
             .operations {
                 Op("add", varying: .int(1 ... 20)) { cart, qty in
                     cart.addItem(priceCents: 999, qty: qty)
                 }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
+            .baselined { GoodCart(center: $0.notifications) }
 
-        let verdict = await typed.verify(against: makeRefactor)
+        let verdict = await typed.verify(candidate: makeRefactor)
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
         XCTAssertTrue(verdict.coverage.unmatchedDomains.isEmpty)

@@ -12,36 +12,49 @@ struct ProbeComparison {
     let evidence: ProbeEvidence
 }
 
-/// The golden template and everything resolved off it (see `goldenSurface()`).
+/// The golden template, the baseline that recorded it, and everything resolved off it.
 private struct GoldenSurface<S> {
+    let baseline: (SeamContext) -> S
     let golden: CassetteData
     let plan: ExplorationPlan<S>
     let qualification: Qualification
 }
 
-public extension Spec {
-    /// Differentially verifies a candidate implementation against this spec's baseline: runs both
-    /// against the *same* generated inputs (call orderings × seam values) and diffs. The baseline branch
-    /// is the oracle, so no expected output is needed. A divergence does not stop the sweep: every
-    /// probe runs, and the richest failing case is shrunk and reported (`RedCases`).
+public extension BaselinedSpec {
+    /// Differentially verifies a candidate against the bound baseline over the *same* generated inputs
+    /// (call orderings × seam values). The baseline is the oracle, so no expected output is needed.
     ///
-    /// `declaring` is the *candidate's* intent — the deltas this particular port is meant to produce.
-    /// It rides the verification call rather than the spec because the spec declares the subject's
-    /// behavior, which every candidate shares; what a given port changes is a fact about that port.
+    /// - Parameters:
+    ///   - candidate: Builds a fresh candidate per capture from the capture's context.
+    ///   - intent: The deltas this candidate is meant to produce; `.none` asks for parity.
+    /// - Returns: The verdict over the whole explored surface.
+    ///
+    /// A divergence does not stop the sweep: every probe runs, and the richest failing case is shrunk
+    /// and reported.
     func verify(
-        against candidate: @escaping (SeamContext) -> S,
+        candidate: @escaping (SeamContext) -> S,
         declaring intent: Intent = .none
     ) async -> SpecVerdict {
-        await collectingOrigins(declaring: intent) {
-            await differentialVerdict(against: candidate, declaring: intent)
+        await spec.collectingOrigins(declaring: intent) {
+            await spec.differentialVerdict(baseline: baseline, candidate: candidate, declaring: intent)
         }
     }
+}
 
-    private func differentialVerdict(
-        against candidate: @escaping (SeamContext) -> S,
+extension Spec {
+    /// Sweeps the explored surface comparing `candidate` to `baseline`.
+    ///
+    /// - Parameters:
+    ///   - baseline: Builds a fresh baseline per capture.
+    ///   - candidate: Builds a fresh candidate per capture.
+    ///   - intent: The deltas the candidate is meant to produce; `.none` asks for parity.
+    /// - Returns: The verdict over the whole explored surface.
+    func differentialVerdict(
+        baseline: @escaping (SeamContext) -> S,
+        candidate: @escaping (SeamContext) -> S,
         declaring intent: Intent
     ) async -> SpecVerdict {
-        let surface = await goldenSurface()
+        let surface = await goldenSurface(baseline: baseline)
         let (golden, plan, qualification) = (surface.golden, surface.plan, surface.qualification)
 
         // Sweep-wide intent facts (disclosure + unobserved intersection) — see `IntentSweep`.
@@ -50,7 +63,7 @@ public extension Spec {
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index) {
                 let run = await compare(
-                    make: makeSystem,
+                    make: baseline,
                     candidate: candidate,
                     order: order,
                     cassette: cassette,
@@ -76,7 +89,7 @@ public extension Spec {
         }
         // Held across the whole explored surface: the swept seams earn domain-coverage credit.
         var representative = await compare(
-            make: makeSystem,
+            make: baseline,
             candidate: candidate,
             order: operations,
             cassette: golden,
@@ -104,8 +117,16 @@ public extension Spec {
         let cassette: CassetteData
     }
 
-    /// The red exit of the live sweep: shrinks the reported case's order, pins what exposed it, and
-    /// carries every failing case.
+    /// Returns the red exit of the live sweep: the reported case's order shrunk, what exposed it
+    /// pinned, and every failing case carried.
+    ///
+    /// - Parameters:
+    ///   - run: The failing comparison the sweep reports.
+    ///   - failingCases: Every failing case the sweep found.
+    ///   - candidate: Builds a fresh candidate per capture.
+    ///   - surface: The golden surface the sweep explored, with the baseline that recorded it.
+    ///   - intent: The deltas the candidate is meant to produce.
+    /// - Returns: The diverged verdict.
     ///
     /// Makes no unobserved-intent claim: the reported diff is one case's, and a declaration it did
     /// not match may have held in another.
@@ -119,6 +140,7 @@ public extension Spec {
         var diff = run.diff
         diff.unobservedIntent = []
         let shrunk = await shrink(
+            baseline: surface.baseline,
             candidate: candidate,
             failing: run.order,
             cassette: run.cassette,
@@ -148,9 +170,12 @@ public extension Spec {
 
     /// Records the golden template — the declared order under live seams, the template every variation
     /// is derived from — and resolves the explored surface plus the qualification measured off it.
-    private func goldenSurface() async -> GoldenSurface<S> {
+    ///
+    /// - Parameter baseline: Builds a fresh baseline per capture.
+    /// - Returns: The baseline, its golden cassette, the exploration plan, and the qualification.
+    private func goldenSurface(baseline: @escaping (SeamContext) -> S) async -> GoldenSurface<S> {
         let recording = Cassette(recordingPreferring: goldenReadings)
-        let goldenTrace = await capture(make: makeSystem, order: explorationOrder(), cassette: recording)
+        let goldenTrace = await capture(make: baseline, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
         let plan = explorationPlan(golden: golden)
         let qualification = liveQualification(
@@ -158,7 +183,7 @@ public extension Spec {
             golden: golden,
             exploration: plan.exploration
         )
-        return GoldenSurface(golden: golden, plan: plan, qualification: qualification)
+        return GoldenSurface(baseline: baseline, golden: golden, plan: plan, qualification: qualification)
     }
 
     /// The longest call sequence exploration can produce: the declared ops, each repeated as far as
@@ -257,13 +282,14 @@ public extension Spec {
     }
 
     private func diverges(
+        baseline: (SeamContext) -> S,
         candidate: (SeamContext) -> S,
         order: [Op<S>],
         cassette: CassetteData,
         declaring intent: Intent
     ) async -> TraceDiff? {
         let diff = await compare(
-            make: makeSystem,
+            make: baseline,
             candidate: candidate,
             order: order,
             cassette: cassette,
@@ -329,7 +355,16 @@ public extension Spec {
 
     /// Delta-debugs the failing call sequence: drops ops that aren't needed to reproduce → the minimal
     /// order that still diverges (the "localize" the north star asks for, applied to sequencing).
+    ///
+    /// - Parameters:
+    ///   - baseline: Builds a fresh baseline per capture.
+    ///   - candidate: Builds a fresh candidate per capture.
+    ///   - failing: An op sequence that diverges under `cassette`.
+    ///   - cassette: The seam readings the failure was found under.
+    ///   - intent: The deltas the candidate is meant to produce.
+    /// - Returns: The shortest subsequence of `failing` found that still diverges.
     private func shrink(
+        baseline: @escaping (SeamContext) -> S,
         candidate: @escaping (SeamContext) -> S,
         failing: [Op<S>],
         cassette: CassetteData,
@@ -341,6 +376,7 @@ public extension Spec {
             var trial = minimal
             trial.remove(at: index)
             if !trial.isEmpty, await diverges(
+                baseline: baseline,
                 candidate: candidate,
                 order: trial,
                 cassette: cassette,

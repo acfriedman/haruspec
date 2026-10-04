@@ -23,9 +23,8 @@ final class QualificationTests: XCTestCase {
     private func cart(
         system: @escaping (SeamContext) -> PromoCart,
         promoLabel: String = "promo"
-    ) -> Spec<PromoCart> {
+    ) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.qualification")
-            .system(system)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -37,12 +36,13 @@ final class QualificationTests: XCTestCase {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 10)
             }
+            .baselined(on: system)
     }
 
     // MARK: - Assembly
 
     func testALiveVerdictCarriesTheSurfaceItWasMeasuredOver() async {
-        let verdict = await cart(system: makeGood).verify(against: makeRefactor)
+        let verdict = await cart(system: makeGood).verify(candidate: makeRefactor)
 
         XCTAssertEqual(verdict.verdict, .equivalent)
         XCTAssertTrue(verdict.qualification.coveredClasses.contains("PromoCart"))
@@ -79,7 +79,7 @@ final class QualificationTests: XCTestCase {
     /// The label is not a type name — `PromoCart` is answered here by two different classes — so the
     /// verdict carries the declarations themselves rather than leaving an audit to search for the name.
     func testALiveVerdictNamesWhereItsCoveredLabelsAreDeclared() async {
-        let verdict = await cart(system: makeGood).verify(against: makeRefactor)
+        let verdict = await cart(system: makeGood).verify(candidate: makeRefactor)
 
         let origins = verdict.qualification.origins
         XCTAssertEqual(Set(origins.map(\.label)), ["PromoCart"])
@@ -104,7 +104,7 @@ final class QualificationTests: XCTestCase {
     }
 
     func testTheQualificationBlockRendersTheDeclaringSources() async {
-        let markdown = await cart(system: makeGood).verify(against: makeRefactor).markdownReport()
+        let markdown = await cart(system: makeGood).verify(candidate: makeRefactor).markdownReport()
 
         XCTAssertTrue(markdown.contains("PromoCart ← GoodCart ("), markdown)
         XCTAssertTrue(markdown.contains("RefactorCart ("), markdown)
@@ -115,7 +115,6 @@ final class QualificationTests: XCTestCase {
     func testATruncatedBoundaryScheduleReportsItsDroppedEdges() async {
         // Two varied seams → 8 scheduled edges; a budget of 5 variants covers 5 and must say so.
         let spec = Spec<PromoCart>("promo-cart.truncated")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -130,7 +129,8 @@ final class QualificationTests: XCTestCase {
                 Seam("mugQty", .int(0 ... 9))
                 Budget(runs: 5)
             }
-        let verdict = await spec.verify(against: makeRefactor)
+            .baselined(on: makeGood)
+        let verdict = await spec.verify(candidate: makeRefactor)
 
         // Five variants: three edge pins and two combined, interleaved — the budget is shared, so a
         // truncated schedule drops edges *and* says how much of it paired the seams instead.
@@ -147,7 +147,7 @@ final class QualificationTests: XCTestCase {
     // MARK: - Rendering (every verdict, placeholders that never overstate)
 
     func testAGreenVerdictStatesItsBlindSpotLine() async {
-        let markdown = await cart(system: makeGood).verify(against: makeRefactor).markdownReport()
+        let markdown = await cart(system: makeGood).verify(candidate: makeRefactor).markdownReport()
 
         XCTAssertTrue(markdown.contains("What this verdict rests on:"), markdown)
         XCTAssertTrue(markdown.contains("not audited"), markdown)
@@ -174,7 +174,7 @@ final class QualificationTests: XCTestCase {
     }
 
     func testTheHTMLReportRendersTheSameBlock() async {
-        let html = await cart(system: makeGood).verify(against: makeRefactor).htmlReport()
+        let html = await cart(system: makeGood).verify(candidate: makeRefactor).htmlReport()
 
         XCTAssertTrue(html.contains("What this verdict rests on"), "the artifact and comment share the block")
         XCTAssertTrue(html.contains("not audited"))
@@ -183,7 +183,7 @@ final class QualificationTests: XCTestCase {
     // MARK: - The stamp
 
     func testAnUnstampedResultArtifactIsRefusedWithReRunNotKeyNotFound() async throws {
-        let verdict = await cart(system: makeGood).verify(against: makeRefactor)
+        let verdict = await cart(system: makeGood).verify(candidate: makeRefactor)
         var json = try JSONSerialization.jsonObject(with: verdict.jsonData()) as? [String: Any] ?? [:]
         json.removeValue(forKey: "schemaVersion")
 
@@ -198,7 +198,7 @@ final class QualificationTests: XCTestCase {
     }
 
     func testAFutureSchemaIsRefusedByNumber() async throws {
-        let verdict = await cart(system: makeGood).verify(against: makeRefactor)
+        let verdict = await cart(system: makeGood).verify(candidate: makeRefactor)
         var json = try JSONSerialization.jsonObject(with: verdict.jsonData()) as? [String: Any] ?? [:]
         json["schemaVersion"] = 999
 

@@ -33,9 +33,8 @@ final class CandidatesTests: XCTestCase {
             .appendingPathComponent("candidates-\(UUID().uuidString)", isDirectory: true)
     }
 
-    private func cart() -> Spec<PromoCart> {
+    private func cart() -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.candidates")
-            .system(makeGood)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -43,6 +42,11 @@ final class CandidatesTests: XCTestCase {
                 Op("promo") { $0.applyPromo() }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
+            .vary {
+                Seam("coffeeQty", .int(1 ... 20))
+                Ordering(max: 4)
+            }
+            .baselined(on: makeGood)
             .candidates {
                 // Both spellings an adopting app will reach for: a factory reference, and the
                 // trailing-closure form that wires collaborators inline.
@@ -50,10 +54,6 @@ final class CandidatesTests: XCTestCase {
                 Candidate("RoundBugCart", expecting: .diverged) { context in
                     RoundBugCart(center: context.notifications)
                 }
-            }
-            .vary {
-                Seam("coffeeQty", .int(1 ... 20))
-                Ordering(max: 4)
             }
     }
 

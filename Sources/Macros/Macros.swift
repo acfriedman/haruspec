@@ -62,7 +62,7 @@ import HaruspecTrace
 /// interesting values are magic (`"SAVE10"`) — and so does a model with no `SeamGenerated` factory;
 /// either traps at spec construction, naming the declaration to write, only if a spec drives that
 /// op. `var` requirements become observed properties. With a pasted `init`, construction derives
-/// too, so `Spec(_:derivedFrom:baseline:)` needs no `.system { }`.
+/// too, so `.baselined(on: LegacyType.self)` binds a baseline with no closure.
 ///
 /// **The double** (`Double<Protocol>`) records each call and does nothing behind it: the
 /// interaction at the boundary is the behavior a differential checks. A value-returning requirement
@@ -97,14 +97,28 @@ import HaruspecTrace
 public macro Haruspec(_ label: String? = nil, timed: Bool = false, schedules: ScheduleDiscipline? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "HaruspecMacro")
 
-/// Runs a spec's continuous side in CI: emits `<Spec>Continuous`, a test suite whose one test records,
-/// replays, or censuses the spec when the environment selects a mode, and runs nothing otherwise.
+/// Emits `<Spec>Continuous`, a test suite that records, replays, or censuses the spec baselined on
+/// `baseline` when the environment selects a mode. The spec stays implementation-free.
 ///
-///     @Continuous
+/// - Parameter baseline: The watched type, built through the boundary's pasted `init`.
+///
+/// The attribute is the test's declaration of which build CI watches.
+/// The file must `import Testing`, and the struct must conform to `SpecProviding` and have a
+/// no-argument initializer:
+///
+///     @Continuous(baseline: CartManager.self)
 ///     struct CartMigrationSpec: SpecProviding {
 ///         var spec: Spec<Cart> { … }
 ///     }
-///
-/// The file must `import Testing`. The struct must conform to `SpecProviding` and have an `init()`.
 @attached(peer, names: suffixed(Continuous))
-public macro Continuous() = #externalMacro(module: "HaruspecMacroPlugin", type: "ContinuousMacro")
+public macro Continuous(baseline: Any.Type) =
+    #externalMacro(module: "HaruspecMacroPlugin", type: "ContinuousMacro")
+
+/// Runs a spec's continuous side in CI on the baseline `initializer` builds — see
+/// ``Continuous(baseline:)``.
+///
+/// - Parameter initializer: The watched type's initializer reference, every parameter resolved per
+///   capture.
+@attached(peer, names: suffixed(Continuous))
+public macro Continuous<each Parameter, Built>(baseline initializer: (repeat each Parameter) -> Built) =
+    #externalMacro(module: "HaruspecMacroPlugin", type: "ContinuousMacro")

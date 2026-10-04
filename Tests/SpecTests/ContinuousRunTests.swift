@@ -17,9 +17,8 @@ private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
 }
 
 final class ContinuousRunTests: XCTestCase {
-    private func cart(system: @escaping (SeamContext) -> PromoCart) -> Spec<PromoCart> {
+    private func cart(system: @escaping (SeamContext) -> PromoCart) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.continuous")
-            .system(system)
             .operations {
                 Op("addCoffee") { cart, seams in
                     cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -31,6 +30,7 @@ final class ContinuousRunTests: XCTestCase {
                 Seam("coffeeQty", .int(1 ... 20))
                 Ordering(max: 4)
             }
+            .baselined(on: system)
     }
 
     private func scratch() -> URL {

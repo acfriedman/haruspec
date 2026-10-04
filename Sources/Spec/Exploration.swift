@@ -112,8 +112,8 @@ public struct Exploration: Codable, Sendable, Equatable {
     }
 }
 
-/// The generation constants shared by the live differential (`verify(against:)`) and the recorded plan
-/// (`record()` / `verify(replaying:)`) — one surface, whichever side of a build boundary it runs on.
+/// The generation constants shared by the live differential and the recorded plan — one surface,
+/// whichever side of a build boundary it runs on.
 enum SpecDefaults {
     static let seed: UInt64 = 0x9E37_79B9_7F4A_7C15
     /// Seam cassettes per ordering when no `Budget(runs:)` is declared.
@@ -160,8 +160,9 @@ enum SpecDefaults {
 // MARK: - The resolved plan
 
 /// The exact work one verify or record will do: which orderings, and how the seam budget is spent
-/// against each. Shared by `verify(against:)` and `record()` so the live differential and the recorded
-/// plan explore the same surface by construction rather than by two copies of the same loop.
+/// against each. Shared by ``BaselinedSpec/verify(candidate:declaring:)`` and ``BaselinedSpec/record()`` so
+/// the live differential and the recorded plan explore the same surface by construction rather than
+/// by two copies of the same loop.
 struct ExplorationPlan<S> {
     let orderings: [[Op<S>]]
     let variantsPerOrdering: Int

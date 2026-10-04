@@ -208,14 +208,14 @@ public extension SeamContext {
         guard candidates.isEmpty else {
             return "\(candidates.count) doubles serve \(boundary): "
                 + candidates.map { "\($0)" }.sorted().joined(separator: ", ")
-                + " — resolution must be unambiguous. Author the system: "
-                + ".system { context in … context.double(\(candidates.map { "\($0)" }.sorted()[0]).self) … }"
+                + " — resolution must be unambiguous. Author the build: "
+                + ".baselined { context in … context.double(\(candidates.map { "\($0)" }.sorted()[0]).self) … }"
         }
         return "nothing serves \(boundary) — declare it: paste its protocol under "
             + "@Haruspec(\"<label>\") refining \(boundary) (a recorded collaborator), provide it "
             + "as a capture resource: .provides(\(boundary).self) { context in … } (isolated "
             + "infrastructure, observed through the subject's reads), or author the wiring: "
-            + ".system { context in … }"
+            + ".baselined { context in … }"
     }
 }
 

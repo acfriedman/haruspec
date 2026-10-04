@@ -223,7 +223,7 @@ public struct ContinuousOutcome: Sendable {
 
 // MARK: - Driving a spec
 
-public extension Spec {
+public extension BaselinedSpec {
     /// Runs whichever side the environment selects. A run that was never selected is a failure here,
     /// not a silent pass — gate the test on `ContinuousMode.fromEnvironment()` so it never gets called.
     func runContinuous(

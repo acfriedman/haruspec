@@ -16,22 +16,22 @@ private final class Ledger {
 }
 
 final class OrderingRepetitionTests: XCTestCase {
-    private func spec(repeating: Int = 2, onceOnPush: Bool = false) -> Spec<Ledger> {
+    private func spec(repeating: Int = 2, onceOnPush: Bool = false) -> BaselinedSpec<Ledger> {
         var push = Op<Ledger>("push") { $0.push("push") }
         if onceOnPush {
             push = push.once()
         }
         return Spec<Ledger>("ledger.repetition")
-            .system { _ in Ledger() }
             .operations {
                 push
                 Op("pull") { $0.push("pull") }
                 Op("close") { $0.push("close") }.last()
             }
             .vary { Ordering(max: 200, repeating: repeating) }
+            .baselined { _ in Ledger() }
     }
 
-    private func orderings(_ spec: Spec<Ledger>) async -> [[String]] {
+    private func orderings(_ spec: BaselinedSpec<Ledger>) async -> [[String]] {
         await spec.record().probes.map(\.ordering)
     }
 
@@ -83,7 +83,6 @@ final class OrderingRepetitionTests: XCTestCase {
     /// has a recorded value to replay. Without that it falls back to live and the verdict abstains.
     func testARepeatedSeamReadStillReplaysFromThePlan() async throws {
         let spec = Spec<Ledger>("ledger.seamed")
-            .system { _ in Ledger() }
             .operations {
                 Op("push") { sut, seams in sut.push("push-\(seams.int("size", default: 1))") }
                 Op("close") { $0.push("close") }.last()
@@ -92,13 +91,14 @@ final class OrderingRepetitionTests: XCTestCase {
                 Seam("size", .int(1 ... 9))
                 Ordering(max: 50)
             }
+            .baselined { _ in Ledger() }
 
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("repetition-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: url) }
         try await spec.record(to: url)
 
-        let verdict = await try spec.verify(replayingContentsOf: url)
+        let verdict = try await spec.verify(replayingContentsOf: url)
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
         XCTAssertTrue(verdict.coverage.unrecordedReach.isEmpty, verdict.report())
     }

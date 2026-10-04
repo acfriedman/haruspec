@@ -4,8 +4,9 @@ import HaruspecSeams
 
 /// The outcome of a spec run: the resolved verdict *with the coverage it was measured over*, how
 /// much was explored, and — for an order-dependent divergence — the failing call sequence: shrunk to
-/// minimal by `verify(against:)`, but the *raw recorded ordering* on `verify(replaying:)`, which never
-/// shrinks (a shrunk variant has no recorded golden to diff against).
+/// minimal by ``BaselinedSpec/verify(candidate:declaring:)``, but the *raw recorded ordering* on
+/// ``BaselinedSpec/verify(replaying:declaring:replays:)``, which never shrinks (a shrunk variant has
+/// no recorded golden to diff against).
 /// `Codable`, so a verify run is writable as a `result.json` artifact a reviewer can read and reproduce.
 ///
 /// Read-only outside the module. Inside it, a step that adjusts one field (an audit's outcome, the

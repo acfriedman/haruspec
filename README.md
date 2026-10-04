@@ -47,7 +47,6 @@ value.
 
 ```swift
 let cart = Spec<PromoCart>("promo-cart")
-    .system(makeLegacyCart)
     .operations {
         Op("addCoffee") { cart, seams in
             cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
@@ -57,7 +56,7 @@ let cart = Spec<PromoCart>("promo-cart")
     }
     .vary { Seam("coffeeQty", .int(1 ... 20)) }
 
-let verdict = await cart.verify(against: makeSwiftPort)
+let verdict = await cart.baselined(on: makeLegacyCart).verify(candidate: makeSwiftPort)
 print(verdict.report())
 ```
 
@@ -103,22 +102,24 @@ One `import Haruspec` surfaces the macros, capture runtime, seams, and the Spec 
 ## Getting started
 
 **1. Declare a spec.** Name the subject's operations, the effects worth observing, and the input
-domains to sweep. Most of it can be derived from the boundary protocol itself, and the baseline
-is named by type: it is built through the protocol's pasted init and wrapped in the generated
-forwarder, and every port takes exactly the same path.
+domains to sweep. Most of it can be derived from the boundary protocol itself. A spec names no
+implementation: it describes the protocol, and a test chooses the baseline.
 
 ```swift
-Spec<Cart>("cart.objc-to-swift", derivedFrom: DerivedCart.self, baseline: CartManager.self) {
+Spec<Cart>("cart", derivedFrom: DerivedCart.self) {
     Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
     Amend("checkout").last()
 }
 ```
 
-**2. Verify.** In the campaign shape, two implementations in one build compare directly. The
-port carries no Haruspec attribute; conforming it to the boundary protocol is the whole adoption:
+**2. Verify.** In the campaign shape, two implementations in one build compare directly. Bind the
+baseline by type with `.baselined(on:)`: it is built through the protocol's pasted init and wrapped in
+the generated forwarder, and every port takes exactly the same path. The port carries no Haruspec
+attribute; conforming it to the boundary protocol is the whole adoption:
 
 ```swift
-try await spec.check(SwiftCart.self)
+let subject = spec.baselined(on: CartManager.self)
+try await subject.check(SwiftCart.self)
 ```
 
 A port whose dependencies differ from the baseline's is checked through its own initializer. Each
@@ -126,7 +127,7 @@ parameter resolves the same way: a provided resource, the capture's notification
 one stamped double serving that type.
 
 ```swift
-try await spec.check(SwiftCatalogPrefetcher.init)
+try await subject.check(SwiftCatalogPrefetcher.init)
 ```
 
 In the continuous shape, record the current behavior once, then replay the recorded plan against
@@ -178,20 +179,23 @@ package or the version `Package.resolved` pins, and builds it once per version. 
 installed globally. `init` writes `.haruspec/config.json` from your Xcode project; check its
 guesses, then commit both files.
 
-Mark each spec `@Continuous`. The attribute emits the spec's continuous suite, which names
-itself, so a check runs that suite and nothing else. Give the suites that check ports the
-`.campaign` trait, so they stand down while a plan is recorded:
+Mark each spec `@Continuous(baseline:)`, naming the implementation CI watches. The attribute
+emits the spec's continuous suite, which names itself, so a check runs that suite and nothing
+else. Give the suites that check ports the `.campaign` trait, so they stand down while a plan is
+recorded:
 
 ```swift
-@Continuous
+@Continuous(baseline: CartManager.self)
 struct CartMigrationSpec: SpecProviding {
     var spec: Spec<Cart> { … }
 }
 
 @Suite("cart.objc-to-swift", .campaign)
 struct CartMigrationTests {
+    private let subject = CartMigrationSpec().baselined(on: CartManager.self)
+
     @Test func swiftPortIsIndistinguishableFromTheBaseline() async throws {
-        try await CartMigrationSpec().check(SwiftCart.self)
+        try await subject.check(SwiftCart.self)
     }
 }
 ```
