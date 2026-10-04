@@ -292,6 +292,13 @@ public extension BaselinedSpec {
         do {
             try FileManager.default.createDirectory(at: resultsDirectory, withIntermediateDirectories: true)
             let markerURL = resultsDirectory.appendingPathComponent(name + CensusMarker.fileSuffix)
+            // A marker another suite wrote this run is a second spec under this name: both would
+            // claim one plan file, so the census refuses rather than letting one shadow the other.
+            if let data = try? Data(contentsOf: markerURL),
+               let claimed = try? JSONDecoder().decode(CensusMarker.self, from: data),
+               claimed.suite != suite {
+                return .failed(SpecNaming.collision(name, suites: [claimed.suite, suite]))
+            }
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
             try encoder.encode(CensusMarker(spec: name, suite: suite)).write(to: markerURL)

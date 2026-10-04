@@ -244,6 +244,12 @@ final class DerivedOpsTests: XCTestCase {
         XCTAssertEqual(bound.spec.settled().operations.count, 3, "settling twice derives once")
     }
 
+    func testASpecIsNamedForItsBoundaryUnlessTheInitNamesIt() {
+        XCTAssertEqual(Spec<NarrowKnobs>().name, "NarrowKnobs", "a stamped boundary lends its label")
+        XCTAssertEqual(Spec<any Equatable>().name, "Equatable", "an unstamped one, its type without the any")
+        XCTAssertEqual(Spec<NarrowKnobs>("knobs.narrow").name, "knobs.narrow")
+    }
+
     func testNarrowWidthsGetSpansTheirTypeCanRepresent() {
         let spec = Spec<NarrowKnobs>("knobs").settled()
 

@@ -104,10 +104,11 @@ One `import Haruspec` surfaces the macros, capture runtime, seams, and the Spec 
 **1. Declare a spec.** Name the subject's operations, the effects worth observing, and the input
 domains to sweep. Over an `@Haruspec` protocol, the operations and their domains derive by default;
 the block amends only what a signature cannot state. A spec names no implementation: it describes
-the protocol, and a test chooses the baseline.
+the protocol, and a test chooses the baseline. It takes the protocol's name too, unless several specs
+interrogate one protocol: then each is named, `Spec<Cart>("cart.promo") { … }`.
 
 ```swift
-Spec<Cart>("cart") {
+Spec<Cart> {
     Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
     Amend("checkout").last()
 }

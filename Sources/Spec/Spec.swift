@@ -32,6 +32,8 @@ public protocol StampedForwarder: AnyObject {
     static var forwardedBoundary: Any.Type { get }
     /// The op catalog the same stamp derived, `DerivedCart.self`.
     static var derivedCatalog: any DerivedOperations.Type { get }
+    /// The stamp's label, `"Cart"` — what every role records under, and a spec's default name.
+    static var stampLabel: String { get }
     /// Wraps a conformer in the forwarder, so the one wrap serves a build however it was made.
     ///
     /// - Parameter conformer: The build to wrap, possibly already wrapped.
@@ -288,7 +290,24 @@ public func Budget(runs: Int) -> Variation {
 /// The spec. Built fluently; the nested `operations`/`vary` use result-builders so the call site
 /// reads declaratively without losing Swift's type-checking, autocomplete, or rename-safety.
 public struct Spec<S> {
-    public let name: String
+    /// The name given at the init, for a boundary several specs interrogate.
+    let explicitName: String?
+
+    /// The spec's identity — its plan file, census marker, intent blocks, and report titles. The
+    /// boundary's stamp label unless the init named it.
+    public var name: String {
+        explicitName ?? Self.boundaryName
+    }
+
+    /// What `S` is called when nothing names the spec: its stamp's label, or for an unstamped system,
+    /// its type without the `any`.
+    static var boundaryName: String {
+        if let forwarder = StampedForwarderRegistry.forwarder(for: S.self) {
+            return forwarder.stampLabel
+        }
+        let type = String(describing: S.self)
+        return type.hasPrefix("any ") ? String(type.dropFirst(4)) : type
+    }
 
     /// Constructs a conformer through the boundary's pasted `init` — set when the derivation settles
     /// from a catalog that derives construction, and what `baselined(on:)` and `check(_:)` build by
@@ -344,7 +363,8 @@ public struct Spec<S> {
     /// Creates a spec whose ops derive from `S`'s `@Haruspec` stamp, amended by `build`.
     ///
     /// - Parameters:
-    ///   - name: The spec's name, unique within the catalog.
+    ///   - name: The spec's name; `nil` names it for its boundary, which only one spec in a catalog
+    ///     can be (a census traps on the second, asking for a name for each).
     ///   - build: Amendments to the derived ops; empty leaves the derivation as stamped.
     /// - Precondition: A non-empty `build` needs a stamped `S` and no authored `.operations`; both
     ///   trap when the spec is bound.
@@ -355,7 +375,7 @@ public struct Spec<S> {
     /// default, `Amend("checkout").last()` adds structure, and a full `Op` replaces its derived twin
     /// when the binding itself must differ:
     ///
-    ///     Spec<Cart>("cart") {
+    ///     Spec<Cart> {
     ///         Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
     ///         Amend("checkout").last()
     ///     }
@@ -364,10 +384,10 @@ public struct Spec<S> {
     /// `.operations { … }` can still replace the derived ops. Names no implementation — a test binds
     /// the baseline with ``baselined(on:)``.
     public init(
-        _ name: String,
+        _ name: String? = nil,
         @OperationOverridesBuilder<S> overriding build: () -> [OperationOverride<S>] = { [] }
     ) {
-        self.name = name
+        explicitName = name
         amendments = build()
     }
 

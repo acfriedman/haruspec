@@ -78,7 +78,8 @@ enum ForwarderEmitter {
         final class \(generatedName): \(conformances) {
             private let __wrapped: \(wrapped)
             init(_ wrapped: \(wrapped)) { __wrapped = wrapped; super.init() }
-            nonisolated var traceLabel: String { \(quotedLiteral(label)) }
+            nonisolated var traceLabel: String { Self.stampLabel }
+            static var stampLabel: String { \(quotedLiteral(label)) }
             static var forwardedBoundary: Any.Type { (\(wrapped)).self }
             static var derivedCatalog: any DerivedOperations.Type { Derived\(protoName).self }
             static func wrap(_ conformer: Any) -> Any? {

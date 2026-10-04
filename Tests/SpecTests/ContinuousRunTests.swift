@@ -17,22 +17,6 @@ private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
 }
 
 final class ContinuousRunTests: XCTestCase {
-    private func cart(system: @escaping (SeamContext) -> PromoCart) -> BaselinedSpec<PromoCart> {
-        Spec<PromoCart>("promo-cart.continuous")
-            .operations {
-                Op("addCoffee") { cart, seams in
-                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
-                }
-                Op("promo") { $0.applyPromo() }
-                Op("checkout") { _ = $0.checkout() }.last()
-            }
-            .vary {
-                Seam("coffeeQty", .int(1 ... 20))
-                Ordering(max: 4)
-            }
-            .baselined(on: system)
-    }
-
     private func scratch() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("continuous-\(UUID().uuidString)", isDirectory: true)
@@ -131,7 +115,7 @@ final class ContinuousRunTests: XCTestCase {
     func testCensusEnumeratesTheWholeCatalogWithoutSelection() {
         let catalog = SpecCatalog(
             cart(system: makeGood).entry(),
-            cart(system: makeRoundBug).entry()
+            cart("promo-cart.round-bug", system: makeRoundBug).entry()
         )
         // Replay with several entries requires HARUSPEC_SPEC; a census never narrows.
         XCTAssertEqual(catalog.continuousSpecs(environment: ["HARUSPEC_MODE": "replay"]), [])
@@ -329,6 +313,28 @@ final class ContinuousRunTests: XCTestCase {
     }
 }
 
+/// The spec every case drives, apart from the class body so the body stays readable.
+private extension ContinuousRunTests {
+    func cart(
+        _ name: String = "promo-cart.continuous",
+        system: @escaping (SeamContext) -> PromoCart
+    ) -> BaselinedSpec<PromoCart> {
+        Spec<PromoCart>(name)
+            .operations {
+                Op("addCoffee") { cart, seams in
+                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
+                }
+                Op("promo") { $0.applyPromo() }
+                Op("checkout") { _ = $0.checkout() }.last()
+            }
+            .vary {
+                Seam("coffeeQty", .int(1 ... 20))
+                Ordering(max: 4)
+            }
+            .baselined(on: system)
+    }
+}
+
 /// Suite identity and the settle side, kept apart from the class body so it stays readable.
 extension ContinuousRunTests {
     func testACensusRecordsTheSuiteThatNamedItself() async {
@@ -337,6 +343,25 @@ extension ContinuousRunTests {
         _ = await cart(system: makeGood).runContinuous(.census(resultsDirectory: dir), suite: suite)
         XCTAssertEqual(suite?.path, "ContinuousRunTests", "the module prefix is the test target's, not the path's")
         XCTAssertEqual(CensusMarker.read(from: dir).first?.suite, suite)
+    }
+
+    func testASecondSuiteCensusingTheSameNameIsRefused() async {
+        let dir = scratch()
+        let census = { (suite: String) in
+            await self.cart(system: makeGood).runContinuous(
+                .census(resultsDirectory: dir),
+                suite: ContinuousSuite(path: suite)
+            )
+        }
+        let first = await census("A")
+        let rerun = await census("A")
+        let second = await census("B")
+
+        XCTAssertTrue(first.succeeded, first.summary)
+        XCTAssertTrue(rerun.succeeded, "the same suite again is a rerun, not a second spec")
+        XCTAssertFalse(second.succeeded)
+        XCTAssertTrue(second.summary.contains("named 'promo-cart.continuous' (in A and B)"), second.summary)
+        XCTAssertEqual(CensusMarker.read(from: dir).first?.suite, ContinuousSuite(path: "A"), "the first claim stands")
     }
 
     func testASettleRunWaitsAndRecordsNothing() async throws {

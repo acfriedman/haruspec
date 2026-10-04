@@ -136,7 +136,15 @@ public struct SpecCatalog {
     /// spec", which is the common case; a catalog with several requires it.
     public static let specKey = "HARUSPEC_SPEC"
 
+    /// Creates a catalog of `entries`.
+    ///
+    /// - Parameter entries: The erased bindings, in catalog order.
+    /// - Precondition: No two entries share a name; the trap asks for a name for each.
     public init(_ entries: [SpecEntry]) {
+        var seen: Set<String> = []
+        for entry in entries {
+            precondition(seen.insert(entry.name).inserted, SpecNaming.collision(entry.name, suites: []))
+        }
         self.entries = entries
     }
 
@@ -313,5 +321,21 @@ public struct SpecCatalog {
         } catch {
             return .failed("\(error)")
         }
+    }
+}
+
+/// The refusal two specs sharing a name earn, wherever it is caught.
+enum SpecNaming {
+    /// Returns the trap text for a name two specs claim.
+    ///
+    /// - Parameters:
+    ///   - name: The shared name, usually the boundary's stamp label.
+    ///   - suites: The suites hosting the two specs, where known.
+    /// - Returns: The message, naming the fix.
+    static func collision(_ name: String, suites: [ContinuousSuite?]) -> String {
+        let hosts = suites.compactMap { $0?.path }
+        let hosted = hosts.isEmpty ? "" : " (in \(hosts.joined(separator: " and ")))"
+        return "two specs are named '\(name)'\(hosted) — a spec takes its boundary's name, so when several "
+            + "interrogate one boundary, name each: Spec<\(name)>(\"\(name.lowercased()).<purpose>\") { … }"
     }
 }
