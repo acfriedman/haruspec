@@ -119,7 +119,11 @@ let package = Package(
             "HaruspecSpec"
         ], path: "Sources/CoreData"),
 
-        // The consumer umbrella. Re-export only (`@_exported import` of the five consumer modules) —
+        // The Swift Testing traits a spec's suites use. Separate so only the umbrella, which test
+        // targets import, links Testing; the engine modules stay runner-agnostic.
+        .target(name: "HaruspecTesting", dependencies: ["HaruspecSpec"], path: "Sources/Testing"),
+
+        // The consumer umbrella. Re-export only (`@_exported import` of the six consumer modules) —
         // no logic lives here, so the dependency-free-core / SwiftSyntax-confined-to-macros layering
         // holds. Depending on HaruspecSpec here is also what makes it reachable to consumers (it is
         // deliberately not its own product; the umbrella is the single supported import).
@@ -129,6 +133,7 @@ let package = Package(
             "HaruspecMacros",
             "HaruspecSeams",
             "HaruspecSpec",
+            "HaruspecTesting",
             // Carried so a persistence-bearing spec adds `import HaruspecCoreData`, not a link step —
             // not re-exported, so the CoreData surface appears only where a spec asks for it.
             "HaruspecCoreData"

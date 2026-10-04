@@ -24,4 +24,5 @@
 @_exported import HaruspecMacros
 @_exported import HaruspecSeams
 @_exported import HaruspecSpec
+@_exported import HaruspecTesting
 @_exported import HaruspecTrace

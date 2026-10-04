@@ -46,6 +46,17 @@ final class RuntimeValueTests: XCTestCase {
         )
     }
 
+    func testEnumsAndOptionSetsReadAsTheirRawValues() {
+        enum Phase: Int { case idle, planning }
+        enum Service: String { case ground, twoDay = "2day" }
+        struct Flags: OptionSet { let rawValue: UInt }
+
+        XCTAssertEqual(RuntimeValue.canonical(Phase.planning), .int(1))
+        XCTAssertEqual(RuntimeValue.canonical(Service.twoDay), .string("2day"))
+        XCTAssertEqual(RuntimeValue.canonical(Flags(rawValue: 5)), .int(5))
+        XCTAssertEqual(RuntimeValue.canonical(["phase": Phase.idle] as [String: Any]), ["phase": 0])
+    }
+
     func testThrownCocoaErrorIsStructuralWhateverItsUserInfoOrder() {
         let built = NSMutableDictionary(dictionary: ["postalCode": "09012"])
         built[NSLocalizedDescriptionKey] = "We cannot ship to that address."

@@ -129,18 +129,13 @@ public extension SeamContext {
     /// collaborator — exactly `context.double(TracedX.self)` with the X looked up by conformance.
     ///
     /// Derived system factories call this per collaborator parameter. Resolution order: a declared
-    /// `.provides` resource, then the one conforming double, then a packaged `SeamResource`
-    /// default. Zero or several candidates trap naming the fix, because a guessed collaborator
-    /// would be a silent wiring change.
+    /// `.provides` resource, the capture's center for `NotificationCenter`, then the one conforming
+    /// double, then a packaged `SeamResource` default. Zero or several candidates trap naming the
+    /// fix, because a guessed collaborator would be a silent wiring change.
     func resolve<P>(_ boundary: P.Type) -> P {
         let key = ObjectIdentifier(boundary)
-        // A declared capture resource wins: it is spec-authored, per-capture, and observed through
-        // the subject's own surface rather than recorded at a boundary.
-        if let make = resourceMakers[key] {
-            guard let resource = make(self) as? P else {
-                preconditionFailure(".provides(\(boundary).self) returned a value that is not a \(boundary)")
-            }
-            return resource
+        if let provided = provided(boundary) {
+            return provided
         }
         // Otherwise matched by type identity against what each double declares it serves — a generic
         // metatype-conformance cast (`is P.Type`) does not consult protocol conformances, so the
@@ -181,6 +176,32 @@ public extension SeamContext {
             )
         }
         return typed
+    }
+
+    /// Returns what the capture itself provides for `boundary`, before any double is considered.
+    ///
+    /// - Parameter boundary: A parameter type of a build being resolved.
+    /// - Returns: A declared resource, the wrapped resolution of an optional, or the capture's
+    ///   center; `nil` when none of those serves `boundary`.
+    private func provided<P>(_ boundary: P.Type) -> P? {
+        // A declared capture resource wins: it is spec-authored, per-capture, and observed through
+        // the subject's own surface rather than recorded at a boundary.
+        if let make = resourceMakers[ObjectIdentifier(boundary)] {
+            guard let resource = make(self) as? P else {
+                preconditionFailure(".provides(\(boundary).self) returned a value that is not a \(boundary)")
+            }
+            return resource
+        }
+        // An unannotated Obj-C initializer imports as `init!`, so its resource is provided optional.
+        if let make = resourceMakers[ObjectIdentifier(P?.self)], let resource = make(self) as? P {
+            return resource
+        }
+        // An unannotated Obj-C parameter imports optional; it takes what its wrapped type resolves to.
+        if let optional = boundary as? any ResolvableOptional.Type {
+            return optional.resolved(in: self) as? P
+        }
+        // The capture's own center, the built-in resource every derived init already receives.
+        return boundary == NotificationCenter.self ? notifications as? P : nil
     }
 
     private static func unresolvable(_ boundary: (some Any).Type, candidates: [any SeamDouble.Type]) -> String {
@@ -226,5 +247,20 @@ extension Spec {
             }
         }
         return sweeps
+    }
+}
+
+/// An optional parameter type, resolved as its wrapped type.
+protocol ResolvableOptional {
+    /// Returns the wrapped type resolved in `context`, wrapped back up.
+    ///
+    /// - Parameter context: The capture resolving the parameter.
+    /// - Returns: A non-`nil` optional holding the resolved value.
+    static func resolved(in context: SeamContext) -> Any
+}
+
+extension Optional: ResolvableOptional {
+    static func resolved(in context: SeamContext) -> Any {
+        Wrapped?.some(context.resolve(Wrapped.self)) as Any
     }
 }

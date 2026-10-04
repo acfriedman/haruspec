@@ -87,6 +87,22 @@ final class AuditGateTests: XCTestCase {
         )
     }
 
+    func testAnAuditFindsTheCheckoutAboveTheCallingFile() async {
+        let verdict = await ledger(system: makeBypassingLedger)
+            .accepts(uncaptured: "NotificationCenter.default")
+            .verify(against: makeBypassingLedger)
+            .audited()
+
+        XCTAssertEqual(verdict.qualification.blindSpots, ["NotificationCenter.default (declared)"])
+    }
+
+    func testTheCheckoutRootIsTheNearestAncestorWithAMarker() {
+        let file = URL(fileURLWithPath: #filePath)
+
+        XCTAssertEqual(SpecVerdict.checkoutRoot(above: file)?.standardizedFileURL, packageRoot.standardizedFileURL)
+        XCTAssertNil(SpecVerdict.checkoutRoot(above: URL(fileURLWithPath: "/no-such-root/a.swift")))
+    }
+
     func testASpecLevelAcceptanceReachesAnExplicitAudit() async {
         // The declaration lives on the spec; the audit is invoked explicitly on the returned verdict.
         // The two audit paths (env-driven inside the verify, explicit afterwards) must resolve the

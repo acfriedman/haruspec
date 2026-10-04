@@ -121,6 +121,14 @@ port carries no Haruspec attribute; conforming it to the boundary protocol is th
 try await spec.check(SwiftCart.self)
 ```
 
+A port whose dependencies differ from the baseline's is checked through its own initializer. Each
+parameter resolves the same way: a provided resource, the capture's notification center, or the
+one stamped double serving that type.
+
+```swift
+try await spec.check(SwiftCatalogPrefetcher.init)
+```
+
 In the continuous shape, record the current behavior once, then replay the recorded plan against
 any later build:
 
@@ -170,14 +178,20 @@ package or the version `Package.resolved` pins, and builds it once per version. 
 installed globally. `init` writes `.haruspec/config.json` from your Xcode project; check its
 guesses, then commit both files.
 
-Give each spec a continuous suite that names itself, so a check runs that suite and nothing else:
+Mark each spec `@Continuous`. The attribute emits the spec's continuous suite, which names
+itself, so a check runs that suite and nothing else. Give the suites that check ports the
+`.campaign` trait, so they stand down while a plan is recorded:
 
 ```swift
-@Suite("cart.objc-to-swift continuous")
-struct CartContinuousTests {
-    @Test(arguments: CartMigrationSpec().continuousModes())
-    func continuousRunHolds(_ mode: ContinuousMode) async throws {
-        try await CartMigrationSpec().checkContinuous(mode, in: Self.self)
+@Continuous
+struct CartMigrationSpec: SpecProviding {
+    var spec: Spec<Cart> { … }
+}
+
+@Suite("cart.objc-to-swift", .campaign)
+struct CartMigrationTests {
+    @Test func swiftPortIsIndistinguishableFromTheBaseline() async throws {
+        try await CartMigrationSpec().check(SwiftCart.self)
     }
 }
 ```

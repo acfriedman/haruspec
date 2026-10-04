@@ -184,5 +184,5 @@ func literalString(_ value: String) -> String {
 
 @main
 struct Plugin: CompilerPlugin {
-    let providingMacros: [Macro.Type] = [HaruspecMacro.self]
+    let providingMacros: [Macro.Type] = [HaruspecMacro.self, ContinuousMacro.self]
 }

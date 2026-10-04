@@ -67,6 +67,11 @@ public enum RuntimeValue {
                 (String(describing: $0.key), canonical($0.value, depth: depth, visited: visited))
             }))
 
+        // An enum or option set reads as its raw value: an imported Obj-C enum otherwise prints
+        // its type name alone, whatever the case.
+        case let raw as any RawRepresentable:
+            return canonical(raw.rawValue, depth: depth, visited: visited)
+
         default:
             // Encodable first so custom `CodingKeys` are honored, then structural reflection, and
             // only then the opaque string of last resort.

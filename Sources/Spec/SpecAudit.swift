@@ -58,6 +58,41 @@ public extension SpecVerdict {
         return noting(report.outcome(accepting: intent.acceptedBlindSpots + (acceptedBlindSpots ?? [])))
     }
 
+    /// Audits against the checkout the calling file lives in: its nearest ancestor holding
+    /// `.haruspec` or `.git`. See ``audited(against:declaring:)``.
+    ///
+    /// - Parameters:
+    ///   - intent: The check site's declaration; only its accepted blind spots are read.
+    ///   - file: The calling file; the caller's own path by default.
+    /// - Returns: The verdict with the audit folded in.
+    /// - Precondition: An ancestor of `file` holds `.haruspec` or `.git`; otherwise audit
+    ///   explicitly with ``audited(against:declaring:)``.
+    func audited(declaring intent: Intent = .none, file: StaticString = #filePath) -> SpecVerdict {
+        let path = URL(fileURLWithPath: "\(file)")
+        guard let root = Self.checkoutRoot(above: path) else {
+            preconditionFailure(
+                "no .haruspec or .git above \(path.path) — audit explicitly: audited(against: <checkout root>)"
+            )
+        }
+        return audited(against: root, declaring: intent)
+    }
+
+    /// Returns the nearest ancestor of `file` holding `.haruspec` or `.git`, or `nil` when none does.
+    ///
+    /// - Parameter file: A source file's path.
+    /// - Returns: The checkout root.
+    internal static func checkoutRoot(above file: URL) -> URL? {
+        var directory = file.deletingLastPathComponent()
+        while directory.pathComponents.count > 1 {
+            let markers = [".haruspec", ".git"].map { directory.appendingPathComponent($0).path }
+            if markers.contains(where: FileManager.default.fileExists(atPath:)) {
+                return directory
+            }
+            directory.deleteLastPathComponent()
+        }
+        return nil
+    }
+
     /// The same verdict with an audit's outcome applied. Split out so a caller holding its own
     /// `AuditReport` (the CLI, a host tool auditing a recorded `result.json`) folds it in identically.
     internal func noting(_ outcome: AuditOutcome) -> SpecVerdict {

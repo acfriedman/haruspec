@@ -96,3 +96,15 @@ import HaruspecTrace
 @attached(peer, names: prefixed(Traced), prefixed(Derived), prefixed(Double))
 public macro Haruspec(_ label: String? = nil, timed: Bool = false, schedules: ScheduleDiscipline? = nil) =
     #externalMacro(module: "HaruspecMacroPlugin", type: "HaruspecMacro")
+
+/// Runs a spec's continuous side in CI: emits `<Spec>Continuous`, a test suite whose one test records,
+/// replays, or censuses the spec when the environment selects a mode, and runs nothing otherwise.
+///
+///     @Continuous
+///     struct CartMigrationSpec: SpecProviding {
+///         var spec: Spec<Cart> { … }
+///     }
+///
+/// The file must `import Testing`. The struct must conform to `SpecProviding` and have an `init()`.
+@attached(peer, names: suffixed(Continuous))
+public macro Continuous() = #externalMacro(module: "HaruspecMacroPlugin", type: "ContinuousMacro")
