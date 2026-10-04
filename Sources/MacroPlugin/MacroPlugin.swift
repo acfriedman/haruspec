@@ -62,7 +62,7 @@ func tracedBody(
     let retValue = "__oracle?.ret(\(label), subject: self, "
         + "value: RuntimeValue.canonical(__oracleResult as Any)\(isolation))"
     let retThrew = "__oracle?.ret(\(label), subject: self, "
-        + "value: [\"__threw\": RuntimeValue.canonical(String(describing: error))]\(isolation))"
+        + "value: [\"__threw\": RuntimeValue.thrown(error)]\(isolation))"
     let timedStop = "if let __oracle, let __oracleStart "
         + "{ __oracle.signpost(\(label), subject: self, durationTicks: __oracle.now() - __oracleStart) }"
 

@@ -46,6 +46,33 @@ final class RuntimeValueTests: XCTestCase {
         )
     }
 
+    func testThrownCocoaErrorIsStructuralWhateverItsUserInfoOrder() {
+        let built = NSMutableDictionary(dictionary: ["postalCode": "09012"])
+        built[NSLocalizedDescriptionKey] = "We cannot ship to that address."
+        let objc = NSError(domain: "d", code: 3, userInfo: built as? [String: Any])
+        let swift = NSError(
+            domain: "d",
+            code: 3,
+            userInfo: [NSLocalizedDescriptionKey: "We cannot ship to that address.", "postalCode": "09012"]
+        )
+
+        XCTAssertEqual(RuntimeValue.thrown(objc), RuntimeValue.thrown(swift))
+        XCTAssertEqual(
+            RuntimeValue.thrown(objc),
+            [
+                "domain": "d",
+                "code": 3,
+                "userInfo": ["postalCode": "09012", NSLocalizedDescriptionKey: "We cannot ship to that address."]
+            ]
+        )
+    }
+
+    func testThrownSwiftErrorKeepsItsAssociatedValues() {
+        enum Refusal: Error { case short(units: Int) }
+
+        XCTAssertNotEqual(RuntimeValue.thrown(Refusal.short(units: 1)), RuntimeValue.thrown(Refusal.short(units: 2)))
+    }
+
     func testStillFallsBackToDescriptionForStructurelessValues() {
         let closure: () -> Void = {}
         if case .string = RuntimeValue.canonical(closure) { /* ok */ } else {
