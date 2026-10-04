@@ -8,9 +8,8 @@ import Foundation
 ///  - redacting volatile fields (UUIDs, dates) to a placeholder naming their shape, and
 ///  - dropping ignored event kinds, then re-densifying the logical clock.
 public enum Canonicalizer {
-    /// Returns the placeholder a volatile field's value is redacted to: its shape, not its value. A
-    /// fresh identifier or timestamp may differ every run, but an empty one, a lowercased one, or a
-    /// number where a string was is a change a consumer sees.
+    /// Returns the placeholder a volatile field's value is redacted to: its shape, not its value.
+    /// An identifier may differ every run, but an empty or lowercased one is a change consumers see.
     ///
     /// - Parameter value: The volatile field's value.
     /// - Returns: A string naming the value's kind, and for a string its format: empty, an upper- or

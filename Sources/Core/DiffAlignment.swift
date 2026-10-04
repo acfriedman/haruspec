@@ -130,6 +130,74 @@ extension BehavioralDiff {
         }
     }
 
+    /// Aligns two event lists so identical events pair first. A call asked in another order then
+    /// pairs with its identical twin and reads as moved, not as every position between it changing.
+    ///
+    /// - Parameters:
+    ///   - baseline: The baseline's events, canonicalized.
+    ///   - candidate: The candidate's events, canonicalized.
+    /// - Returns: The aligned index pairs, in increasing order; every pair shares a signature.
+    ///
+    /// An alignment's score counts each pair with equal content above any number of pairs that
+    /// share only a signature.
+    static func contentFirstAlignment(_ baseline: [TraceEvent], _ candidate: [TraceEvent]) -> [(Int, Int)] {
+        let baselineSig = baseline.map(signature), candidateSig = candidate.map(signature)
+        let baselineContent = contents(of: baseline), candidateContent = contents(of: candidate)
+        let rows = baseline.count, columns = candidate.count
+        guard rows > 0, columns > 0 else { return [] }
+        // One identical pair outweighs a whole alignment of signature-only pairs.
+        let identical = rows + columns + 1
+        func weight(_ row: Int, _ column: Int) -> Int {
+            guard baselineSig[row] == candidateSig[column] else { return 0 }
+            return baselineContent[row] == candidateContent[column] ? identical : 1
+        }
+        let width = columns + 1
+        var table = [Int](repeating: 0, count: (rows + 1) * width)
+        for row in stride(from: rows - 1, through: 0, by: -1) {
+            for column in stride(from: columns - 1, through: 0, by: -1) {
+                let paired = weight(row, column)
+                let skip = Swift.max(table[(row + 1) * width + column], table[row * width + column + 1])
+                table[row * width + column] = paired > 0
+                    ? Swift.max(skip, table[(row + 1) * width + column + 1] + paired)
+                    : skip
+            }
+        }
+        var pairs: [(Int, Int)] = []
+        var row = 0, column = 0
+        while row < rows, column < columns {
+            let paired = weight(row, column)
+            if paired > 0, table[row * width + column] == table[(row + 1) * width + column + 1] + paired {
+                pairs.append((row, column)); row += 1; column += 1
+            } else if table[(row + 1) * width + column] >= table[row * width + column + 1] {
+                row += 1
+            } else {
+                column += 1
+            }
+        }
+        return pairs
+    }
+
+    /// Returns each event's content as alignment compares it: its payload, and for a return the
+    /// payload of the call it returns from too, since the same value answers different questions.
+    ///
+    /// - Parameter events: A trace's events, in order.
+    /// - Returns: One content string per event, in the same order.
+    private static func contents(of events: [TraceEvent]) -> [String] {
+        var open: [String: [String]] = [:]
+        return events.map { event in
+            let own = event.payload?.canonicalString ?? ""
+            switch event.kind {
+            case .call:
+                open[event.label, default: []].append(own)
+                return own
+            case .ret:
+                return (open[event.label]?.popLast() ?? "") + " → " + own
+            default:
+                return own
+            }
+        }
+    }
+
     /// Classic O(n·m) LCS, returning the aligned index pairs in increasing order.
     static func longestCommonSubsequence<T: Equatable>(_ first: [T], _ second: [T]) -> [(Int, Int)] {
         let firstCount = first.count, secondCount = second.count

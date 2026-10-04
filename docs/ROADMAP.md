@@ -109,7 +109,9 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   had to sit on production types. With `@TracedProperty` went full property-write capture, and the
   write-*order* diff it fed (`MutationCapture`, `Tolerance.mutationOrder`) was deleted: it only ever
   ran Swift-to-Swift, and end-state snapshots still gate. A write that crosses a forwarder or double
-  is now compared like a call.
+  is now compared like a call. Observed properties are also sampled at every settled point (after
+  construction, each op, and each held work item), so a state the subject passes through but does
+  not finish in is compared too.
 - ✅ **Semantic tier + two-tier durability** — the durable contract is *observable product behavior*:
   notifications, KVO/state changes, and payload-free `Haruspec.marker(...)` temporal signposts. The
   fragile structural tier is internal call mechanics (calls/returns/timing). `structuralComparison:

@@ -59,6 +59,9 @@ public struct SeamContext {
     /// stamped scheduling protocol's double (`@Haruspec(schedules:)`) enqueues here; the capture runs
     /// it after the ops, and a derived op waiting on a completion block runs it meanwhile.
     public let backlog = WorkBacklog()
+    /// The arguments of the call a stamped double is answering, rendered by `SeamKey.qualifier(_:)`;
+    /// every read through this context is answered per those arguments. `nil` outside such a call.
+    var qualifier: String?
 
     /// Hands a recording double to the subject as an injected collaborator. The act of injection is
     /// the declaration: the double states its own trace label (`TraceLabeled`, emitted on every
@@ -78,22 +81,33 @@ public struct SeamContext {
         inject(type.init(self))
     }
 
+    /// Returns this context answering every read for the call whose arguments are `arguments`, so a
+    /// stamped double that is asked the same question in a different order gets the same answers.
+    ///
+    /// - Parameter arguments: The call's arguments by name, canonical, as its event records them.
+    /// - Returns: A copy reading per argument tuple; this context when there are no arguments.
+    public func arguments(_ arguments: [String: CanonicalValue]) -> SeamContext {
+        var copy = self
+        copy.qualifier = SeamKey.qualifier(arguments)
+        return copy
+    }
+
     public func int(_ seam: String, default value: Int64) -> Int64 {
-        cassette.int(seam: seam, live: { value })
+        cassette.int(seam: seam, qualifier: qualifier, live: { value })
     }
 
     public func double(_ seam: String, default value: Double) -> Double {
-        cassette.double(seam: seam, live: { value })
+        cassette.double(seam: seam, qualifier: qualifier, live: { value })
     }
 
     public func bool(_ seam: String, default value: Bool) -> Bool {
-        cassette.bool(seam: seam, live: { value })
+        cassette.bool(seam: seam, qualifier: qualifier, live: { value })
     }
 
     /// The categorical read, paired with `.oneOf(…)`: an input whose interesting values are named
     /// rather than ranged reads as itself, instead of an int the op has to decode.
     public func string(_ seam: String, default value: String) -> String {
-        cassette.string(seam: seam, live: { value }) ?? value
+        cassette.string(seam: seam, qualifier: qualifier, live: { value }) ?? value
     }
 }
 

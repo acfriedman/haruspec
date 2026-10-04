@@ -204,8 +204,12 @@ the entire runtime-interception column. Every mechanism still lives in the exter
 
 - **Cassette** — an ordered, keyed transcript of boundary interactions captured during the golden run
   (same JSON-bundle discipline as trace capture).
-- **Matching** — a replayed call finds its recorded response by *seam id + canonicalized args + call
-  ordinal*, reusing `HaruspecCore` canonicalization so volatile fields don't defeat the match.
+- **Matching** — a seam's track is its generated values in order. A stamped double's answer is also
+  keyed by its call's canonicalized arguments: the first time the baseline asks with a given tuple,
+  the answer is the track's next value, bound to that tuple; every later ask with the same tuple
+  takes its next bound value. The candidate replays the baseline's bindings, so it is answered by
+  arguments, whatever order it asks in, and a tuple the baseline never asked draws the next unbound
+  value. Plans store each probe's bindings.
 - **Unrecorded interaction** — replay hits a call with no matching entry. This is **both** a
   behavioral-change signal (the change altered the boundary) **and** a coverage event. Policy:
   **surface it, never fabricate a response.** *Now wired to the verdict:* `Cassette.coverage(declaring:)`

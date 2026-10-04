@@ -42,7 +42,8 @@ final class OpIdentityCaptureTests: XCTestCase {
             .observes(Observed("Subject.count") { $0.count })
 
         let trace = await spec.capture(make: spec.makeSystem, order: spec.operations, cassette: Cassette())
-        let ops = Dictionary(uniqueKeysWithValues: trace.events.map { ($0.label, $0.op) })
+        // An observed property records a series; the end-state snapshot is its last event.
+        let ops = Dictionary(trace.events.map { ($0.label, $0.op) }, uniquingKeysWith: { _, last in last })
 
         XCTAssertEqual(ops["first-sync"], OpIdentity(label: "first", position: 0))
         XCTAssertEqual(
@@ -53,6 +54,22 @@ final class OpIdentityCaptureTests: XCTestCase {
         XCTAssertEqual(ops["second-sync"], OpIdentity(label: "second", position: 1))
         XCTAssertEqual(ops["second-async"], OpIdentity(label: "second", position: 1))
         XCTAssertEqual(ops["Subject.count"], .some(nil), "an end-state snapshot is recorded under no op")
+    }
+
+    func testObservedStateIsSampledAtEverySettledPoint() async {
+        let spec = Spec<Subject>("ops")
+            .system { context in Subject(queue: context.double(DoubleOpsQueue.self)) }
+            .operations {
+                Op("first") { $0.act("first") }
+                Op("second") { $0.act("second") }
+            }
+            .observes(Observed("Subject.count") { $0.count })
+
+        let trace = await spec.capture(make: spec.makeSystem, order: spec.operations, cassette: Cassette())
+        let samples = trace.events.filter { $0.label == "Subject.count" }
+
+        XCTAssertEqual(samples.map(\.payload), [0, 1, 2, 2], "construction, each op, then the end state")
+        XCTAssertEqual(samples.map(\.op?.label), [nil, "first", "second", nil])
     }
 
     func testARepeatedOpIsTwoIdentities() async {

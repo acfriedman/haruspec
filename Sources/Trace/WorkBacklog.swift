@@ -64,6 +64,10 @@ public final class WorkBacklog: @unchecked Sendable {
     /// label: the work runs on the draining task, but it ran *as* the queue it was handed to.
     @TaskLocal static var enteredDomain: ConcurrencyDomain?
 
+    /// Runs after each held item, on the draining task, attributed to the item's op. A capture reads
+    /// its observed state here: between items is where another queue's observer could see it.
+    public var settled: (() async -> Void)?
+
     /// The most items one drain runs before giving up: a timer that re-arms itself on every fire has
     /// no settled point, and the drain says so rather than spinning.
     public static let stepLimit = 10000
@@ -232,6 +236,11 @@ public final class WorkBacklog: @unchecked Sendable {
                         }
                     }
                 }
+            }
+        }
+        if let settled {
+            await TraceContext.$currentOp.withValue(item.op) {
+                await settled()
             }
         }
         return true

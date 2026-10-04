@@ -156,6 +156,12 @@ enum DoubleEmitter {
         if let completion = CompletionBlock.of(function) {
             innerBody = delivery(completion, key: key) + (innerBody.isEmpty ? "" : "\n\(innerBody)")
         }
+        // Answers are per argument tuple, so a subject asking in another order gets the same ones.
+        let arguments = CompletionBlock.recordedArgumentNames(of: function)
+        if !innerBody.isEmpty, !arguments.isEmpty {
+            let pairs = arguments.map { "\"\($0)\": RuntimeValue.canonical(\($0) as Any)" }.joined(separator: ", ")
+            innerBody = "let __seams = self.__seams.arguments([\(pairs)])\n" + innerBody
+        }
         let body = tracedBody(
             function: function,
             label: key,

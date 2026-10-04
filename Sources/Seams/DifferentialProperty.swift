@@ -115,8 +115,9 @@ public struct DifferentialProperty {
 
     /// Runs both branches against one variant and diffs them.
     private func diff(on variant: CassetteData) -> TraceDiff {
-        let baseline = run(Cassette(replaying: variant), .baseline)
-        let candidate = run(Cassette(replaying: variant), .candidate)
+        let baselineReplay = Cassette(replaying: variant)
+        let baseline = run(baselineReplay, .baseline)
+        let candidate = run(Cassette(replaying: baselineReplay.snapshot()), .candidate)
         return BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: tolerances)
     }
 

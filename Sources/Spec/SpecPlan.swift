@@ -57,8 +57,10 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// values meet — it replays faithfully but explores the wrong shape, so it is re-recorded.
     /// Bumped to 9 when events began carrying their declared op (`OpIdentity`): a version-8 golden
     /// has no op on any event, so an op-scoped declaration (`.only(in:)`, `.once(per:)`) could
-    /// never hold against it and every such intent would read as unobserved.
-    public static let supportedSchemaVersion = 9
+    /// never hold against it and every such intent would read as unobserved. Bumped to 10 when a
+    /// stamped double's answers became per argument tuple: a probe's cassette now carries the
+    /// baseline's bindings, and a version-9 probe without them would answer a candidate by position.
+    public static let supportedSchemaVersion = 10
 
     public var schemaVersion: Int
     public var specName: String
@@ -193,7 +195,7 @@ public extension Spec {
         var probes = await [probe(order: operations, cassette: golden)]
         for (index, order) in plan.orderings.enumerated() {
             for cassette in plan.cassettes(forOrdering: index)
-                where !(order.map(\.label) == declaredLabels && cassette == golden) {
+                where !(order.map(\.label) == declaredLabels && cassette.tracks == golden.tracks) {
                 await probes.append(probe(order: order, cassette: cassette))
             }
         }
@@ -376,9 +378,11 @@ public extension Spec {
 
     // MARK: - Machinery
 
-    /// One golden probe: replays `cassette` into the base system on `order` and pins the trace.
+    /// One golden probe: replays `cassette` into the base system on `order` and pins the trace with
+    /// the cassette as the base system left it, so a replay answers each call as it was answered.
     private func probe(order: [Op<S>], cassette: CassetteData) async -> SpecProbe {
-        let trace = await capture(make: makeSystem, order: order, cassette: Cassette(replaying: cassette))
-        return SpecProbe(ordering: order.map(\.label), cassette: cassette, golden: trace)
+        let replay = Cassette(replaying: cassette)
+        let trace = await capture(make: makeSystem, order: order, cassette: replay)
+        return SpecProbe(ordering: order.map(\.label), cassette: replay.snapshot(), golden: trace)
     }
 }

@@ -234,7 +234,7 @@ public enum BehavioralDiff {
         let baselineSig = baseline.map(signature)
         let candidateSig = candidate.map(signature)
 
-        let matched = longestCommonSubsequence(baselineSig, candidateSig)
+        let matched = contentFirstAlignment(baseline, candidate)
         let matchedBaseline = Set(matched.map(\.0))
         let matchedCandidate = Set(matched.map(\.1))
 

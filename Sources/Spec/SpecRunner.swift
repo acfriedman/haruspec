@@ -194,15 +194,19 @@ public extension Spec {
         // one choke point for baseline, candidate, record and replay alike.
         let wrap = wrapCandidate ?? StampedForwarderRegistry.wrap(S.self)
         let system = wrap(make(context))
+        let sampler = StateSampler(system: system, properties: observedProperties, recorder: recorder)
+        context.backlog.settled = { await sampler.sample() }
         // Task-locals are inherited across `await`, so binding once around the whole loop still
         // reaches an operation that suspends — which is what lets an op drive an actor. The op
         // identity is bound per operation, so every event — and every block or task the op spawns,
         // which the seams carry it into — is attributed to the declared op that caused it.
+        await sampler.sample()
         await TraceContext.$current.withValue(recorder) {
             await WorkBacklog.$current.withValue(context.backlog) {
                 for (position, operation) in order.enumerated() {
                     await TraceContext.$currentOp.withValue(OpIdentity(label: operation.label, position: position)) {
                         await operation.action(system, context)
+                        await sampler.sample()
                     }
                 }
             }
@@ -232,8 +236,10 @@ public extension Spec {
         cassette: CassetteData,
         declaring intent: Intent
     ) async -> ProbeComparison {
-        let baseline = await capture(make: make, order: order, cassette: Cassette(replaying: cassette))
-        let replay = Cassette(replaying: cassette)
+        let baselineReplay = Cassette(replaying: cassette)
+        let baseline = await capture(make: make, order: order, cassette: baselineReplay)
+        // The candidate is answered as the baseline was, call by call, whatever order it asks in.
+        let replay = Cassette(replaying: baselineReplay.snapshot())
         let candidateTrace = await capture(make: candidate, order: order, cassette: replay)
         let evidence = ProbeEvidence(
             inputs: cassette.tracks,
