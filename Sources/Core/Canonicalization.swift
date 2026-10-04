@@ -5,11 +5,47 @@ import Foundation
 /// The recorder already handles the hardest sources of nondeterminism at capture time (pointers →
 /// symbolic ids, OS threads → logical threads, wall time → a logical clock). What remains, and what
 /// lives here, is value-level normalization that depends on the caller's declared tolerances:
-///  - redacting volatile fields (UUIDs, dates) to a stable placeholder, and
+///  - redacting volatile fields (UUIDs, dates) to a placeholder naming their shape, and
 ///  - dropping ignored event kinds, then re-densifying the logical clock.
 public enum Canonicalizer {
-    /// Placeholder substituted for any volatile field's value. Chosen to be visually obvious in dumps.
-    public static let volatilePlaceholder = CanonicalValue.string("⟨volatile⟩")
+    /// Returns the placeholder a volatile field's value is redacted to: its shape, not its value. A
+    /// fresh identifier or timestamp may differ every run, but an empty one, a lowercased one, or a
+    /// number where a string was is a change a consumer sees.
+    ///
+    /// - Parameter value: The volatile field's value.
+    /// - Returns: A string naming the value's kind, and for a string its format: empty, an upper- or
+    ///   lowercase UUID, an ISO 8601 timestamp with or without fractional seconds, or other text.
+    public static func volatilePlaceholder(for value: CanonicalValue) -> CanonicalValue {
+        .string("⟨volatile \(shape(of: value))⟩")
+    }
+
+    private static func shape(of value: CanonicalValue) -> String {
+        switch value {
+        case let .string(text): stringShape(text)
+        case .int: "int"
+        case .double: "double"
+        case .bool: "bool"
+        case .null: "null"
+        case .array: "array"
+        case .object: "object"
+        }
+    }
+
+    private static func stringShape(_ text: String) -> String {
+        if text.isEmpty {
+            return "empty string"
+        }
+        if UUID(uuidString: text) != nil {
+            // Foundation parses either case; the case a producer emits is part of its format.
+            return text == text.uppercased() ? "UUID" : text == text.lowercased() ? "uuid" : "mixed-case uuid"
+        }
+        let timestamp = #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$"#
+        let match = text.range(of: timestamp, options: .regularExpression)
+        if match == text.startIndex ..< text.endIndex {
+            return text.contains(".") ? "ISO 8601 timestamp, fractional seconds" : "ISO 8601 timestamp"
+        }
+        return "string"
+    }
 
     /// Recursively redacts volatile fields anywhere in a payload tree. `label` is the owning event's
     /// label and `path` the dotted route from the payload root to `value` (arrays contribute no
@@ -27,7 +63,7 @@ public enum Canonicalizer {
             var out: [String: CanonicalValue] = [:]
             for (key, val) in members {
                 out[key] = spec.isVolatile(key: key, label: label, path: path + [key])
-                    ? volatilePlaceholder
+                    ? volatilePlaceholder(for: val)
                     : redact(val, spec: spec, label: label, path: path + [key])
             }
             return .object(out)

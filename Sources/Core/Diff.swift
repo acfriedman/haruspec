@@ -266,50 +266,6 @@ public enum BehavioralDiff {
 
     // MARK: - Aligned-pair comparison
 
-    static func compareAligned(
-        _ baseline: TraceEvent,
-        _ candidate: TraceEvent,
-        spec: Tolerance,
-        isAdvisory: Bool,
-        into scratch: inout DiffScratch
-    ) {
-        // Every matcher funnels its pairs through here, so this is where the alignment is recorded.
-        scratch.alignedPairs.append((baseline, candidate))
-        for mismatch in valueDivergences(
-            baseline.payload ?? .null,
-            candidate.payload ?? .null,
-            path: "",
-            spec: spec
-        ) {
-            scratch.divergences.append(
-                Divergence(
-                    kind: .valueMismatch,
-                    label: baseline.label,
-                    baselineSeq: baseline.seq,
-                    candidateSeq: candidate.seq,
-                    detail: mismatch.detail,
-                    field: mismatch.path,
-                    baselineValue: mismatch.baseline,
-                    candidateValue: mismatch.candidate,
-                    isAdvisory: isAdvisory
-                )
-            )
-        }
-        if let budget = spec.timingBudget(for: baseline.label),
-           let base = baseline.durationTicks, let cand = candidate.durationTicks, cand - base > budget {
-            scratch.divergences.append(
-                Divergence(
-                    kind: .timingRegression,
-                    label: baseline.label,
-                    baselineSeq: baseline.seq,
-                    candidateSeq: candidate.seq,
-                    detail: "duration \(base)→\(cand) ticks exceeds budget +\(budget) (Δ=\(cand - base))",
-                    isAdvisory: isAdvisory
-                )
-            )
-        }
-    }
-
     /// One differing leaf: where it differed and both sides' values, plus the rendered message.
     struct ValueMismatch {
         var path: String

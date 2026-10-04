@@ -135,6 +135,45 @@ final class DiffTests: XCTestCase {
         XCTAssertTrue(tolerant.isEquivalent) // id redacted, amount matches
     }
 
+    func testAVolatileFieldStillComparesItsShape() {
+        let volatile = Tolerance(volatileFields: [.key("id")])
+        let fresh = "3F2504E0-4F89-41D3-9A0C-0305E82C3301"
+        let base = trace("base", [call(0, "a", ["id": .string(fresh)])])
+        let diverges = { (id: CanonicalValue) in
+            !BehavioralDiff.compare(
+                baseline: base,
+                candidate: self.trace("cand", [self.call(0, "a", ["id": id])]),
+                tolerances: volatile
+            ).isEquivalent
+        }
+
+        XCTAssertFalse(diverges("9C5B94B1-35AD-49BB-B118-8E8FC24ABF80"), "another UUID is the same shape")
+        XCTAssertTrue(diverges(""), "an empty identifier")
+        XCTAssertTrue(diverges(.string(fresh.lowercased())), "a lowercased UUID")
+        XCTAssertTrue(diverges(7), "a number where a string was")
+    }
+
+    func testAVolatileTimestampKeepsItsPrecision() {
+        let volatile = Tolerance(volatileFields: [.key("at")])
+        let base = trace("base", [call(0, "a", ["at": "2026-10-03T12:00:00Z"])])
+        let later = trace("cand", [call(0, "a", ["at": "2026-10-04T08:30:15Z"])])
+        let fractional = trace("cand", [call(0, "a", ["at": "2026-10-04T08:30:15.250Z"])])
+
+        XCTAssertTrue(BehavioralDiff.compare(baseline: base, candidate: later, tolerances: volatile).isEquivalent)
+        XCTAssertFalse(BehavioralDiff.compare(baseline: base, candidate: fractional, tolerances: volatile).isEquivalent)
+    }
+
+    func testANotificationPostedWithoutItsSenderDiverges() {
+        let base = trace("base", [note(0, "PlanDidChange", subject: 3)])
+        let anonymous = trace("cand", [note(0, "PlanDidChange", subject: nil)])
+        let renumbered = trace("cand", [note(0, "PlanDidChange", subject: 5)])
+
+        let diff = BehavioralDiff.compare(baseline: base, candidate: anonymous)
+        XCTAssertEqual(diff.divergences.map(\.field), ["object"])
+        let renumberedDiff = BehavioralDiff.compare(baseline: base, candidate: renumbered)
+        XCTAssertTrue(renumberedDiff.isEquivalent, "ids number by first sight")
+    }
+
     func testLabelScopedVolatileFieldDoesNotRedactOtherEvents() {
         // "id" is a fresh UUID in checkout but a stable product identifier in addItem. A rule scoped
         // to checkout must tolerate the former while still catching a regression in the latter.
