@@ -134,6 +134,35 @@ final class DiffTests: XCTestCase {
         }
     }
 
+    func testAMintedLookingMismatchIsHintedAsAnUncontrolledSeam() {
+        // A plan recorded on an earlier day: every replay reads today's clock, so the mismatch is
+        // stable and the verdict DIVERGED. The hint is what points at the clock rather than the code.
+        let base = trace("base", [call(0, "a", ["at": "2026-10-03T12:00:00Z",
+                                                "id": "3F2504E0-4F89-41D3-9A0C-0305E82C3301"])])
+        let cand = trace("cand", [call(0, "a", ["at": "2026-10-07T09:30:00Z",
+                                                "id": "9C5B94B1-35AD-49BB-B118-8E8FC24ABF80"])])
+        let details = BehavioralDiff.compare(baseline: base, candidate: cand).divergences.map(\.detail)
+
+        XCTAssertEqual(details.count, 2)
+        XCTAssertTrue(details.contains { $0.hasPrefix("at:") && $0.hasSuffix("inject the clock") }, "\(details)")
+        XCTAssertTrue(
+            details.contains { $0.hasPrefix("id:") && $0.hasSuffix("inject the identifier's source") },
+            "\(details)"
+        )
+    }
+
+    func testAComputedOrReformattedMismatchCarriesNoHint() {
+        let base = trace("base", [call(0, "a", ["total": 10, "id": "3F2504E0-4F89-41D3-9A0C-0305E82C3301"])])
+        let cand = trace("cand", [call(0, "a", ["total": 11, "id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301"])])
+        let details = BehavioralDiff.compare(baseline: base, candidate: cand).divergences.map(\.detail)
+
+        XCTAssertEqual(details.count, 2)
+        XCTAssertFalse(
+            details.contains { $0.contains("uncontrolled seam") },
+            "a lowercased UUID is a format change: \(details)"
+        )
+    }
+
     func testANotificationPostedWithoutItsSenderDiverges() {
         let base = trace("base", [note(0, "PlanDidChange", subject: 3)])
         let anonymous = trace("cand", [note(0, "PlanDidChange", subject: nil)])

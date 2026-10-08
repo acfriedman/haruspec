@@ -356,6 +356,7 @@ public enum BehavioralDiff {
             baseline: baseline,
             candidate: candidate,
             detail: "\(label(path)): baseline=\(baseline.canonicalString) candidate=\(candidate.canonicalString)"
+                + (CanonicalValue.mintedHint(baseline, candidate).map { " — \($0)" } ?? "")
         )
     }
 }

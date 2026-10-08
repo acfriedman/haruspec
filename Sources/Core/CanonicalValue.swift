@@ -56,6 +56,32 @@ public extension CanonicalValue {
         }
     }
 
+    /// Returns the hint a mismatch carries when both values look minted rather than computed: two
+    /// identifiers, or two timestamps, of the same format.
+    ///
+    /// - Parameters:
+    ///   - baseline: The recorded value.
+    ///   - candidate: The value that differed from it.
+    /// - Returns: The hint, naming the source to inject; `nil` when either value is not an identifier
+    ///   or timestamp, or the two differ in format, which is a change of its own.
+    ///
+    /// A replay against a plan recorded earlier sees a coarse clock read differ on every pass alike,
+    /// so the mismatch is stable and reads as the candidate's. Only the values' shape can say it is
+    /// likely an uncontrolled seam instead; a controlled seam never mismatches, so it never carries one.
+    static func mintedHint(_ baseline: CanonicalValue, _ candidate: CanonicalValue) -> String? {
+        guard baseline.shape == candidate.shape else {
+            return nil
+        }
+        switch baseline.shape {
+        case "UUID", "uuid", "mixed-case uuid":
+            return "likely an uncontrolled seam: inject the identifier's source"
+        case "ISO 8601 timestamp", "ISO 8601 timestamp, fractional seconds":
+            return "likely an uncontrolled seam: inject the clock"
+        default:
+            return nil
+        }
+    }
+
     private static func stringShape(_ text: String) -> String {
         if text.isEmpty {
             return "empty string"
