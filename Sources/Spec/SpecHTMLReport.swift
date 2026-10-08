@@ -67,7 +67,15 @@ public extension SpecVerdict {
                 )
             )
         }
-        if stability.replays > 1 {
+        if let selfCheck = stability.baselineSelfCheck {
+            tiles.append(
+                HTML.tile(
+                    label: "Stability",
+                    value: selfCheck.isEmpty ? "baseline reproduced" : "baseline disagreed with itself",
+                    accent: selfCheck.isEmpty ? "ok" : "warn"
+                )
+            )
+        } else if stability.replays > 1 {
             tiles.append(
                 HTML.tile(
                     label: "Stability",
@@ -94,6 +102,15 @@ public extension SpecVerdict {
     /// The run-to-run delta as the leading panel: each distinct outcome with the passes that produced
     /// it. Run 1 may have had no divergences at all (a flapping green) — the finding is the delta.
     private var unstablePanel: String {
+        let seams = (stability.uncontrolledSeams ?? []).map(\.summary).joined(separator: " — ")
+        let named = seams.isEmpty ? "" : " Uncontrolled seams: \(seams)."
+        if let selfCheck = stability.baselineSelfCheck, !selfCheck.isEmpty {
+            return HTML.abstentionSection(
+                reason: "The baseline, rerun against itself over the failing input, disagreed with "
+                    + "itself (\(selfCheck.joined(separator: " ⸱ "))).\(named) A verdict that cannot "
+                    + "be reproduced cannot gate."
+            )
+        }
         let delta = stability.outcomes.map { outcome in
             let runs = outcome.runs.map(String.init).joined(separator: ", ")
             let inventory = outcome.inventory.isEmpty
@@ -103,7 +120,7 @@ public extension SpecVerdict {
         }
         .joined(separator: " — ")
         return HTML.abstentionSection(
-            reason: "\(stability.replays) replays of identical inputs disagreed (\(delta)). "
+            reason: "\(stability.replays) replays of identical inputs disagreed (\(delta)).\(named) "
                 + "An unmodeled nondeterministic axis; a verdict that cannot be reproduced cannot gate."
         )
     }
@@ -132,7 +149,7 @@ public extension SpecVerdict {
         return HTML.cleanSection(
             summary: "Behavior matched across everything explored",
             detail: "\(scope) call ordering\(plural) — and every generated seam value — produced "
-                + "a byte-for-byte identical behavior trace (within declared tolerances). No divergences."
+                + "a byte-for-byte identical behavior trace (within the declared comparison). No divergences."
         )
     }
 }

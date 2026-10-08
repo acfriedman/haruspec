@@ -204,6 +204,11 @@ extension SpecVerdict {
     }
 
     private var stabilityEntry: String {
+        if let selfCheck = stability.baselineSelfCheck {
+            return selfCheck.isEmpty
+                ? "single run — the baseline reproduced itself on the failing input"
+                : "the baseline disagreed with itself on the failing input"
+        }
         guard stability.replays > 1 else {
             return "single replay — reproduction not measured"
         }

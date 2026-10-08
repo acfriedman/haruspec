@@ -8,7 +8,7 @@ import HaruspecCore
 
 /// Divergence tables stop here; the full list lives in the HTML report artifact. A PR comment that
 /// scrolls past twenty rows has stopped being a verdict and become a log.
-private let divergenceRowCap = 20
+let divergenceRowCap = 20
 
 public extension SpecVerdict {
     /// GitHub-flavored markdown rendering of the verdict, for PR comments and CI job summaries.
@@ -76,7 +76,7 @@ public extension SpecVerdict {
         }
         var lines = ["\(intended.isEmpty ? "Behavior" : "Everything else") matched across everything "
             + "explored — \(scope) call ordering\(plural) and every recorded seam variant replayed "
-            + "to traces identical to the goldens, within declared tolerances."]
+            + "to traces identical to the goldens, within the declared comparison."]
         if let coverageLine {
             lines.append("")
             lines.append(coverageLine)
@@ -294,34 +294,6 @@ public extension SpecVerdict {
         return sections
     }
 
-    private var unstableBody: [String] {
-        var sections = [
-            "The plan was replayed **\(stability.replays) times over identical recorded inputs** and "
-                + "the passes disagreed — \(stability.outcomes.count) distinct outcomes. Identical "
-                + "inputs leave a disagreement only one explanation: an axis of nondeterminism the "
-                + "spec does not model (a missing tolerance, projection, or seam). Neither outcome "
-                + "below is the verdict; the *difference between them* points at the unmodeled axis."
-        ]
-        for outcome in stability.outcomes {
-            let runs = outcome.runs.map(String.init).joined(separator: ", ")
-            let noun = outcome.runs.count == 1 ? "Run" : "Runs"
-            var lines = ["**\(noun) \(runs) — \(TraceDiff.banner(outcome.verdict))**"]
-            if outcome.inventory.isEmpty {
-                lines.append("")
-                lines.append("No divergences.")
-            } else {
-                lines.append("")
-                lines += outcome.inventory.prefix(divergenceRowCap).map { "- \(tableCell($0))" }
-                if outcome.inventory.count > divergenceRowCap {
-                    lines.append("- …and \(outcome.inventory.count - divergenceRowCap) more")
-                }
-            }
-            sections.append(lines.joined(separator: "\n"))
-        }
-        sections.append("A verdict that cannot be reproduced cannot gate — **this check does not pass.**")
-        return sections
-    }
-
     private var footer: String {
         let explored = exploration.isExhaustive
             ? "\(orderingsExplored) (exhaustive)"
@@ -374,7 +346,7 @@ public extension SpecVerdict {
     }
 
     /// Keeps engine-produced text from breaking the table grammar: pipes escape, newlines flatten.
-    private func tableCell(_ text: String) -> String {
+    func tableCell(_ text: String) -> String {
         text
             .replacingOccurrences(of: "|", with: "\\|")
             .replacingOccurrences(of: "\n", with: " · ")

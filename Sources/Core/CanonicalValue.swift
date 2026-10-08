@@ -37,6 +37,41 @@ public extension CanonicalValue {
     }
 }
 
+public extension CanonicalValue {
+    /// The kind of value this is, and for a string its format — what a reader needs to recognize a
+    /// value the subject made up itself (a fresh identifier, a clock reading) without seeing it.
+    ///
+    /// Names the kind for a non-string; a string is an empty string, an upper- or lowercase UUID
+    /// (the case a producer emits is part of its format), an ISO 8601 timestamp with or without
+    /// fractional seconds, or plain string.
+    var shape: String {
+        switch self {
+        case let .string(text): Self.stringShape(text)
+        case .int: "int"
+        case .double: "double"
+        case .bool: "bool"
+        case .null: "null"
+        case .array: "array"
+        case .object: "object"
+        }
+    }
+
+    private static func stringShape(_ text: String) -> String {
+        if text.isEmpty {
+            return "empty string"
+        }
+        if UUID(uuidString: text) != nil {
+            return text == text.uppercased() ? "UUID" : text == text.lowercased() ? "uuid" : "mixed-case uuid"
+        }
+        let timestamp = #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$"#
+        let match = text.range(of: timestamp, options: .regularExpression)
+        if match == text.startIndex ..< text.endIndex {
+            return text.contains(".") ? "ISO 8601 timestamp, fractional seconds" : "ISO 8601 timestamp"
+        }
+        return "string"
+    }
+}
+
 // MARK: - Codable (round-trips through plain JSON)
 
 extension CanonicalValue: Codable {

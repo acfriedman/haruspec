@@ -4,10 +4,15 @@ import HaruspecCore
 // Replay repetition — the trust layer above coverage. `verify(replaying:)` replays the plan more than
 // once and requires every pass to reach the *same* verdict with the *same* divergence inventory. Two
 // passes over identical recorded inputs have no legitimate reason to disagree, so a disagreement is
-// proof of an unmodeled nondeterministic axis (a missing tolerance, projection, or seam) — exactly the
-// failure that once made the parallel subject report a different counterexample every run. The delta
-// between the disagreeing passes is not noise to suppress; it is the report's pointer to which axis
-// is unmodeled.
+// proof of an unmodeled nondeterministic axis (an uncontrolled seam, or a missing projection) —
+// exactly the failure that once made the parallel subject report a different counterexample every
+// run. The delta between the disagreeing passes is not noise to suppress; it is the report's pointer
+// to which axis is unmodeled, and where it is a payload field, the report names it as an
+// `UncontrolledSeam` with the injection that controls it.
+//
+// The live differential has no repeated passes, so it measures the same thing where it matters: on a
+// red, the failing input is rerun with the baseline on both sides. A baseline that cannot reproduce
+// itself over identical inputs makes the red UNSTABLE rather than a finding about the candidate.
 
 /// How a verdict behaved across repeated replays of the same plan: the number of passes and the
 /// distinct outcomes they produced. One outcome = stable; more = UNSTABLE, and the outcomes *are* the
@@ -35,24 +40,41 @@ public struct Stability: Codable, Sendable, Equatable {
     public var replays: Int
     /// The distinct outcomes, in first-seen order. Never empty for a measured run.
     public var outcomes: [Outcome]
+    /// The divergence fingerprints of the baseline compared against itself over the live
+    /// differential's failing input.
+    ///
+    /// `nil` where it never ran (a green, or a replay, which measures through ``outcomes``
+    /// instead); empty when the baseline reproduced itself, so the red is the candidate's.
+    public var baselineSelfCheck: [String]?
+    /// The payload fields that took different values over identical inputs, each a value the subject
+    /// makes up itself instead of reading through a seam. `nil` when none was found.
+    public var uncontrolledSeams: [UncontrolledSeam]?
 
-    public init(replays: Int, outcomes: [Outcome]) {
+    public init(
+        replays: Int,
+        outcomes: [Outcome],
+        baselineSelfCheck: [String]? = nil,
+        uncontrolledSeams: [UncontrolledSeam]? = nil
+    ) {
         self.replays = replays
         self.outcomes = outcomes
+        self.baselineSelfCheck = baselineSelfCheck
+        self.uncontrolledSeams = uncontrolledSeams
     }
 
-    /// A single pass, or every pass agreeing. `verify(replaying:)` flips the verdict to `.unstable`
-    /// exactly when this is false.
+    /// Every measurement agreeing: at most one replay outcome, and a baseline that reproduced itself
+    /// wherever it was rerun. The resolved verdict is `.unstable` exactly when this is false.
     public var isStable: Bool {
-        outcomes.count <= 1
+        outcomes.count <= 1 && (baselineSelfCheck?.isEmpty ?? true)
     }
 
     /// The unmeasured placeholder for verdicts that never repeat a run (the live differential, a
     /// single-pass replay). Renders as "single run", never as a reproduction claim.
     public static let singleRun = Stability(replays: 1, outcomes: [])
 
-    /// Replay passes per `verify(replaying:)`. More than one by default: a verdict that has never
-    /// been reproduced is a verdict on faith, and the replay leg is the cheap side of the pipeline.
+    /// Replay passes per ``BaselinedSpec/verify(replaying:declaring:replays:)``. More than one by
+    /// default: a verdict never reproduced is a verdict on faith, and replay is the cheap leg.
+    ///
     /// Three catches every always-different axis (the flapping-counterexample class) on the first
     /// disagreement, and a genuine coin-flip survives all three same-colored only one run in four.
     public static let defaultReplays = 3
@@ -73,10 +95,16 @@ public extension Divergence {
 }
 
 extension SpecVerdict {
-    /// The stability line every measured replay carries in `report()` — and, on disagreement, the
-    /// run-to-run delta: each distinct outcome with the passes that produced it. The delta is the
-    /// diagnostic (it names the unmodeled axis), so it renders in full rather than as a count.
+    /// The stability lines ``SpecVerdict/report()`` carries: one when the measurement agreed, and on
+    /// a disagreement the delta itself, which names the unmodeled axis.
+    ///
+    /// For replays the delta is each distinct outcome with the passes that produced it; for the live
+    /// differential, what the baseline could not reproduce. Either renders in full rather than as a
+    /// count, followed by any uncontrolled seams.
     var stabilityLines: [String] {
+        if let selfCheck = stability.baselineSelfCheck {
+            return selfCheckLines(selfCheck)
+        }
         guard stability.replays > 1 else {
             return []
         }
@@ -96,8 +124,33 @@ extension SpecVerdict {
             }
         }
         lines.append("    ⚠︎ identical replays disagreed — an axis of nondeterminism is unmodeled "
-            + "(a missing tolerance, projection, or seam); the delta above points at it")
-        return lines
+            + "(an uncontrolled seam, or a missing projection); the delta above points at it")
+        return lines + uncontrolledSeamLines
+    }
+
+    /// Returns the live differential's reproduction lines.
+    ///
+    /// - Parameter selfCheck: The divergence fingerprints of the baseline against itself; empty when
+    ///   it reproduced itself.
+    /// - Returns: One line for a reproduction; otherwise the disagreement, a warning, and the seams.
+    private func selfCheckLines(_ selfCheck: [String]) -> [String] {
+        guard !selfCheck.isEmpty else {
+            return ["  stability: the baseline reproduced itself on the failing input"]
+        }
+        var lines = ["  stability: the baseline disagreed with itself on the failing input:"]
+        lines += selfCheck.map { "      \($0)" }
+        lines.append("    ⚠︎ the baseline cannot reproduce itself over identical inputs, so no "
+            + "comparison against it can gate")
+        return lines + uncontrolledSeamLines
+    }
+
+    /// Each varying payload field named, with the injection that controls it.
+    private var uncontrolledSeamLines: [String] {
+        guard let seams = stability.uncontrolledSeams, !seams.isEmpty else {
+            return []
+        }
+        return ["  uncontrolled seams — values the subject makes up itself:"]
+            + seams.map { "    \($0.summary)" }
     }
 
     /// The same verdict, carrying what repetition showed. Everything else is run 1's — the
@@ -110,8 +163,12 @@ extension SpecVerdict {
 }
 
 extension Stability {
-    /// Folds N single-pass verdicts into their distinct outcomes. Grouping is by resolved verdict +
-    /// full inventory; first-seen order keeps run 1 first so the carried representative matches.
+    /// Returns the stability of replay passes over identical inputs, naming the uncontrolled seams
+    /// when they disagreed.
+    ///
+    /// - Parameter passes: Each pass's verdict, in pass order; non-empty.
+    /// - Returns: The passes grouped into distinct outcomes by verdict and full inventory, in
+    ///   first-seen order so run 1, the carried representative, leads.
     static func measured(over passes: [SpecVerdict]) -> Stability {
         var outcomes: [Outcome] = []
         for (index, pass) in passes.enumerated() {
@@ -124,6 +181,14 @@ extension Stability {
                 outcomes.append(Outcome(runs: [index + 1], verdict: pass.result.verdict, inventory: inventory))
             }
         }
-        return Stability(replays: passes.count, outcomes: outcomes)
+        guard outcomes.count > 1 else {
+            return Stability(replays: passes.count, outcomes: outcomes)
+        }
+        let seams = UncontrolledSeam.found(across: passes.map(\.diff.divergences))
+        return Stability(
+            replays: passes.count,
+            outcomes: outcomes,
+            uncontrolledSeams: seams.isEmpty ? nil : seams
+        )
     }
 }

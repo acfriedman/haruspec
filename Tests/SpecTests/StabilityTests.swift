@@ -60,6 +60,19 @@ private final class DriftingSubject: Totaling {
     }
 }
 
+/// A baseline that mints its own identifier: a fresh UUID per capture, never read through a seam —
+/// the uncontrolled seam a redaction rule used to hide.
+private final class MintingSubject: Totaling {
+    private let center: NotificationCenter
+    init(center: NotificationCenter) {
+        self.center = center
+    }
+
+    func total() {
+        center.post(name: .init("Total"), object: nil, userInfo: ["value": 42, "orderID": UUID().uuidString])
+    }
+}
+
 /// The genuine coin flip: agrees with the baseline on every second capture, diverges otherwise —
 /// a gate without repetition reports whichever color this pass happened to land.
 private final class FlippingSubject: Totaling {
@@ -218,5 +231,82 @@ final class StabilityTests: XCTestCase {
 
         XCTAssertEqual(reloaded.verdict, .unstable)
         XCTAssertEqual(reloaded.stability, verdict.stability)
+    }
+
+    // MARK: - Uncontrolled seams are named
+
+    func testUnstableReplayNamesTheVaryingField() async {
+        let plan = await steadyPlan()
+        let verdict = await spec { DriftingSubject(center: $0.notifications) }.verify(replaying: plan)
+
+        XCTAssertEqual(
+            verdict.stability.uncontrolledSeams,
+            [UncontrolledSeam(label: "Total", field: "value", shape: "int")],
+            "the field whose value differed between passes is the unmodeled axis, named"
+        )
+        XCTAssertTrue(verdict.report().contains("uncontrolled seams"), verdict.report())
+    }
+
+    func testStableRedNamesNoSeam() async {
+        let plan = await steadyPlan()
+        final class WrongSubject: Totaling {
+            private let center: NotificationCenter
+            init(center: NotificationCenter) {
+                self.center = center
+            }
+
+            func total() {
+                center.post(name: .init("Total"), object: nil, userInfo: ["value": 41])
+            }
+        }
+        let verdict = await spec { WrongSubject(center: $0.notifications) }.verify(replaying: plan)
+
+        XCTAssertNil(verdict.stability.uncontrolledSeams, "a mismatch every pass agrees on is a finding, not a seam")
+    }
+
+    // MARK: - The live differential checks the baseline against itself on a red
+
+    func testLiveBaselineThatMintsItsOwnIdentifierIsUnstable() async {
+        let verdict = await spec { MintingSubject(center: $0.notifications) }
+            .verify(candidate: { MintingSubject(center: $0.notifications) })
+
+        XCTAssertEqual(
+            verdict.verdict,
+            .unstable,
+            "a baseline that cannot reproduce itself makes the red noise, not a finding about the candidate"
+        )
+        XCTAssertEqual(
+            verdict.stability.uncontrolledSeams,
+            [UncontrolledSeam(label: "Total", field: "orderID", shape: "UUID")]
+        )
+        let report = verdict.report()
+        XCTAssertTrue(report.contains("baseline disagreed with itself"), report)
+        XCTAssertTrue(report.contains("Total.orderID (UUID)"), report)
+        XCTAssertTrue(report.contains("`() -> UUID`"), report)
+        XCTAssertTrue(verdict.markdownReport().contains("Uncontrolled seams"), verdict.markdownReport())
+    }
+
+    func testLiveRedFromADeterministicBaselineStaysRed() async {
+        let verdict = await spec { SteadySubject(center: $0.notifications) }
+            .verify(candidate: { DriftingSubject(center: $0.notifications) })
+
+        XCTAssertEqual(
+            verdict.verdict,
+            .diverged,
+            "nondeterminism the candidate introduced is the candidate's divergence"
+        )
+        XCTAssertEqual(verdict.stability.baselineSelfCheck, [])
+        XCTAssertTrue(
+            verdict.report().contains("the baseline reproduced itself on the failing input"),
+            verdict.report()
+        )
+    }
+
+    func testLiveGreenRunsNoSelfCheck() async {
+        let verdict = await spec { SteadySubject(center: $0.notifications) }
+            .verify(candidate: { SteadySubject(center: $0.notifications) })
+
+        XCTAssertEqual(verdict.verdict, .equivalent)
+        XCTAssertNil(verdict.stability.baselineSelfCheck)
     }
 }

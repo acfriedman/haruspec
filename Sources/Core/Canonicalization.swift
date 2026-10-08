@@ -15,35 +15,7 @@ public enum Canonicalizer {
     /// - Returns: A string naming the value's kind, and for a string its format: empty, an upper- or
     ///   lowercase UUID, an ISO 8601 timestamp with or without fractional seconds, or other text.
     public static func volatilePlaceholder(for value: CanonicalValue) -> CanonicalValue {
-        .string("⟨volatile \(shape(of: value))⟩")
-    }
-
-    private static func shape(of value: CanonicalValue) -> String {
-        switch value {
-        case let .string(text): stringShape(text)
-        case .int: "int"
-        case .double: "double"
-        case .bool: "bool"
-        case .null: "null"
-        case .array: "array"
-        case .object: "object"
-        }
-    }
-
-    private static func stringShape(_ text: String) -> String {
-        if text.isEmpty {
-            return "empty string"
-        }
-        if UUID(uuidString: text) != nil {
-            // Foundation parses either case; the case a producer emits is part of its format.
-            return text == text.uppercased() ? "UUID" : text == text.lowercased() ? "uuid" : "mixed-case uuid"
-        }
-        let timestamp = #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$"#
-        let match = text.range(of: timestamp, options: .regularExpression)
-        if match == text.startIndex ..< text.endIndex {
-            return text.contains(".") ? "ISO 8601 timestamp, fractional seconds" : "ISO 8601 timestamp"
-        }
-        return "string"
+        .string("⟨volatile \(value.shape)⟩")
     }
 
     /// Recursively redacts volatile fields anywhere in a payload tree. `label` is the owning event's

@@ -117,8 +117,8 @@ extension Spec {
         let cassette: CassetteData
     }
 
-    /// Returns the red exit of the live sweep: the reported case's order shrunk, what exposed it
-    /// pinned, and every failing case carried.
+    /// Returns the red exit of the live sweep, unstable when the baseline disagrees with itself
+    /// over the failing input.
     ///
     /// - Parameters:
     ///   - run: The failing comparison the sweep reports.
@@ -126,10 +126,12 @@ extension Spec {
     ///   - candidate: Builds a fresh candidate per capture.
     ///   - surface: The golden surface the sweep explored, with the baseline that recorded it.
     ///   - intent: The deltas the candidate is meant to produce.
-    /// - Returns: The diverged verdict.
+    /// - Returns: The diverged verdict, or an unstable one carrying what the baseline could not
+    ///   reproduce.
     ///
-    /// Makes no unobserved-intent claim: the reported diff is one case's, and a declaration it did
-    /// not match may have held in another.
+    /// A stable red has the reported case's order shrunk, what exposed it pinned, and every failing
+    /// case carried; an unstable one reports its order unshrunk. Makes no unobserved-intent claim:
+    /// the reported diff is one case's, and a declaration it did not match may have held in another.
     private func divergedLiveVerdict(
         run: DivergedRun,
         failingCases: FailingCases,
@@ -139,13 +141,17 @@ extension Spec {
     ) async -> SpecVerdict {
         var diff = run.diff
         diff.unobservedIntent = []
-        let shrunk = await shrink(
-            baseline: surface.baseline,
-            candidate: candidate,
-            failing: run.order,
-            cassette: run.cassette,
-            declaring: intent
-        )
+        let stability = await selfCheck(baseline: surface.baseline, order: run.order, cassette: run.cassette)
+        var shrunk = run.order
+        if stability.isStable {
+            shrunk = await shrink(
+                baseline: surface.baseline,
+                candidate: candidate,
+                failing: run.order,
+                cassette: run.cassette,
+                declaring: intent
+            )
+        }
         let coverage = plannedCoverage(replay: run.candidateReplay, domainHeld: false, plan: surface.plan)
         let failing = exploreOrdering ? shrunk.map(\.label) : nil
         return SpecVerdict(
@@ -156,6 +162,7 @@ extension Spec {
             exploration: surface.plan.exploration,
             qualification: surface.qualification,
             violatedPreconditions: failing.map(preconditionViolations(in:)),
+            stability: stability,
             failingCases: failingCases
         )
     }
@@ -254,7 +261,7 @@ extension Spec {
 
     /// One differential run. The diff is already intent-classified: with a declared intent the loop
     /// must not stop on an intended-only divergence set, so classification lives here, not at exits.
-    private func compare(
+    func compare(
         make: (SeamContext) -> S,
         candidate: (SeamContext) -> S,
         order: [Op<S>],
