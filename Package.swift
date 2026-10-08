@@ -8,7 +8,7 @@ import PackageDescription
 /// `Haruspec` prefix so they can't clash in a consumer's dependency graph; the folders under Sources/
 /// drop it (wired via each target's `path:`), and type names are unprefixed — the module namespaces
 /// them. The only public entry point is the `Haruspec` umbrella.
-///   HaruspecCore        — the evergreen behavioral-diff primitive (model + canonicalize + tolerances + diff).
+///   HaruspecCore        — the evergreen behavioral-diff primitive (model + canonicalize + comparison + diff).
 ///   HaruspecTrace       — the runtime capture library (recorder, interceptors, ambient TraceContext).
 ///   HaruspecMacros      — the `@Traced` / `@TracedMethod` declarations (opt-in zero-code method capture).
 ///   HaruspecMacroPlugin — the compiler-plugin implementation of those macros (the only SwiftSyntax user).

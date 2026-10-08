@@ -42,7 +42,7 @@ public extension TraceDiff {
     /// prepend a coverage-aware headline and reuse this body verbatim.
     func bodyLines() -> [String] {
         guard !divergences.isEmpty else {
-            return ["  behavior trace matches within declared tolerances (0 divergences)"]
+            return ["  behavior trace matches within declared comparison (0 divergences)"]
                 + unobservedIntentLines()
         }
 
@@ -106,7 +106,7 @@ public extension TraceDiff {
         • Collateral changes: \(collateralCount). NOT declared. Treat each as a suspected regression:
           state WHAT changed and WHERE (label + detail), and ask the user whether it was intended.
         • Claim only that observable behavior did or did not change vs. the baseline within declared
-          tolerances — never that the code is "correct."\(mergeGuard)
+          comparison — never that the code is "correct."\(mergeGuard)
         """
     }
 

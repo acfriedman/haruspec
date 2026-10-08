@@ -1,10 +1,10 @@
 import Foundation
 
 /// The declared "expected behavioral change" for a feature or enhancement — the symmetric complement
-/// to `Tolerance`.
+/// to `Comparison`.
 ///
-/// Tolerances say which deltas *don't matter* (volatile fields, jitter, order) and are filtered out
-/// before diffing. Intent says which deltas were *meant to happen* (the feature) and are surfaced but
+/// A comparison says which deltas *aren't behavior* (jitter, timing within budget, order) and sets
+/// them aside before diffing. Intent says which deltas were *meant to happen* (the feature) and are surfaced but
 /// reclassified `.intended`, so they don't gate the verdict. Whatever remains is `.collateral`: an
 /// undeclared change the author didn't intend — the thing an extension-mode gate fails on.
 ///

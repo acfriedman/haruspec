@@ -326,7 +326,7 @@ public struct Spec<S> {
     /// Whether the derivation has settled (see ``settled()``), so binding twice derives once.
     var isSettled = false
     var operations: [Op<S>] = []
-    var tolerances: Tolerance = .strict
+    var comparison: Comparison = .strict
     var seamDomains: [String: SeamDomain] = [:]
     /// What the golden template reads at each declared seam: the domain's first interior value, so the
     /// recording sits inside the declared surface (a cart with items in it) rather than at the op's
@@ -445,10 +445,10 @@ public struct Spec<S> {
     /// sides at diff time, so a channel whose count varies run-to-run stops causing spurious
     /// divergences. The only notification knob a spec has, and it is subtractive by design: an
     /// allowlist would hide a channel the subject *starts* posting, which is the failure a behavioral
-    /// oracle exists to catch. Writes into the tolerance spec, so the raw trace stays complete.
+    /// oracle exists to catch. Writes into the comparison, so the raw trace stays complete.
     public func ignore(notifications names: [String]) -> Spec<S> {
         var copy = self
-        copy.tolerances.ignoredNotificationNames += names
+        copy.comparison.ignoredNotificationNames += names
         return copy
     }
 
@@ -459,13 +459,14 @@ public struct Spec<S> {
     // inherently isolated; pointing this at a process-wide center under a *parallel* test runner can let a
     // sibling capture's posts leak in (prefer injecting the context center, or serialize the suite).
 
-    /// Returns a copy of the spec whose captures are diffed under `spec` instead of strict parity.
+    /// Returns a copy of the spec whose captures are diffed under `comparison` instead of strict
+    /// parity.
     ///
-    /// - Parameter spec: The deltas the diff accepts.
-    /// - Returns: The spec with `spec` as its whole tolerance, any earlier one replaced; the receiver
-    ///   is unchanged.
-    public func tolerate(_ spec: Tolerance) -> Spec<S> {
-        var copy = self; copy.tolerances = spec; return copy
+    /// - Parameter comparison: What the diff sets aside as not behavior.
+    /// - Returns: The spec with `comparison` as its whole comparison, any earlier one replaced; the
+    ///   receiver is unchanged.
+    public func comparing(_ comparison: Comparison) -> Spec<S> {
+        var copy = self; copy.comparison = comparison; return copy
     }
 
     /// Observes boundary properties: snapshots each at the end of every capture, and the end-state
@@ -484,7 +485,7 @@ public struct Spec<S> {
     ///
     /// Spec-level deliberately, where port intent deliberately is not: an intent declared on the spec
     /// would leak one port's excuses to every candidate, but an uncaptured channel in covered baseline
-    /// code IS every candidate's shared context — the same reasoning that puts `Tolerance` here. A
+    /// code IS every candidate's shared context — the same reasoning that puts `Comparison` here. A
     /// channel only one port introduces still belongs at its check site, via `Intent`.
     public func accepts(uncaptured channels: String...) -> Spec<S> {
         var copy = self

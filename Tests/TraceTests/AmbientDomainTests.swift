@@ -104,7 +104,7 @@ final class SpawnEdgeTests: XCTestCase {
             TraceEvent(seq: 2, kind: .marker, label: "reserve", tier: .semantic, spawnedBy: 1)
         ])
 
-        let canonical = Canonicalizer.canonicalize(raw, spec: Tolerance(ignoredKinds: [.custom]))
+        let canonical = Canonicalizer.canonicalize(raw, comparison: Comparison(ignoredKinds: [.custom]))
 
         let checkout = canonical.events.first { $0.label == "Cart.checkout" }
         let reserve = canonical.events.first { $0.label == "reserve" }
@@ -120,7 +120,7 @@ final class SpawnEdgeTests: XCTestCase {
             TraceEvent(seq: 1, kind: .marker, label: "spawned", tier: .semantic, spawnedBy: 0)
         ])
 
-        let canonical = Canonicalizer.canonicalize(raw, spec: Tolerance(ignoredKinds: [.custom]))
+        let canonical = Canonicalizer.canonicalize(raw, comparison: Comparison(ignoredKinds: [.custom]))
 
         XCTAssertNil(canonical.events.first?.spawnedBy)
     }

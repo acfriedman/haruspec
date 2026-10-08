@@ -25,7 +25,7 @@ public typealias ProbeInputs = [String: [CanonicalValue]]
 public struct ProbeEvidence: Sendable {
     public var inputs: ProbeInputs?
     /// Both sides' events exactly as the diff aligned them — canonicalized under the diff's
-    /// tolerance, so a divergence's `baselineSeq` / `candidateSeq` indexes into them.
+    /// comparison, so a divergence's `baselineSeq` / `candidateSeq` indexes into them.
     public var baseline: [TraceEvent]
     public var candidate: [TraceEvent]
     /// Every divergence of the comparison being classified, for a cardinality modifier to count
@@ -33,25 +33,25 @@ public struct ProbeEvidence: Sendable {
     public var divergences: [Divergence]
 
     /// Creates the evidence a modifier is checked against, canonicalizing both traces under
-    /// `tolerances` so their sequence numbers are the ones the divergences carry.
+    /// `comparison` so their sequence numbers are the ones the divergences carry.
     ///
     /// - Parameters:
     ///   - inputs: The probe's inputs; `nil` when the probe had none.
     ///   - baseline: The recorded trace; `nil` leaves `baseline` empty.
     ///   - candidate: The candidate trace; `nil` leaves `candidate` empty.
-    ///   - tolerances: The tolerance the diff ran under; `.strict` when the caller has none.
+    ///   - comparison: The comparison the diff ran under; `.strict` when the caller has none.
     ///   - divergences: Every divergence of the comparison being classified; empty when the
     ///     comparison is not known.
     public init(
         inputs: ProbeInputs? = nil,
         baseline: Trace? = nil,
         candidate: Trace? = nil,
-        tolerances: Tolerance = .strict,
+        comparison: Comparison = .strict,
         divergences: [Divergence] = []
     ) {
         self.inputs = inputs
-        self.baseline = baseline.map { Canonicalizer.canonicalize($0, spec: tolerances).events } ?? []
-        self.candidate = candidate.map { Canonicalizer.canonicalize($0, spec: tolerances).events } ?? []
+        self.baseline = baseline.map { Canonicalizer.canonicalize($0, comparison: comparison).events } ?? []
+        self.candidate = candidate.map { Canonicalizer.canonicalize($0, comparison: comparison).events } ?? []
         self.divergences = divergences
     }
 

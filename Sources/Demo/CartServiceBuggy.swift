@@ -12,11 +12,13 @@ import HaruspecTrace
 ///  3. `checkout` recomputes redundantly, blowing its timing budget (a `timingRegression`).
 public final class CartServiceBuggy: CartService {
     private let center: NotificationCenter
+    private let issuer: ReceiptIssuer
     private var items: [(sku: String, price: Int, qty: Int)] = []
     private var promoActive = false
 
-    public init(center: NotificationCenter) {
+    public init(center: NotificationCenter, issuer: ReceiptIssuer) {
         self.center = center
+        self.issuer = issuer
     }
 
     public func addItem(sku: String, unitPriceCents: Int, quantity: Int) {
@@ -48,8 +50,8 @@ public final class CartServiceBuggy: CartService {
             taxCents: tax,
             totalCents: taxable + tax,
             lineCount: items.count,
-            orderID: Pricing.freshOrderID(),
-            issuedAt: Pricing.issuedNow()
+            orderID: issuer.orderID(),
+            issuedAt: issuer.issuedAt()
         )
         center.post(name: .checkoutDidComplete, object: self, userInfo: ["totalCents": receipt.totalCents])
         // Payload-free milestone marker. The off-by-one total is caught via the CheckoutDidComplete

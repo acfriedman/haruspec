@@ -6,7 +6,7 @@ let usage = """
 haruspec — the behavioral-oracle engine
 
 USAGE:
-  haruspec diff <baseline.json> <candidate.json> [--tolerance <spec.json>] [--intent <spec.json>]\
+  haruspec diff <baseline.json> <candidate.json> [--comparison <comparison.json>] [--intent <spec.json>]\
  [--agent] [--json] [--html <path>]
       Diff two captured traces. Exits 3 if they diverge.
       --intent <spec.json>  extension mode: absorb declared changes, gate only on collateral ones.
@@ -42,7 +42,7 @@ USAGE:
       write the traces, and print the verdicts — including parity vs. extension mode. Great first run.
       --html                also write a visual HTML report per verdict into <dir>.
 
-  haruspec canonicalize <trace.json> [--tolerance <spec.json>] [--out <file.json>]
+  haruspec canonicalize <trace.json> [--comparison <comparison.json>] [--out <file.json>]
       Emit the canonical, redacted form of a trace.
 
   haruspec report <result.json>... [--markdown] [--html <path>] [--agent] [--changed <file> --root <dir>]

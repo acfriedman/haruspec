@@ -23,9 +23,8 @@ public enum EventKind: String, Codable, Sendable, CaseIterable {
 /// observable product behavior — notifications, KVO/state changes, payload-free markers, and outbound
 /// calls recorded at an injected collaborator seam (a real effect leaving the SUT across a declared
 /// boundary) — labeled by domain concepts / stable public APIs, so it survives refactors and is the
-/// durable contract. Tolerances
-/// can gate on one
-/// tier and treat the other as advisory or ignored (see `StructuralComparison`).
+/// durable contract. A comparison can gate on one tier and treat the other as advisory or ignored (see
+/// `StructuralComparison`).
 public enum EventTier: String, Codable, Sendable {
     case structural // internal call mechanics (calls / returns / timing) — code-symbol-named, fragile
     case semantic // observable product behavior (notifications, state, markers) — the durable contract
@@ -174,7 +173,7 @@ public struct TraceEvent: Sendable, Equatable {
     public var subject: Int?
     /// Arguments / return value / notification userInfo, canonicalized.
     public var payload: CanonicalValue?
-    /// Duration for `.signpost` intervals. A *tolerant* field: only compared against declared budgets.
+    /// Duration for `.signpost` intervals. A budgeted field: only compared against declared budgets.
     public var durationTicks: Int64?
     /// Call-nesting depth (informational; helps render/understand a trace).
     public var depth: Int

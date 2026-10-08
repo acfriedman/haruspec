@@ -35,7 +35,7 @@ public enum HTML {
         <footer>
           Behavioral diff by <strong>Haruspec</strong> — a deterministic re-run of the candidate against a
           recorded baseline over the same generated inputs. Any divergence above is a real change in
-          observable behavior within the declared tolerances, not a plausibility guess.
+          observable behavior within the declared comparison, not a plausibility guess.
           <div class="ts">generated \(timestamp())</div>
         </footer>
         </main>
@@ -483,7 +483,7 @@ public extension TraceDiff {
             return HTML.unobservedIntentSection(unobservedIntent) + HTML.cleanSection(
                 summary: "Behavior matched",
                 detail: "Every compared event produced a byte-for-byte identical behavior trace "
-                    + "(within declared tolerances). No divergences."
+                    + "(within declared comparison). No divergences."
             )
         }
     }

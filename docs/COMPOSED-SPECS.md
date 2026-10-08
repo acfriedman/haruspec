@@ -91,7 +91,7 @@ a large migration is, and the work people are most afraid to do without a net.
   or neither alone: an *interaction* bug. Most integration failures start with a day of "whose bug is
   this?"
 - **Low marginal cost.** With both units stamped and specified, a composed spec is mostly wiring: it
-  reuses their ops, seam domains, tolerances and intent.
+  reuses their ops, seam domains, comparisons and intent.
 - **Runs only when needed.** In the continuous shape it replays only when A's or B's files change.
 - **Honest scope.** If B reaches a queue, clock or framework nobody controls, the verdict is
   `CANNOT-VERIFY`, not a pass.
@@ -105,11 +105,11 @@ a large migration is, and the work people are most afraid to do without a net.
    context. Driving B only through A's op catalog keeps the ordering space small and realistic.
 2. **Interior edges are advisory by default.** Gate on A's outer boundary and on B's own outbound
    edges; report A→B differences as localization hints. The semantic/structural split
-   (`Tolerance.structuralComparison`) is the natural home.
+   (`Comparison.structuralComparison`) is the natural home.
 3. **Pairwise attribution.** The 4× matrix above, opt-in because it multiplies cost.
 4. **Shared collaborators.** When A and C both use B, interleave both subjects' ops against one live
    B. Shared-state bugs live here.
-5. **Merged declarations.** Intent and tolerances from both specs, scoped so B's intent only excuses
+5. **Merged declarations.** Intent and comparisons from both specs, scoped so B's intent only excuses
    divergences that originate in B.
 
 **A cheaper complement, contract stitching.** Without running the pair together: the calls A makes
@@ -124,8 +124,8 @@ logic live.**
 
 ### Values: UUIDs, clocks, randomness
 
-`SeamClock` and `SeamRNG` already exist. UUIDs are only redacted today (`volatileFields`). Two ways
-to control them:
+`SeamClock` and `SeamRNG` already exist. UUIDs are injected by the adopter today; redaction
+(`volatileFields`) was retired, and an uncontrolled one reads as UNSTABLE. Two ways to control them:
 
 - **Inject a deterministic sequence** (a `SeamUUID`, like `SeamRNG`). Identical IDs on both sides,
   but fragile across ports: one extra UUID drawn by the candidate shifts every later ID into a
@@ -134,7 +134,7 @@ to control them:
   already is. No production change, and robust to an extra draw.
 
 Canonicalization should be the default, with injection where the value itself matters (sorting by
-ID, hashing, persistence). Redaction is the worst choice here: IDs are what cross boundaries, and
+ID, hashing, persistence). Redaction was the worst choice here: IDs are what cross boundaries, and
 redacting them hides "A passed B the wrong order ID." Aliasing keeps which ID went where.
 
 ### Schedules

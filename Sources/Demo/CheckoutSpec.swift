@@ -6,7 +6,8 @@ import HaruspecTrace
 /// returns the captured trace. This is the "replay" half of capture→replay→diff: identical inputs,
 /// so any difference in the output trace is attributable to the code, not the driver.
 public enum CheckoutSpec {
-    /// Runs the canonical spec, capturing a trace under a deterministic clock.
+    /// Runs the canonical spec, capturing a trace under a deterministic clock and a fixed
+    /// ``ReceiptIssuer``.
     ///
     /// Capture is fully ambient and zero-code on the service side: the stamped protocol's forwarder
     /// records call/args/return against `TraceContext.current` (bound here), and an injected
@@ -15,13 +16,13 @@ public enum CheckoutSpec {
     /// of the oracle.
     public static func capture(
         name: String,
-        _ makeService: (NotificationCenter) -> CartService
+        _ makeService: (NotificationCenter, ReceiptIssuer) -> CartService
     ) -> Trace {
         let clock = ManualClock()
         let recorder = TraceRecorder(name: name, clock: clock)
         let center = RecordingNotificationCenter()
 
-        let service = TracedCartService(makeService(center))
+        let service = TracedCartService(makeService(center, .fixed()))
 
         TraceContext.$current.withValue(recorder) {
             service.addItem(sku: "COFFEE", unitPriceCents: 1299, quantity: 2)
@@ -36,24 +37,24 @@ public enum CheckoutSpec {
 
     /// Golden baseline behavior.
     public static func baseline() -> Trace {
-        capture(name: "checkout.baseline") { CartServiceV1(center: $0) }
+        capture(name: "checkout.baseline") { CartServiceV1(center: $0, issuer: $1) }
     }
 
     /// A behavior-preserving refactor (should verify EQUIVALENT).
     public static func refactor() -> Trace {
-        capture(name: "checkout.refactor") { CartServiceV2(center: $0) }
+        capture(name: "checkout.refactor") { CartServiceV2(center: $0, issuer: $1) }
     }
 
     /// A subtly-broken change (should be caught as DIVERGED).
     public static func regression() -> Trace {
-        capture(name: "checkout.regression") { CartServiceBuggy(center: $0) }
+        capture(name: "checkout.regression") { CartServiceBuggy(center: $0, issuer: $1) }
     }
 
     /// A feature change: intended new behavior (loyalty points) plus one collateral regression.
     /// Verified in *extension mode* against `intent` — the intended deltas are absorbed, the
     /// collateral one is caught. (See `CartServiceV3`.)
     public static func feature() -> Trace {
-        capture(name: "checkout.feature") { CartServiceV3(center: $0) }
+        capture(name: "checkout.feature") { CartServiceV3(center: $0, issuer: $1) }
     }
 
     /// The declared intent for the `feature()` change: the loyalty additions were *meant* to happen,
@@ -67,12 +68,10 @@ public enum CheckoutSpec {
         }
     }
 
-    /// The declared tolerance contract for this application: fresh UUIDs/timestamps are volatile,
-    /// the recompute interval has a small timing budget, and the two independent post-add
-    /// notifications may be emitted in either order.
-    public static var tolerances: Tolerance {
-        Tolerance(
-            volatileFields: [.key("orderID"), .key("issuedAt")],
+    /// The declared comparison for this application: the recompute interval has a small timing
+    /// budget, and the two independent post-add notifications may be emitted in either order.
+    public static var comparison: Comparison {
+        Comparison(
             numericEpsilon: 0,
             timingBudgets: ["CartService.checkout": 50],
             unorderedGroups: [["CartDidChange", "AnalyticsDidTrack"]],

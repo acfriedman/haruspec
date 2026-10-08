@@ -6,7 +6,7 @@ import Foundation
 ///  - **Deterministic ordering.** Object keys are always rendered sorted (`canonicalString`),
 ///    so two structurally-equal payloads produce identical text regardless of insertion order.
 ///  - **Structural comparison.** The diff engine walks this tree directly, applying numeric
-///    tolerances and volatile-field redaction, rather than comparing opaque strings.
+///    comparison and volatile-field redaction, rather than comparing opaque strings.
 public indirect enum CanonicalValue: Sendable, Equatable {
     case null
     case bool(Bool)

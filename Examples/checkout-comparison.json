@@ -1,5 +1,4 @@
 {
-  "volatileFields": ["orderID", "issuedAt"],
   "numericEpsilon": 0,
   "timingBudgets": {
     "CartService.checkout": 50

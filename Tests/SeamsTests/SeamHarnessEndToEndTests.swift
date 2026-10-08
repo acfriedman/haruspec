@@ -11,7 +11,7 @@ import XCTest
 /// branches; diff the traces through the oracle.
 ///
 /// What this proves beyond the validation gate: the nondeterminism here (a timestamp, a random
-/// bucket) *flows into the output*, so tolerances can't absorb it — only seam replay can. Record once,
+/// bucket) *flows into the output*, so comparison can't absorb it — only seam replay can. Record once,
 /// replay into both branches, and a code change is isolated against a held-identical environment.
 final class SeamHarnessEndToEndTests: XCTestCase {
     private static let sessionStarted = Notification.Name("SessionStarted")
@@ -67,7 +67,7 @@ final class SeamHarnessEndToEndTests: XCTestCase {
         let cassette = recording.snapshot()
 
         // 2. A fresh LIVE run reads a different timestamp/bucket, and those flow into behavior — so the
-        //    trace diverges and no tolerance can absorb it (the values are real outputs, not noise).
+        //    trace diverges and no comparison can set it aside (the values are real outputs, not noise).
         let liveAgain = runSession(cassette: Cassette(), pricing: baselinePricing)
         XCTAssertFalse(
             BehavioralDiff.compare(baseline: golden, candidate: liveAgain).isEquivalent,

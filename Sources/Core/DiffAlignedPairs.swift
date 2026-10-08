@@ -4,7 +4,7 @@ extension BehavioralDiff {
     static func compareAligned(
         _ baseline: TraceEvent,
         _ candidate: TraceEvent,
-        spec: Tolerance,
+        comparison: Comparison,
         isAdvisory: Bool,
         into scratch: inout DiffScratch
     ) {
@@ -14,7 +14,7 @@ extension BehavioralDiff {
             baseline.payload ?? .null,
             candidate.payload ?? .null,
             path: "",
-            spec: spec
+            comparison: comparison
         ) {
             scratch.divergences.append(
                 Divergence(
@@ -31,7 +31,7 @@ extension BehavioralDiff {
             )
         }
         scratch.divergences += senderDivergences(baseline, candidate, isAdvisory: isAdvisory)
-        if let budget = spec.timingBudget(for: baseline.label),
+        if let budget = comparison.timingBudget(for: baseline.label),
            let base = baseline.durationTicks, let cand = candidate.durationTicks, cand - base > budget {
             scratch.divergences.append(
                 Divergence(

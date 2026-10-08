@@ -1,6 +1,6 @@
 import Foundation
 
-/// How a divergence relates to the change's *declared intent* (see `Intent`). Tolerated deltas
+/// How a divergence relates to the change's *declared intent* (see `Intent`). Deltas the comparison sets aside
 /// never become divergences at all; of those that do, `intended` ones were declared and don't gate,
 /// `collateral` ones were not — the residual an extension-mode verdict fails on.
 public enum DivergenceClass: String, Codable, Sendable {
@@ -18,7 +18,7 @@ public struct Divergence: Codable, Sendable, Equatable {
         case orderingRelaxed // work left an ordered domain for an unordered one — a guarantee was dropped
         case orderingLost // a happens-before constraint held in baseline; the candidate leaves the pair concurrent
         case orderingAdded // the candidate constrains a pair the baseline left concurrent — new synchronization
-        case valueMismatch // an aligned event's payload differs beyond tolerance
+        case valueMismatch // an aligned event's payload differs beyond the numeric epsilon
         case timingRegression // an aligned interval got slower than its declared budget allows
     }
 
@@ -95,7 +95,7 @@ public struct Divergence: Codable, Sendable, Equatable {
 }
 
 /// The oracle's verdict on whether the candidate's behavior trace matches the baseline's within the
-/// declared tolerances. It carries every divergence found, so a failing verdict is its own report.
+/// declared comparison. It carries every divergence found, so a failing verdict is its own report.
 public struct TraceDiff: Codable, Sendable, Equatable {
     /// The four verdict tiers, kept in one place so every layer speaks one vocabulary. A pure trace
     /// comparison only ever produces `.equivalent` or `.diverged`; `.cannotVerify` and `.unstable`
@@ -133,7 +133,7 @@ public struct TraceDiff: Codable, Sendable, Equatable {
 /// The evergreen "behavioral diff" primitive. Everything else in the product is a caller of this.
 ///
 /// Pipeline:
-///  1. Canonicalize both traces under the tolerance spec (redact volatile fields, drop ignored kinds).
+///  1. Canonicalize both traces under the comparison (drop ignored kinds and channels).
 ///  2. Align event *signatures* (kind+label+domain) with an LCS — robust to insertions,
 ///     deletions and moves without assuming lockstep positions.
 ///  3. Classify the leftovers: matched-and-moved ⇒ reordered, same event on another domain ⇒
@@ -153,30 +153,30 @@ public enum BehavioralDiff {
     public static func compare(
         baseline rawBaseline: Trace,
         candidate rawCandidate: Trace,
-        tolerances spec: Tolerance = .strict
+        comparison: Comparison = .strict
     ) -> TraceDiff {
-        var baseline = Canonicalizer.canonicalize(rawBaseline, spec: spec).events
-        var candidate = Canonicalizer.canonicalize(rawCandidate, spec: spec).events
+        var baseline = Canonicalizer.canonicalize(rawBaseline, comparison: comparison).events
+        var candidate = Canonicalizer.canonicalize(rawCandidate, comparison: comparison).events
 
         // Two-tier: when the structural tier is ignored, compare only the semantic (product) events.
-        if spec.structuralComparison == .ignored {
+        if comparison.structuralComparison == .ignored {
             baseline = baseline.filter { $0.tier == .semantic }
             candidate = candidate.filter { $0.tier == .semantic }
         }
         /// A divergence is advisory (reported, non-failing) when its event sits in the structural tier
-        /// and the spec compares that tier under `.advisory`.
+        /// and the comparison sets that tier to `.advisory`.
         func advisory(_ event: TraceEvent) -> Bool {
-            isAdvisory(event, under: spec)
+            isAdvisory(event, under: comparison)
         }
 
         var scratch = DiffScratch()
 
-        switch spec.concurrency {
+        switch comparison.concurrency {
         case .totalOrder:
             compareTotalOrder(
                 baseline: baseline,
                 candidate: candidate,
-                spec: spec,
+                comparison: comparison,
                 advisory: advisory,
                 into: &scratch
             )
@@ -186,14 +186,14 @@ public enum BehavioralDiff {
             comparePerDomain(
                 baseline: baseline,
                 candidate: candidate,
-                spec: spec,
+                comparison: comparison,
                 into: &scratch
             )
         }
 
         // The happens-before pass: with alignment settled, compare the *constraints* the recorded
         // spawn edges imply. `DiffSpawnEdges.swift`.
-        compareSpawnEdges(baseline: baseline, candidate: candidate, spec: spec, into: &scratch)
+        compareSpawnEdges(baseline: baseline, candidate: candidate, comparison: comparison, into: &scratch)
 
         scratch.divergences.sort { lhs, rhs in
             (lhs.baselineSeq ?? lhs.candidateSeq ?? Int.max, lhs.candidateSeq ?? Int.max)
@@ -227,7 +227,7 @@ public enum BehavioralDiff {
     private static func compareTotalOrder(
         baseline: [TraceEvent],
         candidate: [TraceEvent],
-        spec: Tolerance,
+        comparison: Comparison,
         advisory: (TraceEvent) -> Bool,
         into scratch: inout DiffScratch
     ) {
@@ -243,7 +243,7 @@ public enum BehavioralDiff {
             compareAligned(
                 baseline[baselineIndex],
                 candidate[candidateIndex],
-                spec: spec,
+                comparison: comparison,
                 isAdvisory: advisory(baseline[baselineIndex]),
                 into: &scratch
             )
@@ -258,7 +258,7 @@ public enum BehavioralDiff {
                 matchedBaseline: matchedBaseline,
                 matchedCandidate: matchedCandidate
             ),
-            spec: spec,
+            comparison: comparison,
             advisory: advisory,
             into: &scratch
         )
@@ -274,24 +274,24 @@ public enum BehavioralDiff {
         var detail: String
     }
 
-    /// Returns one mismatch per leaf path at which two canonical values differ beyond the tolerance.
+    /// Returns one mismatch per leaf path at which two canonical values differ under the comparison.
     /// Internal rather than private because the projection's multiset matching uses it as its predicate.
     ///
     /// - Parameters:
     ///   - baseline: The recorded value.
     ///   - candidate: The value compared against it.
     ///   - path: The dotted route to `baseline` from the payload root.
-    ///   - spec: The tolerance in force.
+    ///   - comparison: The comparison in force.
     /// - Returns: The mismatches, each at a path beneath `path`; empty when the values are equivalent,
-    ///   with numbers within `spec.numericEpsilon` counting as equal.
+    ///   with numbers within `comparison.numericEpsilon` counting as equal.
     static func valueDivergences(
         _ baseline: CanonicalValue,
         _ candidate: CanonicalValue,
         path: String,
-        spec: Tolerance
+        comparison: Comparison
     ) -> [ValueMismatch] {
         if let baselineNumber = numeric(baseline), let candidateNumber = numeric(candidate) {
-            return abs(baselineNumber - candidateNumber) <= spec.numericEpsilon
+            return abs(baselineNumber - candidateNumber) <= comparison.numericEpsilon
                 ? [] : [mismatch(path, baseline, candidate)]
         }
         switch (baseline, candidate) {
@@ -312,7 +312,12 @@ public enum BehavioralDiff {
                 )]
             }
             return baselineArray.indices.flatMap {
-                valueDivergences(baselineArray[$0], candidateArray[$0], path: "\(label(path))[\($0)]", spec: spec)
+                valueDivergences(
+                    baselineArray[$0],
+                    candidateArray[$0],
+                    path: "\(label(path))[\($0)]",
+                    comparison: comparison
+                )
             }
         case let (.object(baselineObject), .object(candidateObject)):
             let keys = Set(baselineObject.keys).union(candidateObject.keys).sorted()
@@ -321,7 +326,7 @@ public enum BehavioralDiff {
                     baselineObject[key] ?? .null,
                     candidateObject[key] ?? .null,
                     path: path.isEmpty ? key : "\(path).\(key)",
-                    spec: spec
+                    comparison: comparison
                 )
             }
         default:

@@ -16,13 +16,17 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
 ## Engine — the behavioral-diff primitive
 
 - ✅ **Trace model + canonicalization** — logical clock, symbolic object identity, nominal concurrency domains,
-  volatile-field redaction. (`HaruspecCore`)
+  no value redaction: a varying value is an uncontrolled seam. (`HaruspecCore`)
 - ✅ **Behavioral diff v0** — LCS alignment; missing/unexpected/reordered/value/timing divergences;
-  declared tolerances (volatile fields, numeric epsilon, timing budgets, unordered groups, ignored
-  kinds). The crown jewel.
+  a declared `Comparison` (numeric epsilon, timing budgets, unordered groups, ignored kinds). The crown jewel.
 - ✅ **Capture → store → reload** — deterministic JSON trace bundles.
 - ✅ **Validation gate proven** — repeat captures of one real module verify EQUIVALENT under
-  tolerances despite nondeterminism; a plausible-but-wrong change is caught and localized.
+  strict comparison, with the volatile values injected; a plausible-but-wrong change is caught and localized.
+- ✅ **Uncontrolled seams, not tolerated values** (2026-10-07) — `Tolerance` is `Comparison`
+  (`.comparing(_:)`, `--comparison`), and value redaction (`volatileFields`) is gone: a fresh UUID or
+  clock read is a seam to inject. A run that varies on one reads `UNSTABLE` and names each varying
+  field, its shape, and the injection. The live differential reruns a red's failing input with the
+  baseline on both sides, so a baseline that cannot reproduce itself never reads as `DIVERGED`.
 - ✅ **Three-tier verdict + coverage** — beyond `EQUIVALENT` / `DIVERGED`, `CANNOT-VERIFY`: the
   engine abstains (loudly) when a change crosses a seam it can't faithfully isolate, and reports the
   fraction of the change's behavioral surface actually exercised. Sound by design — a false
@@ -41,15 +45,15 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   exit code `4 = cannot-verify` (CI treats 3 and 4 as non-pass; only 0 is green). Deferred by decision:
   a numeric coverage *threshold* (declared `CoveragePolicy`) and **static seam-crossing analysis** to
   see boundaries no one recorded — today's denominator is honest but partial.
-- ✅ **Expected-change (intent) spec** — `Intent`, symmetric to `Tolerance`: tolerances declare
-  deltas that *don't matter*, the intent spec declares deltas that were *meant to happen*
+- ✅ **Expected-change (intent) spec** — `Intent`, symmetric to `Comparison`: a comparison sets aside
+  deltas that *aren't behavior*, the intent spec declares deltas that were *meant to happen*
   (`expectedNewEvents` / `expectedRemovedEvents` / `expectedValueChanges`). `TraceDiff.classified(against:)`
   reclassifies declared divergences `intended` and re-derives the verdict from the residual collateral —
   so extension mode (features) and parity mode (migrations) are the same engine, with migration the
   special case where intent = ∅ (`Intent.none`). Field-specific: declaring one field of an event
   doesn't excuse a change to another.
 - ✅ **Per-divergence labeling + agent relay** — each divergence tagged `intended` / `collateral`
-  (`tolerated` deltas never become divergences); `haruspec diff --intent` gates only on collateral, and
+  (deltas the comparison sets aside never become divergences); `haruspec diff --intent` gates only on collateral, and
   `--agent` prints a prompt-injected guide teaching a consuming agent how to relay the verdict.
   Demonstrated end-to-end by `CartServiceV3` (a loyalty feature carrying a collateral dropped
   notification).
@@ -107,7 +111,7 @@ Known constraints of *shipped* code (as opposed to unbuilt features) live in
   per-call timing for timing budgets; `Haruspec.interval` still covers sub-call regions. Retired with
   it: the class macros `@Traced` / `@TracedMethod` / `@TracedProperty` / `@Timed` / `@Seamed`, which
   had to sit on production types. With `@TracedProperty` went full property-write capture, and the
-  write-*order* diff it fed (`MutationCapture`, `Tolerance.mutationOrder`) was deleted: it only ever
+  write-*order* diff it fed (`MutationCapture`, `Comparison.mutationOrder`) was deleted: it only ever
   ran Swift-to-Swift, and end-state snapshots still gate. A write that crosses a forwarder or double
   is now compared like a call. Observed properties are also sampled at every settled point (after
   construction, each op, and each held work item), so a state the subject passes through but does
@@ -208,7 +212,7 @@ the golden branch, replay the *same* transcript into both branches, and diff. Se
 ## Distribution & rails
 
 - ✅ **MCP tool wrapper** — `haruspec mcp` serves the engine over MCP stdio (dependency-free JSON-RPC,
-  ~200 lines in `HaruspecMCP`): `verify_behavioral_parity` wraps the `diff --tolerance --intent
+  ~200 lines in `HaruspecMCP`): `verify_behavioral_parity` wraps the `diff --comparison --intent
   --agent` path — text content carries the report + agent relay guide, `structuredContent` the verdict
   + intended/collateral counts + full diff JSON — and `canonicalize_trace` exposes the canonical form
   for debugging. Tool-execution failures ride `isError` (visible to the model), never protocol errors.
@@ -241,7 +245,7 @@ the golden branch, replay the *same* transcript into both branches, and diff. Se
   are recorded (`spawnedBy`); nothing diffs them yet.
 - 🔬 **Trace canonicalization at scale** — clock jitter, address nondeterminism, dispatch ordering.
 - 🔬 **Replay determinism** — input seeding, sim-state restore, network stubbing so replays compare.
-- 🔬 **Tolerance model depth** — richer declared deltas beyond exact/volatile/timing/unordered.
+- 🔬 **Comparison depth** — richer declared deltas beyond exact/epsilon/timing/unordered.
 - 🔬 **Legacy reach** — ObjC dynamism (KVO/notifications/runtime) capture fidelity vs. pure Swift, and
   the record/replay fidelity of every I/O and nondeterminism seam. Cataloged and prioritized in
   [`SEAMS.md`](SEAMS.md) — this is what governs how much code reaches the no-simulator tier.

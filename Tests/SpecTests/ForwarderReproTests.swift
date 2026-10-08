@@ -30,8 +30,12 @@ final class ReproReceipt: NSObject {
 final class ReproLegacyManager {
     let notifications: NotificationCenter
 
-    init(notifications: NotificationCenter = .default) {
+    /// Mints each receipt's order ID; injected so a capture holds it still.
+    let newOrderID: () -> String
+
+    init(notifications: NotificationCenter = .default, newOrderID: @escaping () -> String) {
         self.notifications = notifications
+        self.newOrderID = newOrderID
     }
 
     private var lines: [String: (price: Int, qty: Int)] = [:]
@@ -68,7 +72,7 @@ final class ReproLegacyManager {
         let total = subtotal - discount
         let receipt = ReproReceipt()
         receipt.subtotal = subtotal; receipt.discount = discount; receipt.total = total
-        receipt.orderID = UUID().uuidString
+        receipt.orderID = newOrderID()
         notifications.post(name: .init("CheckoutDidComplete"), object: self, userInfo: ["total": total])
         order.removeAll(); lines.removeAll(); promo = false
         notifications.post(name: .init("CartDidChange"), object: self)
@@ -90,8 +94,12 @@ extension ReproLegacyManager: ReproCart {}
 final class ReproSwiftPort: ReproCart {
     let notifications: NotificationCenter
 
-    init(notifications: NotificationCenter = .default) {
+    /// Mints each receipt's order ID; injected so a capture holds it still.
+    let newOrderID: () -> String
+
+    init(notifications: NotificationCenter = .default, newOrderID: @escaping () -> String) {
         self.notifications = notifications
+        self.newOrderID = newOrderID
     }
 
     private var lines: [String: (price: Int, qty: Int)] = [:]
@@ -128,7 +136,7 @@ final class ReproSwiftPort: ReproCart {
         let total = subtotal - discount
         let receipt = ReproReceipt()
         receipt.subtotal = subtotal; receipt.discount = discount; receipt.total = total
-        receipt.orderID = UUID().uuidString
+        receipt.orderID = newOrderID()
         notifications.post(name: .init("CheckoutDidComplete"), object: self, userInfo: ["total": total])
         order.removeAll(); lines.removeAll(); promo = false
         notifications.post(name: .init("CartDidChange"), object: self)
@@ -150,23 +158,18 @@ final class ForwarderReproTests: XCTestCase {
                 Op("removeMug") { sut in sut.removeSku("MUG") }.after("addMug")
                 Op("checkout") { sut in _ = sut.checkout() }.last()
             }
-            .tolerate(
-                Tolerance(
-                    volatileFields: [.key("orderID")],
-                    numericEpsilon: 0,
-                    timingBudgets: [:],
-                    unorderedGroups: [],
-                    ignoredKinds: []
-                )
-            )
             .vary {
                 Seam("coffeeQty", .int(1 ... 20))
                 Seam("mugQty", .int(1 ... 5))
                 Ordering(max: 50)
             }
-            .baselined { context in ReproLegacyManager(notifications: context.notifications) }
+            .baselined { context in
+                ReproLegacyManager(notifications: context.notifications, newOrderID: { "ORDER-1" })
+            }
 
-        let verdict = await spec.verify { context in ReproSwiftPort(notifications: context.notifications) }
+        let verdict = await spec.verify { context in
+            ReproSwiftPort(notifications: context.notifications, newOrderID: { "ORDER-1" })
+        }
         print("=== FORWARDER REPRO ===")
         print(verdict.report())
         print("=== FORWARDER REPRO END ===")

@@ -277,12 +277,12 @@ extension Spec {
             inputs: cassette.tracks,
             baseline: baseline,
             candidate: candidateTrace,
-            tolerances: tolerances
+            comparison: comparison
         )
         let diff = BehavioralDiff.compare(
             baseline: baseline,
             candidate: candidateTrace,
-            tolerances: tolerances
+            comparison: comparison
         )
         .classified(against: intent, evidence: evidence)
         return ProbeComparison(diff: diff, candidateReplay: replay, evidence: evidence)

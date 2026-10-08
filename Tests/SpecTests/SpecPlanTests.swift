@@ -142,7 +142,7 @@ final class SpecPlanTests: XCTestCase {
 
     func testRecordIsDeterministic() async {
         // Two records of the same base build produce the same plan — the cross-build analog of
-        // `testCaptureIsDeterministicUnderTolerances`, and what makes committed-golden viable.
+        // `testCaptureIsDeterministicUnderStrictComparison`, and what makes committed-golden viable.
         let first = await cart(system: makeGood).record()
         let second = await cart(system: makeGood).record()
         XCTAssertEqual(first, second)

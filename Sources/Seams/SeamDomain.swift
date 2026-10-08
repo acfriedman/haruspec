@@ -97,7 +97,7 @@ public enum SeamDomain: Sendable {
     }
 
     /// Where the fractional decade ladder bottoms out: per-mille scale, below which differences
-    /// stop being distinguishable through the tolerance layer anyway.
+    /// stop being distinguishable through the numeric epsilon anyway.
     static let smallestDoubleMagnitude = 0.001
 }
 

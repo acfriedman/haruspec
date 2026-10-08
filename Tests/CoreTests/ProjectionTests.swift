@@ -10,7 +10,7 @@ import XCTest
 /// content and counts gate, order stays a contract exactly where the runtime guarantees it, and a
 /// guarantee that was *dropped* is its own named, gating divergence rather than noise.
 final class ProjectionTests: XCTestCase {
-    private let perDomain = Tolerance(concurrency: .perDomain)
+    private let perDomain = Comparison(concurrency: .perDomain)
 
     private func effect(
         _ seq: Int,
@@ -45,7 +45,7 @@ final class ProjectionTests: XCTestCase {
             effect(2, "Analytics.track", on: delivery, ["symbol": "waterbottle"])
         ])
 
-        let projected = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let projected = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
         XCTAssertEqual(projected.verdict, .equivalent)
         XCTAssertTrue(projected.divergences.isEmpty)
 
@@ -67,7 +67,7 @@ final class ProjectionTests: XCTestCase {
             effect(1, "Cart.save", on: cart, ["items": 2])
         ])
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
 
         XCTAssertEqual(diff.verdict, .diverged)
         XCTAssertTrue(diff.divergences.contains { $0.kind == .reordered })
@@ -86,7 +86,7 @@ final class ProjectionTests: XCTestCase {
             effect(1, "Analytics.track", on: delivery, ["symbol": "mug"])
         ])
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
 
         XCTAssertEqual(diff.verdict, .diverged)
         XCTAssertEqual(diff.divergences.map(\.kind), [.missingEvent])
@@ -107,7 +107,7 @@ final class ProjectionTests: XCTestCase {
             effect(2, "Analytics.track", on: delivery, ["discountCents": 999])
         ])
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
 
         XCTAssertEqual(diff.verdict, .diverged)
         XCTAssertEqual(diff.divergences.map(\.kind), [.valueMismatch])
@@ -131,7 +131,7 @@ final class ProjectionTests: XCTestCase {
             effect(1, "Cart.save", on: cart, ["items": 1])
         ])
 
-        let projected = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let projected = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
         XCTAssertEqual(projected.verdict, .equivalent)
         XCTAssertTrue(projected.divergences.isEmpty)
 
@@ -156,7 +156,7 @@ final class ProjectionTests: XCTestCase {
                 effect(index, "Analytics.track", on: .ambient, ["symbol": .string(symbol)])
             })
 
-            let undeclared = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+            let undeclared = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
             XCTAssertEqual(undeclared.verdict, .diverged, "an undeclared port move must gate")
 
             let diff = undeclared.classified(against: portIntent)
@@ -182,7 +182,7 @@ final class ProjectionTests: XCTestCase {
             effect(1, "Cart.save", on: .ambient, ["items": 2])
         ])
 
-        let movesDeclared = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let movesDeclared = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
             .classified(against: Intent { Moves(everythingFrom: .queue("com.emporium.cart"), to: .ambient) })
 
         XCTAssertEqual(movesDeclared.verdict, .diverged)
@@ -219,7 +219,7 @@ final class ProjectionTests: XCTestCase {
             effect(1, "Checkout.finish", on: .ambient, ["total": 100])
         ])
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
             .classified(against: Intent {
                 Relaxes(orderingOf: .queue("com.emporium.cart"))
                 Moves(everythingFrom: .queue("com.emporium.cart"), to: .ambient)
@@ -236,7 +236,7 @@ final class ProjectionTests: XCTestCase {
         let baseline = trace("b", [effect(0, "Cart.save", on: .ambient, ["items": 2])])
         let candidate = trace("c", [effect(0, "Cart.save", on: cart, ["items": 2])])
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
             .classified(against: Intent { Moves("Cart.save", from: .ambient, to: .queue("com.emporium.cart")) })
 
         XCTAssertEqual(diff.verdict, .equivalent)
@@ -250,7 +250,7 @@ final class ProjectionTests: XCTestCase {
         let baseline = trace("b", [effect(0, "Analytics.track", on: delivery, ["symbol": "mug"])])
         let candidate = trace("c", [effect(0, "Analytics.track", on: .ambient, ["symbol": "mug"])])
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
             .classified(against: Intent { Moves("Analytics.track", from: .queue("com.emporium.delivery"), to: .ambient)
             })
 

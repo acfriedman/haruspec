@@ -94,9 +94,9 @@ final class DomainMigrationTests: XCTestCase {
     func testAdvisoryPolicyReportsWithoutFailing() {
         let baseline = trace("b", [note(0, "CartDidChange", on: .main)])
         let candidate = trace("c", [note(0, "CartDidChange", on: .ambient)])
-        let spec = Tolerance(domainMigration: .advisory)
+        let spec = Comparison(domainMigration: .advisory)
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: spec)
 
         XCTAssertEqual(diff.verdict, .equivalent)
         XCTAssertEqual(diff.divergences.map(\.kind), [.domainMigration])
@@ -106,10 +106,10 @@ final class DomainMigrationTests: XCTestCase {
     func testGatingPolicyFailsOnTheMoveAlone() {
         let baseline = trace("b", [note(0, "CartDidChange", on: .main)])
         let candidate = trace("c", [note(0, "CartDidChange", on: .queue("com.emporium.cart", serial: true))])
-        let spec = Tolerance(domainMigration: .gating)
+        let spec = Comparison(domainMigration: .gating)
 
         XCTAssertEqual(
-            BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec).verdict,
+            BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: spec).verdict,
             .diverged
         )
     }
@@ -119,9 +119,9 @@ final class DomainMigrationTests: XCTestCase {
     func testIgnoredPolicyRestoresTheMissingUnexpectedPair() {
         let baseline = trace("b", [note(0, "CartDidChange", on: .main)])
         let candidate = trace("c", [note(0, "CartDidChange", on: .ambient)])
-        let spec = Tolerance(domainMigration: .ignored)
+        let spec = Comparison(domainMigration: .ignored)
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: spec)
 
         XCTAssertEqual(Set(diff.divergences.map(\.kind)), [.missingEvent, .unexpectedEvent])
     }

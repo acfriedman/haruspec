@@ -10,12 +10,14 @@ import HaruspecTrace
 /// rename — none of the restructuring is observable, so the oracle should return EQUIVALENT.
 public final class CartServiceV2: CartService {
     private let center: NotificationCenter
+    private let issuer: ReceiptIssuer
     private var order: [String] = []
     private var lines: [String: (price: Int, qty: Int)] = [:]
     private var promoActive = false
 
-    public init(center: NotificationCenter) {
+    public init(center: NotificationCenter, issuer: ReceiptIssuer) {
         self.center = center
+        self.issuer = issuer
     }
 
     private var lineCount: Int {
@@ -57,8 +59,8 @@ public final class CartServiceV2: CartService {
             taxCents: tax,
             totalCents: taxable + tax,
             lineCount: lineCount,
-            orderID: Pricing.freshOrderID(),
-            issuedAt: Pricing.issuedNow()
+            orderID: issuer.orderID(),
+            issuedAt: issuer.issuedAt()
         )
         center.post(name: .checkoutDidComplete, object: self, userInfo: ["totalCents": receipt.totalCents])
         // The same payload-free milestone marker as the baseline — pins temporal coupling even though

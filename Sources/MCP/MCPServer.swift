@@ -12,7 +12,7 @@ import HaruspecCore
 /// responses on stdout, logs on stderr.
 ///
 /// Two families of tools: verification of *artifacts* (trace files), wrapping the same path as
-/// `haruspec diff --tolerance --intent --agent`; and the local check (`check`, `save_intent`), which
+/// `haruspec diff --comparison --intent --agent`; and the local check (`check`, `save_intent`), which
 /// runs a repository's own test target through its `.haruspec/config.json` — the capture still
 /// happens inside the consumer's tests, and the server only drives them.
 public struct MCPServer {
@@ -80,7 +80,7 @@ public struct MCPServer {
             Haruspec is a behavioral oracle for iOS/Swift: it proves whether a change altered observable \
             behavior, instead of trusting "it compiles / tests pass". Call verify_behavioral_parity with \
             two captured trace files (golden vs. current) to get a deterministic verdict — EQUIVALENT, or \
-            DIVERGED with each divergence localized. Declared tolerances absorb nondeterminism; a declared \
+            DIVERGED with each divergence localized. Declared comparison absorb nondeterminism; a declared \
             intent spec absorbs the deltas a feature *meant* to make, so only collateral changes gate. \
             In a repository with .haruspec/config.json, call check to compare the branch with its merge \
             base, and save_intent to record a change the user confirms they meant.
@@ -102,10 +102,10 @@ public struct MCPServer {
                 "description": """
                 Deterministically diff two captured behavior traces (JSON files written by Haruspec capture — \
                 `Spec.record(to:)`, `haruspec demo`, or a TraceRecorder run) and return the verdict: \
-                EQUIVALENT (behavior matches within declared tolerances) or DIVERGED (each divergence listed \
+                EQUIVALENT (behavior matches under the declared comparison) or DIVERGED (each divergence listed \
                 and localized: missing/unexpected events, reordering, value mismatches, timing regressions). \
-                Use it to gate a refactor or migration on proof rather than plausibility. Optional tolerance \
-                spec absorbs declared nondeterminism (volatile fields, timing budgets, unordered groups); \
+                Use it to gate a refactor or migration on proof rather than plausibility. Optional comparison \
+                file sets aside what is not behavior (numeric epsilon, timing budgets, unordered groups); \
                 optional intent spec runs extension mode — divergences the change was *meant* to make are \
                 labeled intended and don't gate, anything undeclared is collateral and does. This file-level \
                 diff makes no coverage claim (CANNOT-VERIFY arises in spec/plan flows, where isolation \
@@ -119,9 +119,9 @@ public struct MCPServer {
                             "type": "string",
                             "description": "Path to the candidate (after) trace JSON"
                         ],
-                        "tolerance": [
+                        "comparison": [
                             "type": "string",
-                            "description": "Optional path to a Tolerance JSON (declared acceptable deltas)"
+                            "description": "Optional path to a Comparison JSON (what the diff sets aside)"
                         ],
                         "intent": [
                             "type": "string",
@@ -137,15 +137,15 @@ public struct MCPServer {
                 "name": "canonicalize_trace",
                 "title": "Canonicalize a captured trace",
                 "description": """
-                Emit the canonical, redacted form of a captured trace under a tolerance spec — volatile \
-                fields redacted, ignored kinds dropped. Useful for inspecting exactly what the diff will \
+                Emit the canonical form of a captured trace under a comparison — ignored kinds and \
+                channels dropped. Useful for inspecting exactly what the diff will \
                 compare, or debugging why two traces differ.
                 """,
                 "inputSchema": [
                     "type": "object",
                     "properties": [
                         "trace": ["type": "string", "description": "Path to the trace JSON"],
-                        "tolerance": ["type": "string", "description": "Optional path to a Tolerance JSON"]
+                        "comparison": ["type": "string", "description": "Optional path to a Comparison JSON"]
                     ],
                     "required": ["trace"]
                 ],
@@ -181,8 +181,8 @@ public struct MCPServer {
         do {
             let baseline = try Trace(contentsOf: URL(fileURLWithPath: baselinePath))
             let candidate = try Trace(contentsOf: URL(fileURLWithPath: candidatePath))
-            let tolerances = try loadTolerance(args)
-            var diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: tolerances)
+            let comparison = try loadComparison(args)
+            var diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: comparison)
             if let intentPath = args["intent"] as? String, !intentPath.isEmpty {
                 diff = try diff.classified(against: Intent(contentsOf: URL(fileURLWithPath: intentPath)))
             }
@@ -215,7 +215,7 @@ public struct MCPServer {
         }
         do {
             let trace = try Trace(contentsOf: URL(fileURLWithPath: path))
-            let canonical = try Canonicalizer.canonicalize(trace, spec: loadTolerance(args))
+            let canonical = try Canonicalizer.canonicalize(trace, comparison: loadComparison(args))
             return try [
                 "content": [textContent(String(decoding: canonical.jsonData(), as: UTF8.self))],
                 "isError": false
@@ -227,9 +227,9 @@ public struct MCPServer {
 
     // MARK: - Plumbing
 
-    private func loadTolerance(_ args: [String: Any]) throws -> Tolerance {
-        guard let path = args["tolerance"] as? String, !path.isEmpty else { return .strict }
-        return try Tolerance(contentsOf: URL(fileURLWithPath: path))
+    private func loadComparison(_ args: [String: Any]) throws -> Comparison {
+        guard let path = args["comparison"] as? String, !path.isEmpty else { return .strict }
+        return try Comparison(contentsOf: URL(fileURLWithPath: path))
     }
 
     private func textContent(_ text: String) -> [String: Any] {

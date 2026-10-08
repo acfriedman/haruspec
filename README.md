@@ -157,10 +157,11 @@ protocol StateQueue: SerialQueueing {
 Haruspec overrides nothing. A subject that calls GCD, `Task {}`, or `MainActor.run` directly is
 an audit finding (`dispatch`), never a silent green.
 
-**3. Read the verdict.** `EQUIVALENT` means every probe matched under the declared tolerances and
+**3. Read the verdict.** `EQUIVALENT` means every probe matched under the declared comparison and
 intent. `DIVERGED` names the first difference and shrinks it. `CANNOT-VERIFY` means the oracle
-refuses to claim coverage it does not have. `UNSTABLE` means replays of the same build disagreed,
-and the run-to-run delta is the diagnostic. Exit codes carry the verdict, so the same command is
+refuses to claim coverage it does not have. `UNSTABLE` means runs over identical inputs disagreed,
+and the delta names the diagnostic: usually an uncontrolled seam (a fresh UUID, a clock read)
+to inject. Exit codes carry the verdict, so the same command is
 the CI gate.
 
 ## Checking a branch locally
@@ -235,7 +236,7 @@ For a working CI setup (PR replay, sticky comments, record-on-merge), see the
 
 Haruspec captures a trace of the subject's boundary (method calls, notifications, property
 snapshots, seam reads, concurrency domains), canonicalizes it, replays the identical generated
-inputs against the candidate, and diffs the two traces under the tolerances and intent you
+inputs against the candidate, and diffs the two traces under the comparison and intent you
 declared. Structural differences (a moved concurrency domain, a relaxed ordering, a dropped
 synchronization edge) gate by default until declared. Where capture is incomplete, the verdict
 abstains and says why rather than guessing.

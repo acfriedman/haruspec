@@ -267,12 +267,12 @@ extension Spec {
                 inputs: probe.cassette.tracks,
                 baseline: probe.golden,
                 candidate: current,
-                tolerances: tolerances
+                comparison: comparison
             )
             let diff = BehavioralDiff.compare(
                 baseline: probe.golden,
                 candidate: current,
-                tolerances: tolerances
+                comparison: comparison
             )
             .classified(against: intent, evidence: evidence)
             let run = ProbeComparison(diff: diff, candidateReplay: replay, evidence: evidence)

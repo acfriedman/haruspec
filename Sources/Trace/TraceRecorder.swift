@@ -231,7 +231,7 @@ public final class TraceRecorder: @unchecked Sendable {
         )
     }
 
-    /// Times a unit of work as a signpost interval; the measured duration is a *tolerant* trace field.
+    /// Times a unit of work as a signpost interval; the measured duration is a budgeted trace field.
     @discardableResult
     public func interval<T>(
         _ label: String,

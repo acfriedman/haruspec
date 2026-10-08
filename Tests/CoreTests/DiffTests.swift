@@ -2,7 +2,7 @@
 import XCTest
 
 /// Focused unit tests for the diff primitive, using hand-built traces so each divergence kind and
-/// each tolerance lever is exercised in isolation.
+/// each comparison lever is exercised in isolation.
 final class DiffTests: XCTestCase {
     /// Small builders for readability.
     private func call(
@@ -59,7 +59,7 @@ final class DiffTests: XCTestCase {
         XCTAssertEqual(diff.divergences[0].label, "N")
     }
 
-    func testReorderFlaggedByDefaultButToleratedWhenDeclaredUnordered() {
+    func testReorderFlaggedByDefaultButSetAsideWhenDeclaredUnordered() {
         // Two independent notifications posted in swapped order.
         let base = trace("base", [note(0, "A"), note(1, "B")])
         let cand = trace("cand", [note(0, "B"), note(1, "A")])
@@ -68,12 +68,12 @@ final class DiffTests: XCTestCase {
         XCTAssertFalse(strict.isEquivalent)
         XCTAssertTrue(strict.divergences.contains { $0.kind == .reordered })
 
-        let tolerant = BehavioralDiff.compare(
+        let setAside = BehavioralDiff.compare(
             baseline: base,
             candidate: cand,
-            tolerances: Tolerance(unorderedGroups: [["A", "B"]])
+            comparison: Comparison(unorderedGroups: [["A", "B"]])
         )
-        XCTAssertTrue(tolerant.isEquivalent)
+        XCTAssertTrue(setAside.isEquivalent)
     }
 
     func testTimingRegressionRespectsBudget() {
@@ -84,7 +84,7 @@ final class DiffTests: XCTestCase {
         let withinBudget = BehavioralDiff.compare(
             baseline: base,
             candidate: slow,
-            tolerances: Tolerance(timingBudgets: ["work": 150])
+            comparison: Comparison(timingBudgets: ["work": 150])
         )
         XCTAssertTrue(withinBudget.isEquivalent)
 
@@ -92,7 +92,7 @@ final class DiffTests: XCTestCase {
         let bad = BehavioralDiff.compare(
             baseline: base,
             candidate: slow,
-            tolerances: Tolerance(timingBudgets: ["work": 50])
+            comparison: Comparison(timingBudgets: ["work": 50])
         )
         XCTAssertEqual(bad.divergences.map(\.kind), [.timingRegression])
     }
@@ -102,12 +102,12 @@ final class DiffTests: XCTestCase {
         let cand = trace("cand", [call(0, "a", ["ratio": 1.0000001])])
         let exact = BehavioralDiff.compare(baseline: base, candidate: cand)
         XCTAssertFalse(exact.isEquivalent)
-        let tolerant = BehavioralDiff.compare(
+        let setAside = BehavioralDiff.compare(
             baseline: base,
             candidate: cand,
-            tolerances: Tolerance(numericEpsilon: 0.001)
+            comparison: Comparison(numericEpsilon: 0.001)
         )
-        XCTAssertTrue(tolerant.isEquivalent)
+        XCTAssertTrue(setAside.isEquivalent)
     }
 
     func testAlignmentIgnoresSubjectOrdinal() {
@@ -122,45 +122,16 @@ final class DiffTests: XCTestCase {
         XCTAssertEqual(diff.divergences.count, 0)
     }
 
-    func testVolatileFieldsAreRedactedAway() {
+    func testAFreshValueDivergesUnderEveryComparison() {
+        // No comparison redacts a payload value: a fresh identifier is an uncontrolled seam, injected
+        // at its source rather than set aside here.
         let base = trace("base", [call(0, "a", ["id": "UUID-1", "amount": 10])])
         let cand = trace("cand", [call(0, "a", ["id": "UUID-2", "amount": 10])])
-        let strict = BehavioralDiff.compare(baseline: base, candidate: cand)
-        XCTAssertFalse(strict.isEquivalent) // ids differ
-        let tolerant = BehavioralDiff.compare(
-            baseline: base,
-            candidate: cand,
-            tolerances: Tolerance(volatileFields: [.key("id")])
-        )
-        XCTAssertTrue(tolerant.isEquivalent) // id redacted, amount matches
-    }
-
-    func testAVolatileFieldStillComparesItsShape() {
-        let volatile = Tolerance(volatileFields: [.key("id")])
-        let fresh = "3F2504E0-4F89-41D3-9A0C-0305E82C3301"
-        let base = trace("base", [call(0, "a", ["id": .string(fresh)])])
-        let diverges = { (id: CanonicalValue) in
-            !BehavioralDiff.compare(
-                baseline: base,
-                candidate: self.trace("cand", [self.call(0, "a", ["id": id])]),
-                tolerances: volatile
-            ).isEquivalent
+        let loosest = Comparison(numericEpsilon: 1, structuralComparison: .advisory, concurrency: .perDomain)
+        for comparison in [Comparison.strict, loosest] {
+            let diff = BehavioralDiff.compare(baseline: base, candidate: cand, comparison: comparison)
+            XCTAssertEqual(diff.divergences.map(\.field), ["id"])
         }
-
-        XCTAssertFalse(diverges("9C5B94B1-35AD-49BB-B118-8E8FC24ABF80"), "another UUID is the same shape")
-        XCTAssertTrue(diverges(""), "an empty identifier")
-        XCTAssertTrue(diverges(.string(fresh.lowercased())), "a lowercased UUID")
-        XCTAssertTrue(diverges(7), "a number where a string was")
-    }
-
-    func testAVolatileTimestampKeepsItsPrecision() {
-        let volatile = Tolerance(volatileFields: [.key("at")])
-        let base = trace("base", [call(0, "a", ["at": "2026-10-03T12:00:00Z"])])
-        let later = trace("cand", [call(0, "a", ["at": "2026-10-04T08:30:15Z"])])
-        let fractional = trace("cand", [call(0, "a", ["at": "2026-10-04T08:30:15.250Z"])])
-
-        XCTAssertTrue(BehavioralDiff.compare(baseline: base, candidate: later, tolerances: volatile).isEquivalent)
-        XCTAssertFalse(BehavioralDiff.compare(baseline: base, candidate: fractional, tolerances: volatile).isEquivalent)
     }
 
     func testANotificationPostedWithoutItsSenderDiverges() {
@@ -174,58 +145,16 @@ final class DiffTests: XCTestCase {
         XCTAssertTrue(renumberedDiff.isEquivalent, "ids number by first sight")
     }
 
-    func testLabelScopedVolatileFieldDoesNotRedactOtherEvents() {
-        // "id" is a fresh UUID in checkout but a stable product identifier in addItem. A rule scoped
-        // to checkout must tolerate the former while still catching a regression in the latter.
-        let base = trace("base", [call(0, "addItem", ["id": "SKU-7"]),
-                                  call(1, "checkout", ["id": "UUID-1"])])
-        let cand = trace("cand", [call(0, "addItem", ["id": "SKU-9"]),
-                                  call(1, "checkout", ["id": "UUID-2"])])
-
-        let scoped = Tolerance(volatileFields: [.key("id", inEvent: "checkout")])
-        let diff = BehavioralDiff.compare(baseline: base, candidate: cand, tolerances: scoped)
-        XCTAssertEqual(diff.divergences.map(\.kind), [.valueMismatch]) // addItem's id still compared
-        XCTAssertEqual(diff.divergences[0].label, "addItem")
-
-        // An unscoped rule would have swallowed both.
-        let unscoped = BehavioralDiff.compare(
-            baseline: base,
-            candidate: cand,
-            tolerances: Tolerance(volatileFields: [.key("id")])
-        )
-        XCTAssertTrue(unscoped.isEquivalent)
-    }
-
-    func testPathScopedVolatileFieldOnlyRedactsAtThatPath() {
-        // "issuedAt" under receipt is clock noise; "issuedAt" under promotion is fixed campaign data.
-        let base = trace("base", [call(0, "checkout", ["receipt": ["issuedAt": "t1"],
-                                                       "promotion": ["issuedAt": "June"]])])
-        let cand = trace("cand", [call(0, "checkout", ["receipt": ["issuedAt": "t2"],
-                                                       "promotion": ["issuedAt": "July"]])])
-
-        let scoped = Tolerance(volatileFields: [.path("receipt.issuedAt")])
-        let diff = BehavioralDiff.compare(baseline: base, candidate: cand, tolerances: scoped)
-        XCTAssertEqual(diff.divergences.map(\.kind), [.valueMismatch]) // promotion.issuedAt still compared
-
-        // Widening the rule to the bare key redacts both and the traces become equivalent.
-        let unscoped = BehavioralDiff.compare(
-            baseline: base,
-            candidate: cand,
-            tolerances: Tolerance(volatileFields: [.key("issuedAt")])
-        )
-        XCTAssertTrue(unscoped.isEquivalent)
-    }
-
     func testIgnoredKindsAreDropped() {
         let base = trace("base", [call(0, "a")])
         let cand = trace("cand", [call(0, "a"), TraceEvent(seq: 1, kind: .custom, label: "telemetry")])
         let strict = BehavioralDiff.compare(baseline: base, candidate: cand)
         XCTAssertFalse(strict.isEquivalent)
-        let tolerant = BehavioralDiff.compare(
+        let setAside = BehavioralDiff.compare(
             baseline: base,
             candidate: cand,
-            tolerances: Tolerance(ignoredKinds: [.custom])
+            comparison: Comparison(ignoredKinds: [.custom])
         )
-        XCTAssertTrue(tolerant.isEquivalent)
+        XCTAssertTrue(setAside.isEquivalent)
     }
 }

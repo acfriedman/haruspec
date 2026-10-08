@@ -24,10 +24,10 @@ extension BehavioralDiff {
     static func compareSpawnEdges(
         baseline: [TraceEvent],
         candidate: [TraceEvent],
-        spec: Tolerance,
+        comparison: Comparison,
         into scratch: inout DiffScratch
     ) {
-        guard spec.spawnEdges != .ignored else {
+        guard comparison.spawnEdges != .ignored else {
             return
         }
         let baselineBySeq = Dictionary(uniqueKeysWithValues: baseline.map { ($0.seq, $0) })
@@ -55,7 +55,7 @@ extension BehavioralDiff {
                         detail: "synchronization dropped: \(spawner.label) → \(baselineEvent.label) "
                             + "held in baseline (spawn edge from #\(spawner.seq)); "
                             + "the candidate leaves them concurrent",
-                        isAdvisory: spec.spawnEdges == .advisory
+                        isAdvisory: comparison.spawnEdges == .advisory
                     )
                 )
             }
@@ -71,7 +71,7 @@ extension BehavioralDiff {
                         candidateSeq: candidateEvent.seq,
                         detail: "synchronization added: \(spawner.label) → \(candidateEvent.label) "
                             + "constrained in candidate, concurrent in baseline",
-                        isAdvisory: spec.spawnEdges == .advisory
+                        isAdvisory: comparison.spawnEdges == .advisory
                     )
                 )
             }

@@ -44,14 +44,14 @@ determinism, and have clean interception points.
 | Seam | Mechanism | Record | Replay | Notes |
 |------|-----------|:------:|:------:|-------|
 | Injectable logical clock | ctor/ambient injection | ✅ | ✅ | Engine's canonical clock; **`SeamClock` adds cassette record/replay of wall-clock reads**. |
-| `Date()` / `Date.now` (bare call) | inject a `SeamClock` | 📋 | 📋 | The `@Seamed` source shim was removed (2026-09-27): it had to sit on the production type, and Haruspec attributes now live only on test-side protocols. Until a bare read is injected, redact it with the tolerance model. |
+| `Date()` / `Date.now` (bare call) | inject a `SeamClock` | 📋 | 📋 | The `@Seamed` source shim was removed (2026-09-27): it had to sit on the production type, and Haruspec attributes now live only on test-side protocols. Until a bare read is injected, it reads as an uncontrolled seam: the verdict is UNSTABLE and names the field. |
 | `CACurrentMediaTime`, `mach_absolute_time`, `DispatchTime.now` | interpose | 📋 | 📋 | Timing-budget captures depend on this. |
 | `Timer` / `RunLoop` scheduling | swizzle / virtualized clock | 🔬 | 🔬 | Needs a virtual scheduler to replay deterministically. |
 
 ### Randomness & identity
 | Seam | Mechanism | Record | Replay | Notes |
 |------|-----------|:------:|:------:|-------|
-| `UUID()` (bare call) | redaction | ✅ | n/a | Redact via the tolerance model (`volatileFields`). The `@Seamed` source shim was removed with the class macros (2026-09-27). |
+| `UUID()` (bare call) | inject the source | n/a | n/a | Take a `() -> UUID` (or an issuer type) through the initializer and supply it with `.provides`. A bare call is an uncontrolled seam: the verdict is UNSTABLE and names the field. Redaction (`volatileFields`) was retired 2026-10-07. |
 | `SystemRandomNumberGenerator`, `Int.random(using:)` | injectable RNG (`SeamRNG`) | ✅ | ✅ | `SeamRNG` records/replays the `next()` stream via `Cassette`; drop into any `random(in:using:)`. Bare `Int.random(in:)` (no `using:`) still needs a shim. |
 
 ### Network
@@ -82,7 +82,7 @@ determinism, and have clean interception points.
 | `NotificationCenter` posts | injected `RecordingNotificationCenter` | ✅ | ⏳ | A center is a collaborator, so it is handed in like any other. There is no observing variant: a subject that posts to a center it was never given has to accept one first, which is the injectability precondition this catalog is built on. |
 | KVO observed changes | — | 📋 | 📋 | The `KVOInterceptor` scaffold is **removed**: never wired to a spec, and observing from outside is the shape this catalog moved away from. `TraceRecorder.stateChange` remains, so a decorator (or `@Observable`) can emit changes by injection when this is picked up. |
 | Dispatch, `Task`, Combine schedulers | injected scheduling protocol, `@Haruspec(schedules:)` | ✅ | ✅ | The project's own thread seam, like any collaborator: the subject takes a stamped protocol in its `init`, production conforms a real queue to it, and the double holds every enqueue in the capture's `WorkBacklog`. The engine drains the backlog after the ops, one item at a time in enqueue order, so handed-off work is reached, counted, and run in one deterministic order. Delayed work runs on virtual time; a `notify` waits for its group; `.main` work runs on the main thread. The discipline (`serial` / `concurrent` / `main`) is on the stamp, the type the subject depends on. Nothing is overridden: a direct GCD call, `Task {}`, or `MainActor.run` in a subject is an audit finding (`dispatch`). Combine reaches the seam through a `Scheduler` the project writes over it. |
-| Structured concurrency (`withTaskGroup`, `async let`) | none | ⏳ | ⏳ | Children of seamed work inherit its domain and are awaited, so they finish inside the drain, but they run truly concurrently: their order is scheduler noise, which `.perDomain` tolerates. A serial task executor preference (`withTaskExecutorPreference`) may bring them under control; unverified. |
+| Structured concurrency (`withTaskGroup`, `async let`) | none | ⏳ | ⏳ | Children of seamed work inherit its domain and are awaited, so they finish inside the drain, but they run truly concurrently: their order is scheduler noise, which `.perDomain` sets aside. A serial task executor preference (`withTaskExecutorPreference`) may bring them under control; unverified. |
 | Combine publishers | operator tap | 📋 | 📋 | Record emitted values + completion, replay as a fixture publisher. |
 | Locale / TimeZone / Calendar | injected `SeamEnvironment` | ✅ | ✅ | `SeamEnvironment`: locale/timezone/calendar reads recorded/replayed. Cheap and high-value for the UI configuration-sweep application. |
 | Feature flags / remote config | protocol injection | 📋 | 📋 | Usually already behind a protocol — an easy seam. |
@@ -122,7 +122,7 @@ replays agree, and a logic change under the *same* cassette still diverges (attr
 
 It's also **wired to the behavioral-diff engine end-to-end** (`SeamHarnessEndToEndTests`): production
 logic reads seams (clock + RNG bucket + config) whose values *flow into observable behavior*
-(notifications + markers) captured in a `TraceRecorder`. An un-replayed run diverges — tolerances can't
+(notifications + markers) captured in a `TraceRecorder`. An un-replayed run diverges — no comparison can
 absorb values that flow into the output — while replaying the cassette makes the baseline reproduce its
 golden trace `EQUIVALENT`, and the changed branch is `DIVERGED` and localized, through `BehavioralDiff`.
 This is the seam harness's version of the engine's original validation gate.

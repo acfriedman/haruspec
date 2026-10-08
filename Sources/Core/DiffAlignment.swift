@@ -39,7 +39,7 @@ extension BehavioralDiff {
     /// classification rules here are the fiddly part and deserve their own frame.
     static func reconcileUnmatched(
         _ alignment: Alignment,
-        spec: Tolerance,
+        comparison: Comparison,
         advisory: (TraceEvent) -> Bool,
         into scratch: inout DiffScratch
     ) {
@@ -51,7 +51,7 @@ extension BehavioralDiff {
         for baselineIndex in baseline.indices where !matchedBaseline.contains(baselineIndex) {
             if let slot = unmatchedInsertions.firstIndex(where: { candidateSig[$0] == baselineSig[baselineIndex] }) {
                 let candidateIndex = unmatchedInsertions.remove(at: slot)
-                if !spec.isUnordered(label: baseline[baselineIndex].label) {
+                if !comparison.isUnordered(label: baseline[baselineIndex].label) {
                     scratch.divergences.append(
                         Divergence(
                             kind: .reordered,
@@ -68,11 +68,11 @@ extension BehavioralDiff {
                 compareAligned(
                     baseline[baselineIndex],
                     candidate[candidateIndex],
-                    spec: spec,
+                    comparison: comparison,
                     isAdvisory: advisory(baseline[baselineIndex]),
                     into: &scratch
                 )
-            } else if spec.domainMigration != .ignored,
+            } else if comparison.domainMigration != .ignored,
                       let slot = unmatchedInsertions.firstIndex(where: {
                           candidateSig[$0].ignoringDomain == baselineSig[baselineIndex].ignoringDomain
                       }) {
@@ -92,14 +92,14 @@ extension BehavioralDiff {
                         fromDomain: baseline[baselineIndex].domain.description,
                         toDomain: candidate[candidateIndex].domain.description,
                         isAdvisory: advisory(baseline[baselineIndex])
-                            || spec.domainMigration == .advisory
+                            || comparison.domainMigration == .advisory
                     )
                 )
                 // The move is reported; the values are still the contract.
                 compareAligned(
                     baseline[baselineIndex],
                     candidate[candidateIndex],
-                    spec: spec,
+                    comparison: comparison,
                     isAdvisory: advisory(baseline[baselineIndex]),
                     into: &scratch
                 )

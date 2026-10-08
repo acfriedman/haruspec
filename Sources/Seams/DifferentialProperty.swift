@@ -15,16 +15,16 @@ public struct DifferentialProperty {
     public let golden: CassetteData
     /// Runs the code for a branch against a replay cassette, returning its behavior trace.
     public let run: (Cassette, Branch) -> Trace
-    /// Tolerances for the branch-vs-branch diff (default: strict parity).
-    public let tolerances: Tolerance
+    /// The comparison for the branch-vs-branch diff (default: strict parity).
+    public let comparison: Comparison
 
     public init(
         golden: CassetteData,
-        tolerances: Tolerance = .strict,
+        comparison: Comparison = .strict,
         run: @escaping (Cassette, Branch) -> Trace
     ) {
         self.golden = golden
-        self.tolerances = tolerances
+        self.comparison = comparison
         self.run = run
     }
 
@@ -118,7 +118,7 @@ public struct DifferentialProperty {
         let baselineReplay = Cassette(replaying: variant)
         let baseline = run(baselineReplay, .baseline)
         let candidate = run(Cassette(replaying: baselineReplay.snapshot()), .candidate)
-        return BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: tolerances)
+        return BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: comparison)
     }
 
     /// The diff iff the two branches diverge on this variant.

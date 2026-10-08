@@ -9,7 +9,7 @@ import XCTest
 //
 //   HaruspecMacros   — @Haruspec
 //   HaruspecTrace    — Haruspec.marker / Haruspec.interval, TraceRecorder, RecordingNotificationCenter, ManualClock
-//   HaruspecCore     — Tolerance, TraceDiff.Verdict
+//   HaruspecCore     — Comparison, TraceDiff.Verdict
 //   HaruspecSeams    — Cassette, Seam, SeamClock, SeamDomain
 //   HaruspecSpec — Spec / Op / Seam / Ordering / .baselined(on:)
 //
@@ -90,7 +90,7 @@ final class UmbrellaImportTests: XCTestCase {
                 Op("add") { cart, seams in cart.add(cents: 999, qty: Int(seams.int("qty", default: 2))) }
                 Op("checkout") { _ = $0.checkout() }.last()
             }
-            .tolerate(.strict) // ← Tolerance (HaruspecCore)
+            .comparing(.strict) // ← Comparison (HaruspecCore)
             .vary { Ordering(max: 10); Seam("qty", .int(1 ... 5)) } // ← Ordering / Seam / SeamDomain
             .baselined(on: makeGood)
 

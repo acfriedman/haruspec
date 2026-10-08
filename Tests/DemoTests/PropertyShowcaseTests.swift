@@ -32,11 +32,10 @@ final class PropertyShowcaseTests: XCTestCase {
         return recorder.trace()
     }
 
-    /// Fresh order id / timestamp are volatile; the recompute interval gets a generous budget so the
-    /// isolated signal is the value-dependent discount, not timing.
-    private var tolerances: Tolerance {
-        Tolerance(
-            volatileFields: [.key("orderID"), .key("issuedAt")],
+    /// The receipt's order ID and timestamp are held still by the fixed issuer; the recompute interval
+    /// gets a generous budget so the isolated signal is the value-dependent discount, not timing.
+    private var comparison: Comparison {
+        Comparison(
             numericEpsilon: 0,
             timingBudgets: ["CartService.checkout": 500],
             unorderedGroups: [["CartDidChange", "AnalyticsDidTrack"]],
@@ -51,18 +50,19 @@ final class PropertyShowcaseTests: XCTestCase {
         _ makeCandidate: @escaping (NotificationCenter) -> CartService
     ) -> DifferentialProperty {
         let recording = Cassette()
-        _ = capture(name: "cartservice.v1", cassette: recording) { CartServiceV1(center: $0) }
+        _ = capture(name: "cartservice.v1", cassette: recording) { CartServiceV1(center: $0, issuer: .fixed()) }
         let golden = recording.snapshot()
 
-        return DifferentialProperty(golden: golden, tolerances: tolerances) { cassette, branch in
+        return DifferentialProperty(golden: golden, comparison: comparison) { cassette, branch in
             branch == .candidate
                 ? self.capture(name: candidateName, cassette: cassette, makeCandidate)
-                : self.capture(name: "cartservice.v1", cassette: cassette) { CartServiceV1(center: $0) }
+                : self
+                .capture(name: "cartservice.v1", cassette: cassette) { CartServiceV1(center: $0, issuer: .fixed()) }
         }
     }
 
     func testPropertyGenerationOnRealCartServices() throws {
-        let buggy = property(candidateName: "cartservice.buggy") { CartServiceBuggy(center: $0) }
+        let buggy = property(candidateName: "cartservice.buggy") { CartServiceBuggy(center: $0, issuer: .fixed()) }
 
         print("=== SHOWCASE START ===")
 
@@ -86,7 +86,7 @@ final class PropertyShowcaseTests: XCTestCase {
         XCTAssertFalse(caught.heldOverSurface, "property gen finds a quantity where truncation ≠ rounding")
 
         print("\n── 3. Property gen over coffeeQty ∈ 1...20 · V1 vs V2 (behavior-preserving refactor) ──")
-        let refactor = property(candidateName: "cartservice.v2") { CartServiceV2(center: $0) }
+        let refactor = property(candidateName: "cartservice.v2") { CartServiceV2(center: $0, issuer: .fixed()) }
         let held = refactor.verify(count: 40, varying: ["coffeeQty": .int(1 ... 20)], seed: 7)
         print(held.report())
         XCTAssertEqual(held.verdict, .equivalent, "the refactor holds across the whole quantity domain")

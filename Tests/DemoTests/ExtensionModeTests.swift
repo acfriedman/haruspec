@@ -10,7 +10,7 @@ final class ExtensionModeTests: XCTestCase {
         BehavioralDiff.compare(
             baseline: CheckoutSpec.baseline(),
             candidate: CheckoutSpec.feature(),
-            tolerances: CheckoutSpec.tolerances
+            comparison: CheckoutSpec.comparison
         )
     }
 

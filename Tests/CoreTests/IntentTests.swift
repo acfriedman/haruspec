@@ -1,7 +1,7 @@
 @testable import HaruspecCore
 import XCTest
 
-/// `Intent` is the symmetric complement to `Tolerance`: it reclassifies *declared* divergences
+/// `Intent` is the symmetric complement to `Comparison`: it reclassifies *declared* divergences
 /// as `.intended` (non-gating) so an extension-mode verdict gates only on the residual `.collateral`
 /// ones. These tests pin the classification logic against hand-built divergences — no capture needed.
 final class IntentTests: XCTestCase {

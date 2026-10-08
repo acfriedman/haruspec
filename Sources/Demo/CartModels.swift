@@ -3,8 +3,8 @@ import HaruspecMacros
 import HaruspecSpec
 import HaruspecTrace
 
-/// The observable result of a checkout. `orderID` and `issuedAt` are deliberately non-deterministic
-/// (fresh every run) to prove the tolerance model neutralizes real-world volatility.
+/// The observable result of a checkout. `orderID` and `issuedAt` come from the cart's injected
+/// ``ReceiptIssuer``, so a capture can hold them still.
 ///
 /// `Codable` is all it takes for the forwarder to capture a checkout's return value as a structured
 /// payload (via the `Codable → CanonicalValue` bridge), so the diff can report per-field mismatches.
@@ -14,8 +14,8 @@ public struct Receipt: Sendable, Equatable, Codable {
     public var taxCents: Int
     public var totalCents: Int
     public var lineCount: Int
-    public var orderID: String // volatile: a fresh UUID each run
-    public var issuedAt: String // volatile: wall-clock timestamp
+    public var orderID: String
+    public var issuedAt: String
 
     public init(
         subtotalCents: Int,
@@ -33,6 +33,42 @@ public struct Receipt: Sendable, Equatable, Codable {
         self.lineCount = lineCount
         self.orderID = orderID
         self.issuedAt = issuedAt
+    }
+}
+
+/// Where a receipt's identity comes from: a fresh order ID and the moment it was issued. Both are
+/// values a checkout makes up, so they are injected rather than read from the world.
+///
+/// A cart that minted its own UUID and read the wall clock would hold two uncontrolled seams: no two
+/// runs could agree on a receipt, and a comparison of two carts would read UNSTABLE.
+public struct ReceiptIssuer: Sendable {
+    /// Returns the next order ID.
+    public var orderID: @Sendable () -> String
+    /// Returns the ISO 8601 timestamp of the moment of issue.
+    public var issuedAt: @Sendable () -> String
+
+    public init(orderID: @escaping @Sendable () -> String, issuedAt: @escaping @Sendable () -> String) {
+        self.orderID = orderID
+        self.issuedAt = issuedAt
+    }
+
+    /// The production issuer: a fresh UUID and the wall clock.
+    public static let live = ReceiptIssuer(
+        orderID: { UUID().uuidString },
+        issuedAt: { ISO8601DateFormatter().string(from: Date()) }
+    )
+
+    /// Returns an issuer that issues the same order ID and timestamp every time.
+    ///
+    /// - Parameters:
+    ///   - orderID: The order ID every receipt carries.
+    ///   - issuedAt: The ISO 8601 timestamp every receipt carries.
+    /// - Returns: The issuer; two carts built on it issue identical receipts for identical carts.
+    public static func fixed(
+        orderID: String = "00000000-0000-0000-0000-000000000001",
+        issuedAt: String = "2026-01-01T00:00:00Z"
+    ) -> ReceiptIssuer {
+        ReceiptIssuer(orderID: { orderID }, issuedAt: { issuedAt })
     }
 }
 
@@ -60,13 +96,5 @@ enum Pricing {
 
     static func tax(taxable: Int) -> Int {
         Int((Double(taxable) * taxRate).rounded())
-    }
-
-    static func freshOrderID() -> String {
-        UUID().uuidString
-    }
-
-    static func issuedNow() -> String {
-        ISO8601DateFormatter().string(from: Date())
     }
 }

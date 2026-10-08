@@ -37,7 +37,7 @@ extension BehavioralDiff {
     static func comparePerDomain(
         baseline: [TraceEvent],
         candidate: [TraceEvent],
-        spec: Tolerance,
+        comparison: Comparison,
         into scratch: inout DiffScratch
     ) {
         var domains: [ConcurrencyDomain] = []
@@ -65,7 +65,7 @@ extension BehavioralDiff {
                 compareOrderedBucket(
                     bucketBaseline,
                     bucketCandidate,
-                    spec: spec,
+                    comparison: comparison,
                     into: &scratch,
                     leftovers: &leftovers
                 )
@@ -73,20 +73,20 @@ extension BehavioralDiff {
                 compareUnorderedBucket(
                     bucketBaseline,
                     bucketCandidate,
-                    spec: spec,
+                    comparison: comparison,
                     into: &scratch,
                     leftovers: &leftovers
                 )
             }
         }
 
-        reconcileAcrossDomains(leftovers, spec: spec, into: &scratch)
+        reconcileAcrossDomains(leftovers, comparison: comparison, into: &scratch)
     }
 
     /// The per-event advisory rule, shared by every matcher: a structural-tier event under
     /// `StructuralComparison.advisory` is reported without gating.
-    static func isAdvisory(_ event: TraceEvent, under spec: Tolerance) -> Bool {
-        spec.structuralComparison == .advisory && event.tier == .structural
+    static func isAdvisory(_ event: TraceEvent, under comparison: Comparison) -> Bool {
+        comparison.structuralComparison == .advisory && event.tier == .structural
     }
 
     // MARK: - Within one domain
@@ -96,7 +96,7 @@ extension BehavioralDiff {
     private static func compareOrderedBucket(
         _ baseline: [TraceEvent],
         _ candidate: [TraceEvent],
-        spec: Tolerance,
+        comparison: Comparison,
         into scratch: inout DiffScratch,
         leftovers: inout Leftovers
     ) {
@@ -110,8 +110,8 @@ extension BehavioralDiff {
             compareAligned(
                 baseline[baselineIndex],
                 candidate[candidateIndex],
-                spec: spec,
-                isAdvisory: isAdvisory(baseline[baselineIndex], under: spec),
+                comparison: comparison,
+                isAdvisory: isAdvisory(baseline[baselineIndex], under: comparison),
                 into: &scratch
             )
         }
@@ -120,7 +120,7 @@ extension BehavioralDiff {
         for baselineIndex in baseline.indices where !matchedBaseline.contains(baselineIndex) {
             if let slot = unmatchedInsertions.firstIndex(where: { candidateSig[$0] == baselineSig[baselineIndex] }) {
                 let candidateIndex = unmatchedInsertions.remove(at: slot)
-                if !spec.isUnordered(label: baseline[baselineIndex].label) {
+                if !comparison.isUnordered(label: baseline[baselineIndex].label) {
                     scratch.divergences.append(
                         Divergence(
                             kind: .reordered,
@@ -130,15 +130,15 @@ extension BehavioralDiff {
                             detail: "event order changed within \(baseline[baselineIndex].domain) "
                                 + "(baseline #\(baseline[baselineIndex].seq) "
                                 + "→ candidate #\(candidate[candidateIndex].seq))",
-                            isAdvisory: isAdvisory(baseline[baselineIndex], under: spec)
+                            isAdvisory: isAdvisory(baseline[baselineIndex], under: comparison)
                         )
                     )
                 }
                 compareAligned(
                     baseline[baselineIndex],
                     candidate[candidateIndex],
-                    spec: spec,
-                    isAdvisory: isAdvisory(baseline[baselineIndex], under: spec),
+                    comparison: comparison,
+                    isAdvisory: isAdvisory(baseline[baselineIndex], under: comparison),
                     into: &scratch
                 )
             } else {
@@ -157,7 +157,7 @@ extension BehavioralDiff {
     private static func compareUnorderedBucket(
         _ baseline: [TraceEvent],
         _ candidate: [TraceEvent],
-        spec: Tolerance,
+        comparison: Comparison,
         into scratch: inout DiffScratch,
         leftovers: inout Leftovers
     ) {
@@ -181,7 +181,7 @@ extension BehavioralDiff {
             var unpaired: [TraceEvent] = []
             var pairs: [(TraceEvent, TraceEvent)] = []
             for event in baselineBySignature[sig] ?? [] {
-                if let index = unmatched.firstIndex(where: { payloadsMatch(event, $0, spec: spec) }) {
+                if let index = unmatched.firstIndex(where: { payloadsMatch(event, $0, comparison: comparison) }) {
                     pairs.append((event, unmatched.remove(at: index)))
                 } else {
                     unpaired.append(event)
@@ -194,8 +194,8 @@ extension BehavioralDiff {
                 compareAligned(
                     baselineEvent,
                     candidateEvent,
-                    spec: spec,
-                    isAdvisory: isAdvisory(baselineEvent, under: spec),
+                    comparison: comparison,
+                    isAdvisory: isAdvisory(baselineEvent, under: comparison),
                     into: &scratch
                 )
             }
@@ -214,7 +214,7 @@ extension BehavioralDiff {
     /// ordered domain into an unordered one as a single `orderingRelaxed` per domain pair.
     private static func reconcileAcrossDomains(
         _ leftovers: Leftovers,
-        spec: Tolerance,
+        comparison: Comparison,
         into scratch: inout DiffScratch
     ) {
         var relaxations: [Relaxation] = []
@@ -225,12 +225,12 @@ extension BehavioralDiff {
             // Content-identical counterpart first. Migrated events arrive in the *other* side's
             // scheduling order, so pairing greedily by position would manufacture value mismatches
             // between branches that both ran correctly — the exact flapping the projection removes.
-            if spec.domainMigration != .ignored,
+            if comparison.domainMigration != .ignored,
                let slot = unmatched.firstIndex(where: {
-                   signature($0).ignoringDomain == eventSig && payloadsMatch(event, $0, spec: spec)
+                   signature($0).ignoringDomain == eventSig && payloadsMatch(event, $0, comparison: comparison)
                }) ?? unmatched.firstIndex(where: { signature($0).ignoringDomain == eventSig }) {
                 let counterpart = unmatched.remove(at: slot)
-                recordMigration(event, counterpart, spec: spec, into: &scratch, relaxations: &relaxations)
+                recordMigration(event, counterpart, comparison: comparison, into: &scratch, relaxations: &relaxations)
             } else {
                 scratch.divergences.append(
                     Divergence(
@@ -239,7 +239,7 @@ extension BehavioralDiff {
                         baselineSeq: event.seq,
                         candidateSeq: nil,
                         detail: "\(event.kind.rawValue) present in baseline, absent in candidate",
-                        isAdvisory: isAdvisory(event, under: spec)
+                        isAdvisory: isAdvisory(event, under: comparison)
                     )
                 )
             }
@@ -252,7 +252,7 @@ extension BehavioralDiff {
                     baselineSeq: nil,
                     candidateSeq: event.seq,
                     detail: "\(event.kind.rawValue) present in candidate, absent in baseline",
-                    isAdvisory: isAdvisory(event, under: spec)
+                    isAdvisory: isAdvisory(event, under: comparison)
                 )
             )
         }
@@ -281,7 +281,7 @@ extension BehavioralDiff {
     private static func recordMigration(
         _ event: TraceEvent,
         _ counterpart: TraceEvent,
-        spec: Tolerance,
+        comparison: Comparison,
         into scratch: inout DiffScratch,
         relaxations: inout [Relaxation]
     ) {
@@ -294,14 +294,14 @@ extension BehavioralDiff {
                 detail: "ran on a different domain (\(event.domain) → \(counterpart.domain))",
                 fromDomain: event.domain.description,
                 toDomain: counterpart.domain.description,
-                isAdvisory: isAdvisory(event, under: spec) || spec.domainMigration == .advisory
+                isAdvisory: isAdvisory(event, under: comparison) || comparison.domainMigration == .advisory
             )
         )
         compareAligned(
             event,
             counterpart,
-            spec: spec,
-            isAdvisory: isAdvisory(event, under: spec),
+            comparison: comparison,
+            isAdvisory: isAdvisory(event, under: comparison),
             into: &scratch
         )
         guard event.domain.isOrdered, !counterpart.domain.isOrdered else { return }
@@ -320,10 +320,10 @@ extension BehavioralDiff {
         }
     }
 
-    /// Whether two events' payloads are indistinguishable under the tolerance spec — the multiset
-    /// matching predicate. Volatile fields are already redacted by canonicalization; the epsilon
-    /// comes from the spec.
-    static func payloadsMatch(_ baseline: TraceEvent, _ candidate: TraceEvent, spec: Tolerance) -> Bool {
-        valueDivergences(baseline.payload ?? .null, candidate.payload ?? .null, path: "", spec: spec).isEmpty
+    /// Whether two events' payloads are indistinguishable under the comparison — the multiset
+    /// matching predicate, with numbers within its epsilon counting as equal.
+    static func payloadsMatch(_ baseline: TraceEvent, _ candidate: TraceEvent, comparison: Comparison) -> Bool {
+        valueDivergences(baseline.payload ?? .null, candidate.payload ?? .null, path: "", comparison: comparison)
+            .isEmpty
     }
 }

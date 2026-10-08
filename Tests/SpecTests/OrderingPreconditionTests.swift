@@ -179,7 +179,7 @@ final class OrderingPreconditionTests: XCTestCase {
         let diff = BehavioralDiff.compare(
             baseline: Trace(name: "base", events: []),
             candidate: Trace(name: "candidate", events: []),
-            tolerances: .strict
+            comparison: .strict
         )
         let verdict = SpecVerdict(
             result: VerificationResult(

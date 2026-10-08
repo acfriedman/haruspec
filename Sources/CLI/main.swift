@@ -7,9 +7,10 @@ import HaruspecSpec
 import HaruspecTrace
 
 // A thin, dependency-free CLI over the engine. Subcommands:
-//   haruspec diff <baseline.json> <candidate.json> [--tolerance <spec.json>] [--intent <spec.json>] [--agent] [--json]
+//   haruspec diff <baseline.json> <candidate.json> [--comparison <comparison.json>] [--intent <spec.json>] [--agent]
+//   [--json]
 //   haruspec demo [--out <dir>]
-//   haruspec canonicalize <trace.json> [--tolerance <spec.json>] [--out <file.json>]
+//   haruspec canonicalize <trace.json> [--comparison <comparison.json>] [--out <file.json>]
 //   haruspec report <result.json>... [--markdown] [--html <path>] [--agent] [--changed <file> --root <dir>]
 //   haruspec audit --root <dir> [--verdict <result.json>] [--covering <Sym,Sym>]
 //   haruspec stamp --plan <plan> --recorded-at <sha> --coverage <file>
@@ -80,12 +81,12 @@ func parse(_ args: [String]) -> (flags: [String: String], positionals: [String])
     return (flags, positionals)
 }
 
-func loadTolerance(_ flags: [String: String]) -> Tolerance {
-    guard let path = flags["tolerance"], !path.isEmpty else { return .strict }
+func loadComparison(_ flags: [String: String]) -> Comparison {
+    guard let path = flags["comparison"], !path.isEmpty else { return .strict }
     do {
-        return try Tolerance(contentsOf: URL(fileURLWithPath: path))
+        return try Comparison(contentsOf: URL(fileURLWithPath: path))
     } catch {
-        fail("could not read tolerance spec at \(path): \(error)", code: .runtime)
+        fail("could not read comparison at \(path): \(error)", code: .runtime)
     }
 }
 
@@ -101,11 +102,11 @@ func loadIntent(_ flags: [String: String]) -> Intent? {
 func runDiff(_ rest: [String]) -> Never {
     let (flags, positionals) = parse(rest)
     guard positionals.count == 2 else { fail("diff needs <baseline.json> <candidate.json>\n\n\(usage)", code: .usage) }
-    let spec = loadTolerance(flags)
+    let spec = loadComparison(flags)
     do {
         let baseline = try Trace(contentsOf: URL(fileURLWithPath: positionals[0]))
         let candidate = try Trace(contentsOf: URL(fileURLWithPath: positionals[1]))
-        var result = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec)
+        var result = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: spec)
         // With `--intent`, run in extension mode: intended deltas are absorbed, collateral ones gate.
         if let intent = loadIntent(flags) {
             result = result.classified(against: intent)
@@ -145,19 +146,19 @@ func runDemo(_ rest: [String]) -> Never {
         try regression.write(to: outDir.appendingPathComponent("regression.json"))
         try feature.write(to: outDir.appendingPathComponent("feature.json"))
 
-        let spec = CheckoutSpec.tolerances
+        let spec = CheckoutSpec.comparison
         print("Wrote traces to \(outDir.path)\n")
         print("── Refactor · parity mode (expected: EQUIVALENT) ────────────────")
-        let refactorDiff = BehavioralDiff.compare(baseline: baseline, candidate: refactor, tolerances: spec)
+        let refactorDiff = BehavioralDiff.compare(baseline: baseline, candidate: refactor, comparison: spec)
         print(refactorDiff.report())
         print("\n── Regression · parity mode (expected: DIVERGED) ────────────────")
-        let regressionDiff = BehavioralDiff.compare(baseline: baseline, candidate: regression, tolerances: spec)
+        let regressionDiff = BehavioralDiff.compare(baseline: baseline, candidate: regression, comparison: spec)
         print(regressionDiff.report())
 
         // Extension mode: a feature change (loyalty points) that also carries a collateral regression.
         // Without declared intent every change looks like a regression; with it, the intended deltas
         // are absorbed and only the collateral one gates.
-        let featureRaw = BehavioralDiff.compare(baseline: baseline, candidate: feature, tolerances: spec)
+        let featureRaw = BehavioralDiff.compare(baseline: baseline, candidate: feature, comparison: spec)
         print("\n── Feature · parity mode — no intent, every change is flagged ───")
         print(featureRaw.report())
         let featureDiff = featureRaw.classified(against: CheckoutSpec.intent)
@@ -186,10 +187,10 @@ func runDemo(_ rest: [String]) -> Never {
 func runCanonicalize(_ rest: [String]) -> Never {
     let (flags, positionals) = parse(rest)
     guard positionals.count == 1 else { fail("canonicalize needs <trace.json>\n\n\(usage)", code: .usage) }
-    let spec = loadTolerance(flags)
+    let spec = loadComparison(flags)
     do {
         let trace = try Trace(contentsOf: URL(fileURLWithPath: positionals[0]))
-        let canonical = Canonicalizer.canonicalize(trace, spec: spec)
+        let canonical = Canonicalizer.canonicalize(trace, comparison: spec)
         let data = try canonical.jsonData()
         if let out = flags["out"], !out.isEmpty {
             try data.write(to: URL(fileURLWithPath: out))
@@ -264,8 +265,8 @@ func runReport(_ rest: [String]) -> Never {
                 • Gate: UNSTABLE (exit code 5) — \(verdict.stability.replays) replays of identical \
                 recorded inputs disagreed. This check does NOT pass.
                 • Do NOT relay any single run's outcome as the verdict; the finding is the run-to-run \
-                delta printed above, which points at an unmodeled nondeterministic axis (a missing \
-                tolerance, projection, or seam).
+                delta printed above, which points at an unmodeled nondeterministic axis (an \
+                uncontrolled seam, or a missing projection); inject the source of any seam it names.
                 """
                 : verdict.result.agentBrief()
             // In markdown mode the brief is machine-facing text, not prose — fence it.

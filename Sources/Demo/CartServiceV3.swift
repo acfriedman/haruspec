@@ -20,11 +20,13 @@ import HaruspecTrace
 /// (3) as collateral. The `checkout_completed` marker is payload-free — it just pins the milestone.
 public final class CartServiceV3: CartService {
     private let center: NotificationCenter
+    private let issuer: ReceiptIssuer
     private var items: [(sku: String, price: Int, qty: Int)] = []
     private var promoActive = false
 
-    public init(center: NotificationCenter) {
+    public init(center: NotificationCenter, issuer: ReceiptIssuer) {
         self.center = center
+        self.issuer = issuer
     }
 
     public func addItem(sku: String, unitPriceCents: Int, quantity: Int) {
@@ -56,8 +58,8 @@ public final class CartServiceV3: CartService {
             taxCents: tax,
             totalCents: taxable + tax,
             lineCount: items.count,
-            orderID: Pricing.freshOrderID(),
-            issuedAt: Pricing.issuedNow()
+            orderID: issuer.orderID(),
+            issuedAt: issuer.issuedAt()
         )
         // FEATURE: the completion broadcast now carries points earned (a production value change)...
         center.post(

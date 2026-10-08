@@ -18,7 +18,7 @@ import HaruspecTrace
 ///     `nil` uses the protocol's name. Pass one to keep a renamed protocol matching its old
 ///     recordings (`@Haruspec("Cart") protocol ShoppingCart`), or when the name you want is taken.
 ///   - timed: `true` makes the forwarder also record each forwarded call's duration as a signpost
-///     interval, which is what a spec's timing budgets (``Tolerance/timingBudgets``) compare. For a
+///     interval, which is what a spec's timing budgets (``Comparison/timingBudgets``) compare. For a
 ///     region finer than one call, use ``Haruspec/interval(_:subject:isolation:_:)``.
 ///   - schedules: Makes the protocol a thread seam whose work is ordered this way; see below.
 ///

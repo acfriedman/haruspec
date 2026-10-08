@@ -93,9 +93,9 @@ final class SpawnEdgeDiffTests: XCTestCase {
             event(0, "Cart.checkout", on: .main),
             event(1, "Inventory.reserve", on: .ambient)
         ])
-        let spec = Tolerance(spawnEdges: .advisory)
+        let spec = Comparison(spawnEdges: .advisory)
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: spec)
 
         XCTAssertEqual(diff.verdict, .equivalent)
         XCTAssertEqual(edgeDivergences(diff).map(\.kind), [.orderingLost])
@@ -170,10 +170,10 @@ final class SpawnEdgeDiffTests: XCTestCase {
             event(0, "Cart.checkout", on: .main),
             event(1, "Inventory.reserve", on: .ambient)
         ])
-        let spec = Tolerance(spawnEdges: .ignored)
+        let spec = Comparison(spawnEdges: .ignored)
 
         XCTAssertTrue(
-            edgeDivergences(BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: spec))
+            edgeDivergences(BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: spec))
                 .isEmpty
         )
     }
@@ -181,7 +181,7 @@ final class SpawnEdgeDiffTests: XCTestCase {
     /// The pass rides the projection's alignment too: a pair matched by content inside an unordered
     /// bucket still carries its constraint, and still reports the loss.
     func testEdgesAreComparedThroughMultisetPairs() {
-        let perDomain = Tolerance(concurrency: .perDomain)
+        let perDomain = Comparison(concurrency: .perDomain)
         let baseline = trace("b", [
             event(0, "Cart.checkout", on: .main),
             event(1, "Inventory.reserve", on: .ambient, spawnedBy: 0),
@@ -193,7 +193,7 @@ final class SpawnEdgeDiffTests: XCTestCase {
             event(2, "Inventory.reserve", on: .ambient)
         ])
 
-        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, tolerances: perDomain)
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: perDomain)
 
         XCTAssertEqual(edgeDivergences(diff).map(\.kind), [.orderingLost])
         XCTAssertEqual(edgeDivergences(diff).first?.label, "Inventory.reserve")

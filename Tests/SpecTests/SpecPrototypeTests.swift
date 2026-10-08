@@ -296,15 +296,15 @@ final class SpecPrototypeTests: XCTestCase {
             ".ignore(notifications:) drops the noisy channel from the diff → EQUIVALENT"
         )
 
-        // … and equivalently via the raw tolerance field.
-        let viaTolerance = await analyticsCart()
-            .tolerate(Tolerance(ignoredNotificationNames: ["AnalyticsDidTrack"]))
+        // … and equivalently via the raw comparison field.
+        let viaComparison = await analyticsCart()
+            .comparing(Comparison(ignoredNotificationNames: ["AnalyticsDidTrack"]))
             .baselined(on: makeTracking)
             .verify(candidate: makeSilent)
         XCTAssertEqual(
-            viaTolerance.verdict,
+            viaComparison.verdict,
             .equivalent,
-            "Tolerance.ignoredNotificationNames drops the channel identically"
+            "Comparison.ignoredNotificationNames drops the channel identically"
         )
     }
 }

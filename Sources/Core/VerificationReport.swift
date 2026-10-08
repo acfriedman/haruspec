@@ -49,7 +49,7 @@ public extension VerificationResult {
                 "• Collateral changes: \(diff.collateralCount). NOT declared. Treat each as a suspected regression:",
                 "  state WHAT changed and WHERE (label + detail), and ask the user whether it was intended.",
                 "• Claim only that observable behavior did or did not change vs. the baseline within declared",
-                "  tolerances and over the covered surface — never that the code is \"correct.\""
+                "  comparison and over the covered surface — never that the code is \"correct.\""
             ])
             if diff.collateralCount > 0 {
                 lines.append("• Do not merge until the user confirms each collateral change is acceptable.")

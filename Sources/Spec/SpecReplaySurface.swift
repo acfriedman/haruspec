@@ -67,7 +67,7 @@ extension Spec {
         BehavioralDiff.compare(
             baseline: Trace(name: "\(golden).golden", events: []),
             candidate: Trace(name: name, events: []),
-            tolerances: tolerances
+            comparison: comparison
         )
     }
 }
