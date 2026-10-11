@@ -11,6 +11,10 @@ subject takes through its initializer. A seam it cannot control, it names: the v
 `UNSTABLE`, the audit flags the channel, or the verdict abstains with `CANNOT-VERIFY`. It never stands
 in a guess.
 
+The five-minute video version of this page:
+
+https://github.com/user-attachments/assets/272c05c2-c5f6-4e13-bf2c-840e225ffe43
+
 ## The boundary
 
 Everything Haruspec compares crosses the subject's boundary, in one of two directions.

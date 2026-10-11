@@ -15,6 +15,10 @@ declared you **intended**, and nothing else.
 
 > ⚠️ **Haruspec is not omniscient. It is a best-effort oracle.**
 
+Haruspec in five minutes:
+
+https://github.com/user-attachments/assets/a17f1ab3-8312-40d5-a112-82bc7c3efd47
+
 ## The two shapes of changing code
 
 You may reach for Haruspec for two different reasons, and each takes its own shape.
@@ -260,7 +264,8 @@ abstains and says why rather than guessing.
 
 ## Learn more
 
-Each concept has a page here and a five-minute video in [`lyceum/`](lyceum/):
+Each concept has a page here, with its five-minute video at the top. The videos' sources live in
+[`lyceum/`](lyceum/):
 
 - [Specs](docs/specs.md): the one thing you write, from the stamp to a checked port
 - [Seams](docs/seams.md): what the oracle controls, and why an uncontrolled value reads UNSTABLE

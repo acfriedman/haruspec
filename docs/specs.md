@@ -7,6 +7,10 @@ as the baseline, and every port is driven through the same spec, with the same i
 Over a protocol stamped with `@Haruspec`, most of a spec derives from the protocol's signatures. What you write is
 the part a signature cannot say.
 
+The five-minute video version of this page:
+
+https://github.com/user-attachments/assets/fad7f916-ddc5-4063-8729-ec9f7e978c1e
+
 ## A spec at a glance
 
 This is everything a test target writes to check a Swift port of an Objective-C cart. The app's `CartManager` and

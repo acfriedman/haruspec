@@ -6,6 +6,10 @@ at its cause, why a run abstains, and how to declare the change you meant so the
 ones you didn't. Writing the spec is [specs.md](specs.md); controlling what the subject reads is
 [seams.md](seams.md).
 
+The five-minute video version of this page:
+
+https://github.com/user-attachments/assets/45dfdca2-b506-4f78-8c91-c3f9f751f669
+
 ## Why a green has to say what it saw
 
 A wrong red costs an hour: you look, find nothing, and move on. A wrong green ships a bug through a gate you trusted.
