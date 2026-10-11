@@ -34,7 +34,7 @@ sources:
   - example-xcode-migration/LegacyAppTests/CartMigrationSpec.swift (the three amendment lines, the campaign suite with check and expecting diverged)
   - example-xcode-migration/LegacyAppTests/CollaboratorBoundaries.swift (the Product generator and the catalogue of product codes)
 verified:
-  ".": "632adf115837"
+  ".": "ed2c628332e9"
   example-xcode-migration: "dcfeefbe2d17"
 ---
 
