@@ -35,6 +35,21 @@ final class AmbientDomainTests: XCTestCase {
         )
         XCTAssertEqual(fromMain.trace().events.first?.domain, .ambient)
     }
+
+    /// Inside a capture whose own frames run off main, the main thread is the subject's doing, so
+    /// undeclared work there records `main`; off main it stays `ambient`.
+    func testAVouchingCaptureReadsTheMainThreadAsMain() async {
+        let recorder = TraceRecorder(name: "vouched")
+
+        await TraceContext.$capturesOffMain.withValue(true) {
+            await MainActor.run(resultType: Void.self) { recordUndeclaredWork(into: recorder) }
+            // This test is nonisolated `async`, so it runs off main; a detached task would drop the
+            // binding.
+            recordUndeclaredWork(into: recorder)
+        }
+
+        XCTAssertEqual(recorder.trace().events.map(\.domain), [.main, .ambient])
+    }
 }
 
 /// An effect belongs to the work that caused it, not to the machinery that carried it there.

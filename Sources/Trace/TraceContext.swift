@@ -29,6 +29,15 @@ public enum TraceContext {
         currentOp
     }
 
+    /// Whether the capture's own frames run off main, so an event recorded on the main thread got
+    /// there through the subject.
+    ///
+    /// That is main-actor code, or work the subject handed to main. Bound by a spec's capture,
+    /// whose driving task is nonisolated `async` and never on main. Unbound, the main thread says
+    /// nothing: a caller that merely occupies main is not the subject's isolation, and nonisolated
+    /// work it calls stays `ambient`.
+    @TaskLocal public static var capturesOffMain = false
+
     /// A cause that has not been claimed yet. A box rather than a value because a task-local cannot be
     /// cleared once bound, and the edge belongs to the held work's *first* event — so consuming has to
     /// mutate something the binding merely points at.

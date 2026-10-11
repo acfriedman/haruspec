@@ -79,7 +79,16 @@ public final class WorkBacklog: @unchecked Sendable {
 
     /// The domain of the held work running now, which ``DomainResolver`` reads ahead of any queue
     /// label: the work runs on the draining task, but it ran *as* the queue it was handed to.
-    @TaskLocal static var enteredDomain: ConcurrencyDomain?
+    @TaskLocal static var entered: Entered?
+
+    /// The seam domain bound around held work, and whether the work could leave it.
+    struct Entered: Sendable {
+        /// The domain of the queue or spawner the work was handed to.
+        let domain: ConcurrencyDomain
+        /// Whether the work is a task, which can hop to another executor mid-body. A block runs
+        /// where it was entered, start to finish.
+        let isTask: Bool
+    }
 
     /// Runs after each held item, on the draining task, attributed to the item's op. A capture reads
     /// its observed state here: between items is where another queue's observer could see it.
@@ -205,7 +214,7 @@ public final class WorkBacklog: @unchecked Sendable {
             }
             invoke(body, of: item, recorder: recorder)
         }
-        Self.$enteredDomain.withValue(discipline.domain(label: label)) { work() }
+        Self.$entered.withValue(Entered(domain: discipline.domain(label: label), isTask: false)) { work() }
     }
 
     // MARK: - Drain (what the engine does)
@@ -265,7 +274,7 @@ public final class WorkBacklog: @unchecked Sendable {
             await TraceContext.$current.withValue(recorder ?? TraceContext.current) {
                 await TraceContext.$currentOp.withValue(item.op) {
                     await TraceContext.$pendingSpawnCause.withValue(TraceContext.SpawnCause(item.cause)) {
-                        await Self.$enteredDomain.withValue(item.domain) {
+                        await Self.$entered.withValue(Entered(domain: item.domain, isTask: true)) {
                             await operation()
                         }
                     }
@@ -316,7 +325,7 @@ public final class WorkBacklog: @unchecked Sendable {
         TraceContext.$current.withValue(recorder ?? TraceContext.active) {
             TraceContext.$currentOp.withValue(item.op) {
                 TraceContext.$pendingSpawnCause.withValue(TraceContext.SpawnCause(item.cause)) {
-                    Self.$enteredDomain.withValue(item.domain) {
+                    Self.$entered.withValue(Entered(domain: item.domain, isTask: false)) {
                         if let delay = item.delay {
                             TraceContext.active?.timerFired(
                                 delay: .int(Int64((delay * 1000).rounded())),

@@ -9,10 +9,17 @@ import HaruspecCore
 /// 1. **`#isolation`**, supplied by the caller as a defaulted argument, so it resolves *at the
 ///    recording call site* to the enclosing isolation. It names `MainActor.shared` or an actor
 ///    instance, and is `nil` for every nonisolated context.
-/// 2. **The scheduling seam the work was handed to.** Held work runs on the capture's draining task,
-///    but it ran *as* the queue the subject handed it to, and ``WorkBacklog`` binds that domain
-///    around it — `main`, or the stamped protocol's queue with its declared discipline.
-/// 3. **An app-owned dispatch queue label** (`com.emporium.checkout`): a raw queue the subject made
+/// 2. **The queue a held block was handed to.** Held work runs on the capture's draining task, but
+///    it ran *as* the queue the subject handed it to, and ``WorkBacklog`` binds that domain around
+///    it: `main`, or the stamped protocol's queue with its declared discipline. A block cannot hop,
+///    so this holds even when a `sync` runs it on the main thread, as GCD would.
+/// 3. **The main thread**, inside a capture that vouches for it
+///    (``TraceContext/capturesOffMain``). Main-actor code always runs there, and it is where the
+///    recording frame (a nonisolated double, the notification center) finds out, since `#isolation`
+///    stops at its own nonisolated signature.
+/// 4. **The spawner a held task was handed to.** A task can hop to the main actor mid-body, so the
+///    thread is asked first.
+/// 5. **An app-owned dispatch queue label** (`com.emporium.checkout`): a raw queue the subject made
 ///    itself, nominal by construction. It is read as serial, the strict direction, because nothing
 ///    stated otherwise. A subject reaching one is outside the controlled seams, and the audit's
 ///    dispatch rule names it.
@@ -38,8 +45,15 @@ enum DomainResolver {
             }
             return .actor(String(describing: type(of: isolation)), instance: instanceID(isolation))
         }
-        if let entered = WorkBacklog.enteredDomain {
-            return entered
+        let entered = WorkBacklog.entered
+        if let entered, !entered.isTask {
+            return entered.domain
+        }
+        if TraceContext.capturesOffMain, Thread.isMainThread {
+            return .main
+        }
+        if let entered {
+            return entered.domain
         }
         let label = currentQueueLabel()
         if !label.isEmpty, !label.hasPrefix(systemQueuePrefix) {

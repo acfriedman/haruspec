@@ -59,30 +59,37 @@ extension Spec {
         let operationCount = order.filter { $0.settle == nil }.count
         var position = 0
         var heldWorkAtGaps = false
-        await TraceContext.$current.withValue(recorder) {
-            await WorkBacklog.$current.withValue(context.backlog) {
-                for operation in order {
-                    if let settle = operation.settle {
-                        await context.backlog.settle(settle, recorder: recorder)
-                        continue
-                    }
-                    await TraceContext.$currentOp.withValue(OpIdentity(label: operation.label, position: position)) {
-                        await operation.action(system, context)
-                        await sampler.sample()
-                    }
-                    position += 1
-                    if position < operationCount, context.backlog.pendingCount > 0 {
-                        heldWorkAtGaps = true
+        // This function is nonisolated `async`, so the capture's own frames never run on main, and
+        // anything recorded there got there through the subject.
+        await TraceContext.$capturesOffMain.withValue(true) {
+            await TraceContext.$current.withValue(recorder) {
+                await WorkBacklog.$current.withValue(context.backlog) {
+                    for operation in order {
+                        if let settle = operation.settle {
+                            await context.backlog.settle(settle, recorder: recorder)
+                            continue
+                        }
+                        await TraceContext.$currentOp.withValue(OpIdentity(
+                            label: operation.label,
+                            position: position
+                        )) {
+                            await operation.action(system, context)
+                            await sampler.sample()
+                        }
+                        position += 1
+                        if position < operationCount, context.backlog.pendingCount > 0 {
+                            heldWorkAtGaps = true
+                        }
                     }
                 }
             }
-        }
-        // Drain what the settle schedule left held. Held work carries the op and cause it was enqueued
-        // under, and runs with the recorder rebound — but it has to have run, or the snapshot is a
-        // reading of a program that has not finished. Delayed work fires on virtual time once nothing
-        // else is ready, so a debounce's deferred tail lands inside the capture too.
-        if await context.backlog.drain(recorder: recorder) == false {
-            recorder.marker("⟨haruspec: scheduled work still held at snapshot⟩")
+            // Drain what the settle schedule left held. Held work carries the op and cause it was enqueued
+            // under, and runs with the recorder rebound — but it has to have run, or the snapshot is a
+            // reading of a program that has not finished. Delayed work fires on virtual time once nothing
+            // else is ready, so a debounce's deferred tail lands inside the capture too.
+            if await context.backlog.drain(recorder: recorder) == false {
+                recorder.marker("⟨haruspec: scheduled work still held at snapshot⟩")
+            }
         }
         // The end-state snapshots: after quiescence (a racing read is not a reading), the harness
         // itself reads each observed property back. Harness-read on both sides by construction — the
