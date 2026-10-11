@@ -267,6 +267,28 @@ final class SettlePointTests: XCTestCase {
         XCTAssertFalse(result.exploration.summary.contains("settle"), result.exploration.summary)
     }
 
+    func testRunsShortOrderingsCannotSpendGoBackToSeamBreadth() async {
+        let spec = Spec<any SettleSearch>("settle.search") {
+            Amend("search").varying("text", over: .oneOf("c", "co", "cof")).repeating(1 ... 3)
+        }
+        .vary {
+            Ordering(max: 10)
+            Budget(runs: 600)
+        }
+        .baselined(on: DebouncedSettleSearch.self)
+
+        let exploration = await verdict(spec, DebouncedSettleSearch.self).exploration
+
+        XCTAssertGreaterThan(exploration.settleSchedulesPerOrdering, 1)
+        XCTAssertLessThan(
+            exploration.settledOrderingsExplored,
+            exploration.orderingsExplored * exploration.settleSchedulesPerOrdering,
+            "a one-op ordering has no gap, so it runs one schedule: \(exploration.summary)"
+        )
+        XCTAssertGreaterThan(exploration.runs, 540, exploration.summary)
+        XCTAssertLessThanOrEqual(exploration.runs, 600, exploration.summary)
+    }
+
     // MARK: The capture
 
     func testASettleStepTakesNoOperationPosition() async throws {

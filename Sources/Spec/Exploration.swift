@@ -293,6 +293,12 @@ extension Spec {
         let settledOrderings = orderings.reduce(0) { total, order in
             total + Swift.min(split.schedules, SettleSchedules.spaceSize(gaps: Swift.max(0, order.count - 1)))
         }
+        // Short orderings have fewer gaps than the split assumed, so they run fewer schedules; the
+        // runs that leaves unspent go back to seam breadth rather than shrinking the sweep.
+        var variants = split.variants
+        if let budget = explorationBudget, hasSeams, settledOrderings < orderings.count * split.schedules {
+            variants = Swift.max(variants, budget / Swift.max(1, settledOrderings))
+        }
 
         // The schedule is deterministic from (domains × golden tracks), so its shape is knowable
         // here without running generation — and recomputable at replay from the plan's golden probe.
@@ -303,16 +309,16 @@ extension Spec {
         return ExplorationPlan(
             orderings: orderings,
             settleSchedulesPerOrdering: split.schedules,
-            variantsPerOrdering: split.variants,
+            variantsPerOrdering: variants,
             exploration: Exploration(
                 orderingsExplored: orderings.count,
                 orderingsAvailable: Swift.max(available.count, orderings.count),
                 orderingsAreExact: available.exact,
-                variantsPerOrdering: split.variants,
+                variantsPerOrdering: variants,
                 outOfOrderExplored: outOfOrderCount(among: orderings.map { $0.map(\.label) }),
                 boundaryEdgesScheduled: generator?.scheduledBoundaryEdges ?? 0,
-                boundaryEdgesCovered: generator?.boundaryEdgesCovered(within: split.variants) ?? 0,
-                combinedVariantsCovered: generator?.combinedVariantsCovered(within: split.variants) ?? 0,
+                boundaryEdgesCovered: generator?.boundaryEdgesCovered(within: variants) ?? 0,
+                combinedVariantsCovered: generator?.combinedVariantsCovered(within: variants) ?? 0,
                 settleSchedulesPerOrdering: split.schedules,
                 settledOrderingsExplored: settledOrderings
             ),
@@ -390,7 +396,7 @@ enum ExplorationBudget {
         let scale = (Double(pairs) / Double(orderings * schedules)).squareRoot()
         let corners = Swift.min(2, pairs)
         let perOrdering = Swift.min(schedules, Swift.max(corners, Int((Double(schedules) * scale).rounded())))
-        let orderingCount = Swift.min(orderings, Swift.max(1, pairs / perOrdering))
+        let orderingCount = Swift.min(orderings, Swift.max(1, Int((Double(pairs) / Double(perOrdering)).rounded())))
         let variantCount = variants > 1 ? Swift.max(1, (budget ?? pairs) / (orderingCount * perOrdering)) : 1
         return Split(orderings: orderingCount, schedules: perOrdering, variants: variantCount)
     }
