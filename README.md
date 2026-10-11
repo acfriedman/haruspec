@@ -54,29 +54,36 @@ let cart = Spec<PromoCart>("promo-cart")
         Op("promo") { $0.applyPromo() }
         Op("checkout") { _ = $0.checkout() }.last()
     }
-    .vary { Seam("coffeeQty", .int(1 ... 20)) }
+    .vary {
+        Seam("coffeeQty", .int(1 ... 20))
+        Ordering(max: 10)
+    }
 
 let verdict = await cart.baselined(on: makeLegacyCart).verify(candidate: makeSwiftPort)
 print(verdict.report())
 ```
 
 A faithful port reads `✅ EQUIVALENT`. A port that truncates where the legacy code rounded loses
-one cent, and the verdict says exactly where, shrunk to a minimal counterexample:
+one cent, and the verdict says exactly where, with the failing order and the seam values that
+trigger it:
 
 ```text
-❌ DIVERGED  promo-cart
-  explored: 385 runs · all 7 orderings × 55 seam variants
-  stability: 3/3 identical replays
+❌ DIVERGED  promo-cart → promo-cart
+  explored: 384 runs · all 6 orderings × 64 seam variants
+  stability: the baseline reproduced itself on the failing input
   coverage: 100% of 4 declared boundaries · domain-swept 0%
-  covered: PromoCart — 3 ops · 385 probes
-  seams: coffeeQty (2 positions) · boundary edges 8 of 8 scheduled
+  covered: PromoCart — 3 ops · 384 probes
+  seams: coffeeQty (2 positions) · boundary edges 8 of 8 scheduled · 56 combined (every seam at once)
   blind spots: not audited — capture completeness is unmeasured; effect channels outside the recorded seams may exist
   2 divergence(s):
     ≠ CheckoutCompleted: total: baseline=1798 candidate=1799
     ≠ PromoCart.checkout: value: baseline=1798 candidate=1799
-  ↳ failing order: addCoffee → addCoffee → promo → promo → checkout
+  ↳ failing order: addCoffee → promo → checkout
   ↳ counterexample: coffeeQty=1,1
 ```
+
+The real report also prints a `declared in` line naming each implementation's source file; it is left
+out here.
 
 Every verdict, green or red, carries that qualification block: what was explored, how stable it
 was, and what the oracle could not see.
@@ -104,8 +111,9 @@ One `import Haruspec` surfaces the macros, capture runtime, seams, and the Spec 
 **1. Declare a spec.** Name the subject's operations, the effects worth observing, and the input
 domains to sweep. Over an `@Haruspec` protocol, the operations and their domains derive by default;
 the block amends only what a signature cannot state. A spec names no implementation: it describes
-the protocol, and a test chooses the baseline. It takes the protocol's name too, unless several specs
-interrogate one protocol: then each is named, `Spec<Cart>("cart.promo") { … }`.
+the protocol, and a test chooses the baseline. It takes the stamp's label as its name (the protocol's
+name, unless the stamp gives another), unless several specs interrogate one protocol: then each is
+named, `Spec<Cart>("cart.promo") { … }`.
 
 ```swift
 Spec<Cart> {
@@ -136,15 +144,15 @@ In the continuous shape, record the current behavior once, then replay the recor
 any later build:
 
 ```swift
-try await spec.record(to: planURL)  // on main
-await spec.verify(replaying: plan)  // on the PR
+try await subject.record(to: planURL)                                 // on main
+let verdict = try await subject.verify(replayingContentsOf: planURL)  // on the PR
 ```
 
 **Threads are collaborators too.** A subject that hands work to a queue, spawns a `Task`, or
 schedules a Combine pipeline takes that queue in its `init`, like any other collaborator.
 Production passes a real `DispatchQueue`. The test target stamps the protocol with the discipline
-it honors, and the capture holds whatever the subject hands it, then runs it after the ops, in
-enqueue order, every run:
+it honors, and the capture holds whatever the subject hands it, then runs it in enqueue order,
+every run: after the operations, and at the settle points exploration tries between them:
 
 ```swift
 @Haruspec(schedules: .serial)
@@ -158,7 +166,8 @@ Haruspec overrides nothing. A subject that calls GCD, `Task {}`, or `MainActor.r
 an audit finding (`dispatch`), never a silent green.
 
 **3. Read the verdict.** `EQUIVALENT` means every probe matched under the declared comparison and
-intent. `DIVERGED` names the first difference and shrinks it. `CANNOT-VERIFY` means the oracle
+intent. `DIVERGED` names the differences, the failing order (shortened by dropping operations, on a
+live check), and the seam values that trigger it. `CANNOT-VERIFY` means the oracle
 refuses to claim coverage it does not have. `UNSTABLE` means runs over identical inputs disagreed,
 and the delta names the diagnostic: usually an uncontrolled seam (a fresh UUID, a clock read)
 to inject. Exit codes carry the verdict, so the same command is
@@ -219,7 +228,7 @@ lives in `.haruspec/cache/`, which ignores itself.
 When a red is the point of your branch, the report ends with the command that declares it:
 
 ```bash
-.haruspec/bin/haruspec intent save cart.objc-to-swift \
+.haruspec/bin/haruspec intent save Cart \
   'Changes("LoyaltyPointsEarned", field: "points").increases().only(in: "checkout")'
 ```
 
@@ -247,13 +256,15 @@ abstains and says why rather than guessing.
 | ❌ DIVERGED | 3 | Behavior differs; the report names the divergence and a minimal counterexample. |
 | ⚠️ CANNOT-VERIFY | 4 | Coverage or capture is insufficient to make a claim; the gap is named. |
 | 🌀 UNSTABLE | 5 | Identical replays produced different results; the delta is reported per run. |
+| | 6 | A declared intent matched nothing: a dark feature, or a stale declaration. |
 
 ## Learn more
 
-- [docs/README.md](docs/README.md): the design docs index
-- [docs/SEAMS.md](docs/SEAMS.md): the seam catalog, what can be captured and how
-- [docs/LIMITATIONS.md](docs/LIMITATIONS.md): honest edges, what the oracle cannot see
-- [docs/ROADMAP.md](docs/ROADMAP.md): where this is going
+Each concept has a page here and a five-minute video in [`lyceum/`](lyceum/):
+
+- [Specs](docs/specs.md): the one thing you write, from the stamp to a checked port
+- [Seams](docs/seams.md): what the oracle controls, and why an uncontrolled value reads UNSTABLE
+- [Verdicts](docs/verdicts.md): the four verdicts, the qualification block, and declaring intent
 - [example-xcode-migration](https://github.com/acfriedman/example-xcode-migration): the dogfood
   app, a real Objective-C to Swift migration verified on real PRs
 
