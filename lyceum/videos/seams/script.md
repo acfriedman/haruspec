@@ -41,6 +41,9 @@ sources:
   - example-xcode-migration/LegacyAppTests/CartMigrationSpec.swift (provides sequential identifiers and a fixed instant)
   - example-xcode-migration/LegacyAppTests/Minted.swift (the sequential UUID source and the fixed instant)
   - example-xcode-migration/LegacyAppTests/FulfillmentMigrationSpec.swift (a clock read through the seam Clock.now, swept over eight instants)
+verified:
+  ".": "632adf115837"
+  example-xcode-migration: "dcfeefbe2d17"
 ---
 
 <!--
