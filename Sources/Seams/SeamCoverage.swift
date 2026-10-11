@@ -8,7 +8,7 @@ import HaruspecCore
 public extension Cassette {
     /// Builds the coverage signal for this replay against a declared seam registry.
     ///
-    /// The **registry is the coverage map** (SEAMS.md): the boundaries the harness knows about. When it
+    /// The **registry is the coverage map** (docs/seams.md): the boundaries the harness knows about. When it
     /// isn't declared explicitly it defaults to the seams the golden run recorded — an honest but
     /// *partial* denominator (it can't see boundaries no one recorded — see `Coverage` for the
     /// sources the model absorbs beyond replay). Only meaningful after a `.replay` run.

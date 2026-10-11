@@ -1,8 +1,8 @@
 import Foundation
 import HaruspecCore
 
-// Property-based generation at the seam — the *breadth* leg of the harness (SEAMS.md; the "three input
-// sources" in ROADMAP.md). A single recorded cassette proves equivalence on ONE path; this generates
+// Property-based generation at the seam — the *breadth* leg of the harness (docs/specs.md,
+// how a spec becomes exploration). A single recorded cassette proves equivalence on ONE path; this generates
 // many well-typed seam-value vectors *from that golden cassette as a template* and differentially diffs
 // baseline vs candidate across them. The baseline branch is the oracle, so no expected output is needed
 // for a generated input.

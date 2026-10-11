@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
 
-// Environment seam — SEAMS.md: Locale / TimeZone / Calendar. An injected, cassette-backed value seam:
+// Environment seam — docs/seams.md: Locale / TimeZone / Calendar. An injected, cassette-backed value seam:
 // the same shape as SeamClock/SeamDefaults, reads recorded once and replayed identically.
 
 /// Locale/timezone/calendar reads, recorded/replayed. High-value for the UI configuration-sweep

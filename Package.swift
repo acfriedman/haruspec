@@ -53,7 +53,7 @@ let package = Package(
 
         // A genuine Objective-C fixture (test-only, not a product): a legacy `.m`/`.h` singleton the
         // one-shot injectability bootstrap (`SeamSwizzle`) is proven against — real ObjC dispatch, no
-        // `dynamic` gymnastics. See the injectability precondition in `docs/SEAMS.md`.
+        // `dynamic` gymnastics. See the injectability precondition in `docs/seams.md`.
         .target(name: "LegacyObjC"),
 
         .macro(name: "HaruspecMacroPlugin", dependencies: [

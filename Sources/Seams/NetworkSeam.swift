@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
 
-/// The network seam (SEAMS.md: `URLSession` via `URLProtocol` registration) — Apple's sanctioned,
+/// The network seam (docs/seams.md: `URLSession` via `URLProtocol` registration) — Apple's sanctioned,
 /// no-swizzling interception point. Register it on a `URLSessionConfiguration` and every request the
 /// session makes is either **recorded** (record mode delegates to the real network / a live handler
 /// and captures status + body) or **replayed** (replay mode serves the recorded response headlessly,
@@ -9,7 +9,7 @@ import HaruspecCore
 /// against the golden branch's recorded responses in a pure process.
 ///
 /// v0 keys by `method + URL` and captures status code + body. Header capture, request-body matching,
-/// and streaming are future refinements (see SEAMS.md). `URLProtocol` instances are created by the URL
+/// and streaming are not captured. `URLProtocol` instances are created by the URL
 /// loading system, so configuration rides on class-level state — one active cassette per install.
 public final class CassetteURLProtocol: URLProtocol {
     private static let configLock = NSLock()

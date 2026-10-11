@@ -5,7 +5,7 @@ import ObjectiveC
 ///
 /// The canonical path is the *injectability precondition*: ask for the smallest behavior-preserving
 /// refactor that makes a boundary injectable (a settable-`.shared` behind a protocol — one file, all call
-/// sites untouched), then observe it through clean DI with no interception. See `SEAMS.md`. Swizzling
+/// sites untouched), then observe it through clean DI with no interception. See `docs/seams.md`. Swizzling
 /// survives only where that leaves a residue:
 ///
 /// 1. **The one-shot bootstrap.** Making a singleton injectable is itself an unverified refactor, and

@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
 
-// Persistence seam — SEAMS.md: `UserDefaults`. An injected, cassette-backed value seam: config *reads*
+// Persistence seam — docs/seams.md: `UserDefaults`. An injected, cassette-backed value seam: config *reads*
 // are recorded/replayed; *writes* are behavior, kept in-memory during replay.
 
 /// A key/value store whose *reads* are recorded/replayed (the seam is the config a code path reads;

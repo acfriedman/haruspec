@@ -1,247 +1,339 @@
-# Interceptable Seams — catalog & research roadmap
+# Seams: what the oracle controls
 
-The **reach** of the oracle — how much real legacy code it can isolate and replay *headlessly*,
-without a simulator round-trip — is proportional to how many nondeterminism/I/O **seams** it can
-**record** and **replay**. This doc is the source of truth for that reach.
+Haruspec drives the baseline and the candidate with identical inputs and diffs what they did. A
+difference means something only if both sides were handed the same world. This page covers how that
+happens: what crosses the subject's boundary, how each crossing is controlled, and what Haruspec says
+when one isn't.
 
-A *seam* (Feathers) is a place where behavior crosses the boundary of the unit under test: a clock,
-a network call, a notification, a singleton, a disk write. The seam-harness strategy is:
+A **seam** is a place where something from outside reaches the subject: a collaborator it calls, a
+value it reads (the clock, a fresh identifier), a queue it hands work to. Haruspec controls the seams a
+subject takes through its initializer. A seam it cannot control, it names: the verdict reads
+`UNSTABLE`, the audit flags the channel, or the verdict abstains with `CANNOT-VERIFY`. It never stands
+in a guess.
 
-> **Record the seam once from the golden branch; replay the *same* transcript into both branches;
-> diff the outputs.** The stub is a recorded transcript of the real dependency, not a synthesized
-> guess — so fidelity survives and the diff is attributable to the changed code by construction.
+## The boundary
 
-Status: ✅ record+replay both work · 🔨 in progress · ⏳ next · 📋 backlog · 🔬 open research
+Everything Haruspec compares crosses the subject's boundary, in one of two directions.
 
----
+**Recorded:** calls into the subject (through the stamp's forwarder), calls out to its collaborators
+(through their stamped doubles), notifications (through the capture's recording center), and the
+observed properties the harness reads back.
 
-## Why this is load-bearing (but not a blocker)
+**Supplied:** what the subject reads in. Operation arguments, a collaborator's answers, a clock
+reading and a fresh identifier come from the spec's seams, recorded once from the baseline and replayed
+into both sides. Work the subject hands off runs in one order the capture sets.
 
-More intercepted seams → more code the oracle can run at the fast, no-simulator tier, and a smaller
-"cannot verify" bucket. But an *un*intercepted seam is never a blocker for the whole idea — it just
-forces the change into a higher (slower, more faithful) isolation tier, or an honest abstain:
+Anything that reaches the subject around the boundary (a singleton called from a method body, a bare
+`Date()`, a direct `DispatchQueue.main.async`) is a seam nobody controls.
 
-| Tier | What runs | Requires |
-|------|-----------|----------|
-| **Logic slice** | changed unit extracted + seams replayed from transcripts | pure-Swift unit; every crossed seam is record+replay-able |
-| **Module cut** | changed file in its real module; *downstream* modules replayed | module compiles headless; downstream seams replay-able |
-| **Sim fallback** | the real target on the simulator | UI-coupled code, or a seam we can't yet intercept faithfully |
+## Through the initializer
 
-The rule is **never silently mock an uncaptured seam.** If a change crosses a seam we can't record,
-the verdict escalates the tier or returns `CANNOT-VERIFY` — a false `EQUIVALENT` is the one
-catastrophic outcome and this ledger exists to prevent it. Every row moved toward ✅ shrinks the
-abstain bucket and grows the headless surface; honest gaps are the cost of soundness, not a failure.
+The precondition for all of it, the **injectability precondition**: the subject takes its seams through
+its initializer. Its collaborators, the notification center it posts to, the queues it hands work to,
+and the sources of any values it would otherwise make up. Paste that initializer into the stamped
+protocol and construction derives: `.baselined(on: CartManager.self)` and `check(SwiftCart.self)` build
+both sides through it. The dogfood cart's boundary protocol, abridged to its initializer:
 
----
+```swift
+@Haruspec
+protocol Cart: AnyObject {
+    init(
+        inventory: InventoryReserving,
+        analytics: AnalyticsTracking,
+        notificationCenter: NotificationCenter,
+        orderArchive: OrderArchiving,
+        stateQueue: SerialQueueing,
+        newOrderID: @escaping () -> UUID,
+        clock: @escaping () -> Date
+    )
+}
+```
 
-## The seam ledger
+Legacy code usually reaches these from inside method bodies (`[AnalyticsTracker shared]`,
+`NotificationCenter.default`, `Date()`). The fix is small, behavior-preserving, and touches one file:
+take each seam as an initializer parameter, defaulted to the real one, so production and every call
+site build the class exactly as before.
 
-Prioritized by **frequency in real legacy code × determinism impact × interception cost.** Time,
-randomness, network, and persistence sit at the top of the funnel — they show up everywhere, wreck
-determinism, and have clean interception points.
+```swift
+final class ReceiptPrinter {
+    private let newID: () -> UUID
+    private let now: () -> Date
 
-### Time & ordering
-| Seam | Mechanism | Record | Replay | Notes |
-|------|-----------|:------:|:------:|-------|
-| Injectable logical clock | ctor/ambient injection | ✅ | ✅ | Engine's canonical clock; **`SeamClock` adds cassette record/replay of wall-clock reads**. |
-| `Date()` / `Date.now` (bare call) | inject a `SeamClock` | 📋 | 📋 | The `@Seamed` source shim was removed (2026-09-27): it had to sit on the production type, and Haruspec attributes now live only on test-side protocols. Until a bare read is injected, it reads as an uncontrolled seam: the verdict is UNSTABLE and names the field. |
-| `CACurrentMediaTime`, `mach_absolute_time`, `DispatchTime.now` | interpose | 📋 | 📋 | Timing-budget captures depend on this. |
-| `Timer` / `RunLoop` scheduling | swizzle / virtualized clock | 🔬 | 🔬 | Needs a virtual scheduler to replay deterministically. |
+    init(newID: @escaping () -> UUID = { UUID() }, now: @escaping () -> Date = { Date() }) {
+        self.newID = newID
+        self.now = now
+    }
+}
+```
 
-### Randomness & identity
-| Seam | Mechanism | Record | Replay | Notes |
-|------|-----------|:------:|:------:|-------|
-| `UUID()` (bare call) | inject the source | n/a | n/a | Take a `() -> UUID` (or an issuer type) through the initializer and supply it with `.provides`. A bare call is an uncontrolled seam: the verdict is UNSTABLE and names the field. Redaction (`volatileFields`) was retired 2026-10-07. |
-| `SystemRandomNumberGenerator`, `Int.random(using:)` | injectable RNG (`SeamRNG`) | ✅ | ✅ | `SeamRNG` records/replays the `next()` stream via `Cassette`; drop into any `random(in:using:)`. Bare `Int.random(in:)` (no `using:`) still needs a shim. |
+A singleton is the same case: a parameter whose default is the shared instance
+(`inventory: InventoryReserving = InventoryLedger.shared()`), with its protocol stamped so the capture
+hands in a double. A singleton left in a method body is not on the audit's list: its calls run live on
+both sides, unrecorded, and whatever it returns reaches the subject uncontrolled.
 
-### Network
-| Seam | Mechanism | Record | Replay | Notes |
-|------|-----------|:------:|:------:|-------|
-| `URLSession` (shared + delegate) | `URLProtocol` (`CassetteURLProtocol`) | ✅ | ✅ | Record status+body from live, replay **offline through a real `URLSession` — no code change, no swizzling**. v0 keys by method+URL; headers/request-body/streaming next. |
-| WebSocket / streaming | `URLProtocol` / proxy | 🔬 | 🔬 | Ordered, timed frames — partial-order replay. |
-| Third-party HTTP (Alamofire, etc.) | ride the `URLProtocol` seam | 📋 | 📋 | Most route through `URLSession` underneath. |
+For what an initializer cannot reach (a binary framework with no source, or certifying the refactor
+above against the code before it), `SeamSwizzle.exchange(_:_:with:)` swaps an `@objc dynamic` or
+Objective-C method for a paired one that reads through `Seam.cassette`, and `Seam.bind(_:_:)` binds a
+cassette around a closure. Both are for a harness you write yourself: a spec's capture does not bind
+`Seam.cassette`. Swizzle once to record, make the refactor, compare, then delete the swizzle.
 
-### Persistence & storage
-| Seam | Mechanism | Record | Replay | Notes |
-|------|-----------|:------:|:------:|-------|
-| `UserDefaults` | injected `SeamDefaults` / shim | ✅ | ✅ | `SeamDefaults`: reads recorded/replayed per key, writes kept in-memory. Injected boundary today; swizzling `UserDefaults.standard` is the un-injected path. |
-| `FileManager` / file I/O | injected `SeamFileSystem` / shim | ✅ | ✅ | `SeamFileSystem`: reads recorded/replayed by path, writes in-memory with read-your-writes. Injected boundary today. |
-| Keychain | injected `SeamKeychain` / shim | ✅ | ✅ | `SeamKeychain`: record the token once, replay it so an auth gate never blocks a headless run. |
-| CoreData / SwiftData | in-memory store | 🔬 | 🔬 | In-memory store type helps; relationship/fetch ordering is the hard part. |
-| SQLite / GRDB | in-memory db | 🔬 | 🔬 | Determinism of query ordering. |
+## Collaborators
 
-### Concurrency & dispatch
-| Seam | Mechanism | Record | Replay | Notes |
-|------|-----------|:------:|:------:|-------|
-| `DispatchQueue` / `OperationQueue` | virtualized executor | 🔬 | 🔬 | Ordering across hops — ties to partial-order canonicalization. |
-| `Task` / actor suspension points | custom executor | 🔬 | 🔬 | Async capture end-to-end is already open in ROADMAP. |
+Stamp the collaborator's protocol in the test target, refining the protocol the subject's initializer
+names:
 
-### System & app services
-| Seam | Mechanism | Record | Replay | Notes |
-|------|-----------|:------:|:------:|-------|
-| `NotificationCenter` posts | injected `RecordingNotificationCenter` | ✅ | ⏳ | A center is a collaborator, so it is handed in like any other. There is no observing variant: a subject that posts to a center it was never given has to accept one first, which is the injectability precondition this catalog is built on. |
-| KVO observed changes | — | 📋 | 📋 | The `KVOInterceptor` scaffold is **removed**: never wired to a spec, and observing from outside is the shape this catalog moved away from. `TraceRecorder.stateChange` remains, so a decorator (or `@Observable`) can emit changes by injection when this is picked up. |
-| Dispatch, `Task`, Combine schedulers | injected scheduling protocol, `@Haruspec(schedules:)` | ✅ | ✅ | The project's own thread seam, like any collaborator: the subject takes a stamped protocol in its `init`, production conforms a real queue to it, and the double holds every enqueue in the capture's `WorkBacklog`. The engine drains the backlog after the ops, one item at a time in enqueue order, so handed-off work is reached, counted, and run in one deterministic order. Delayed work runs on virtual time; a `notify` waits for its group; `.main` work runs on the main thread. The discipline (`serial` / `concurrent` / `main`) is on the stamp, the type the subject depends on. Nothing is overridden: a direct GCD call, `Task {}`, or `MainActor.run` in a subject is an audit finding (`dispatch`). Combine reaches the seam through a `Scheduler` the project writes over it. |
-| Structured concurrency (`withTaskGroup`, `async let`) | none | ⏳ | ⏳ | Children of seamed work inherit its domain and are awaited, so they finish inside the drain, but they run truly concurrently: their order is scheduler noise, which `.perDomain` sets aside. A serial task executor preference (`withTaskExecutorPreference`) may bring them under control; unverified. |
-| Combine publishers | operator tap | 📋 | 📋 | Record emitted values + completion, replay as a fixture publisher. |
-| Locale / TimeZone / Calendar | injected `SeamEnvironment` | ✅ | ✅ | `SeamEnvironment`: locale/timezone/calendar reads recorded/replayed. Cheap and high-value for the UI configuration-sweep application. |
-| Feature flags / remote config | protocol injection | 📋 | 📋 | Usually already behind a protocol — an easy seam. |
-| `CLLocationManager`, `AVFoundation`, sensors | protocol wrapper / swizzle | 🔬 | 🔬 | Device services; record a session, replay the sequence. |
-| `UIApplication` / app-lifecycle state | shim | 📋 | 📋 | Background/foreground transitions as recorded events. |
+```swift
+@Haruspec
+protocol Inventory: InventoryReserving {
+    func reserve(sku: String, quantity: Int)
+    func stock(sku: String) -> Int
+    func reset()
+}
+```
 
-### ObjC dynamism & DI seams
+The stamp emits `DoubleInventory`, which serves both `Inventory` and `InventoryReserving`. A double has
+nothing behind it: it records each call, and the call is what the diff compares. Where the subject reads
+an answer (a return value, a property), the double reads it from the seam `"<label>.<member>"`:
 
-**The canonical path here is the injectability precondition:**
-ask for the *smallest behavior-preserving refactor* that makes the boundary injectable — a settable
-`.shared` behind an extracted protocol (**one file: the singleton itself**; all N call sites untouched) —
-then observe it through clean DI with **no runtime interception**. Runtime swizzling is no longer a
-standing mechanism in this column; it survives only as the *one-shot bootstrap* that certifies the
-injectability refactor is EQUIVALENT (then is retired), and as the irreducible no-source-binary residue.
+- the type's zero by default (an empty collection, `nil` for an optional custom type);
+- swept when the spec declares a domain: `.vary { Seam("Inventory.stock", .int(0 ... 12)) }`;
+- keyed by the call's arguments, so a candidate asking `stock(sku: "MUG")` gets the answer the baseline
+  got for that question, whatever order it asks in;
+- for a required custom type, the factory the spec declares with `.generates` (see [specs.md](specs.md));
+- for a completion block, delivered inside the call with generated arguments, each its own seam
+  (`"Carrier.rate.completion.cents"`).
 
-| Seam | Mechanism | Record | Replay | Notes |
-|------|-----------|:------:|:------:|-------|
-| Protocol boundaries | direct injection | ✅ | ✅ | The *easy* case — clean DI needs no interception. |
-| Singletons / `.shared` | settable-`.shared`-behind-protocol → inject recording double | ✅ | ✅ | The one-file injectability refactor: extract a protocol, keep `+sharedInstance` as callers use it, make the backing store settable. The DEBUG/harness path sets a recording double (a generated `@TracedDouble`); production ships the real one. Certified once by a swizzle bootstrap, then pure DI. |
-| Global mutable state | source shim / interpose | 🔬 | 🔬 | Snapshot + restore around the replay. |
-| Swizzle bootstrap / no-source binary | `SeamSwizzle` (`method_exchangeImplementations`) | ✅ | ✅ | **Not a standing mechanism.** One-shot: swizzle the pre-refactor `@objc dynamic`/ObjC singleton to capture a golden, apply the injectability refactor, diff → EQUIVALENT certifies the seam; then drop the swizzle. Also the last reach for a third-party *binary* framework with no source to make injectable. Bootstrap proven on a real `.m`/`.h` singleton (`LegacyObjC`). |
+A network client is a collaborator like any other: stamp its protocol, and the double answers with
+generated responses.
 
-### Third-party SDKs
-| Seam | Mechanism | Record | Replay | Notes |
-|------|-----------|:------:|:------:|-------|
-| Analytics / logging / silent singletons | injected recording double (`@Haruspec`) | ✅ | n/a | *Observed*, not stubbed: make the collaborator injectable (settable-`.shared`-behind-protocol), inject the stamp's generated double that records each outbound call as a semantic `effect` event before forwarding, so a dropped/altered call diverges. A *capture* channel (watch the boundary), not a value-replay seam — nothing to replay. Clean DI, no runtime interception. |
-| Crash reporters | no-op in DEBUG harness | 📋 | 📋 | Suppress side effects during replay. |
+### How a check resolves initializer parameters
 
----
+Every build a capture makes (a baseline bound by type or initializer, `check(SwiftCart.self)`,
+`check(SwiftCatalogPrefetcher.init)`) resolves each initializer parameter in this order:
 
-## Implemented — the `HaruspecSeams` target
+1. a resource the spec provides for that type (`.provides`);
+2. for an optional parameter (an unannotated Objective-C initializer), whatever its wrapped type
+   resolves to;
+3. for `NotificationCenter`, the capture's recording center;
+4. the one stamped double that serves that type;
+5. a packaged default, such as the in-memory store `HaruspecCoreData` provides for
+   `NSManagedObjectContext`.
 
-The **`Cassette`** primitive is built: record-once, replay-into-both, JSON-serializable (same bundle
-discipline as a trace), and it surfaces unrecorded interactions as `SeamMiss`es rather than fabricating
-a response. Proven by `SeamReplayTests` — record a golden run, replay reproduces it exactly, two
-replays agree, and a logic change under the *same* cassette still diverges (attributable to the code).
+If nothing serves a parameter, or two doubles do, the capture traps with a message naming the
+declaration to write. A guessed collaborator would be a silent wiring change, so there is no fallback.
+To wire a build by hand, construct doubles through the context, which registers them as injected:
+`.baselined { context in LegacyQuoter(queue: context.double(DoubleQuoterQueue.self)) }`.
 
-It's also **wired to the behavioral-diff engine end-to-end** (`SeamHarnessEndToEndTests`): production
-logic reads seams (clock + RNG bucket + config) whose values *flow into observable behavior*
-(notifications + markers) captured in a `TraceRecorder`. An un-replayed run diverges — no comparison can
-absorb values that flow into the output — while replaying the cassette makes the baseline reproduce its
-golden trace `EQUIVALENT`, and the changed branch is `DIVERGED` and localized, through `BehavioralDiff`.
-This is the seam harness's version of the engine's original validation gate.
+**Resources** are infrastructure the subject runs on rather than a boundary it calls: an in-memory
+store, a scratch directory, a value source. Nothing is recorded at a resource; its state shows up
+through the subject's own reads. The maker runs once per capture, so every probe gets a fresh instance,
+and a resource can be provided by its initializer: `.provides(ImageLoader.init(queue:deliveryQueue:))`.
 
-Seven seams knocked off the ledger against it, all pure-Swift and no simulator:
+## Values
 
-- **`SeamClock`** (time) — cassette record/replay of wall-clock reads.
-- **`SeamRNG`** (randomness) — a `RandomNumberGenerator` whose `next()` stream is recorded/replayed.
-- **`SeamDefaults`** (persistence) — `UserDefaults`-style reads recorded/replayed per key; writes in-memory.
-- **`CassetteURLProtocol`** (network) — records status+body from live, replays offline through a real
-  `URLSession`, no code change and no swizzling.
-- **`SeamEnvironment`** (locale / timezone / calendar) — reads recorded/replayed.
-- **`SeamKeychain`** (auth-gate token) — record the token, replay it headlessly.
-- **`SeamFileSystem`** (file I/O) — reads recorded/replayed by path; writes in-memory (read-your-writes).
+A value the subject reads from the world is a seam: the clock, a fresh identifier, random numbers, user
+defaults, the keychain, a file, the locale. Take the source through the initializer, then provide it
+from the spec, in one of two shapes.
 
-All of these are the clean **injected** boundary. The **un-injected** reach — a bare `Date()` / `UUID()`
-inside a type's methods — had a source shim, the `@Seamed` macro, until 2026-09-27. It was removed with
-the other class macros: it had to sit on the production type, and Haruspec attributes now live only on
-test-side protocols (`@Haruspec`). The ambient `Seam` cassette it routed through remains for
-hand-written seams such as a swizzled singleton.
+**A fixed source.** Both sides draw the same values in the same order. The dogfood cart's spec provides
+sequential identifiers (a fresh counter per capture, so each side starts at `…0001`) and one instant:
 
-**Singletons & ObjC — make the boundary injectable, don't intercept it.** A shared singleton called
-from everywhere used to force *runtime* interception (there's no injection point). The
-injectability precondition removes that forcing
-function: ask for the one-file, behavior-preserving refactor that gives the boundary an injection point,
-then observe through clean DI.
+```swift
+// A receipt's order ID and timestamp, held still per capture.
+.provides((() -> UUID).self) { _ in Minted.identifiers() }
+.provides((() -> Date).self) { _ in { Minted.instant } }
+```
 
-- **ObjC / `@objc dynamic` singleton with source** (Foundation-style, most legacy `NSObject` singletons)
-  → extract a protocol, keep `+sharedInstance` exactly as callers use it, make the backing store settable
-  (`+setSharedInstance:`). One file changes; all call sites are untouched. The harness sets a recording
-  double (a stamped protocol's generated double); production ships the real one.
-- **pure-Swift singleton with a settable `.shared`** → the same shape natively: swap in a recording
-  subclass decorator. The call-site is untouched; only the global is redirected (`SingletonSeamTests`).
-- **pure-Swift `final` + `let shared` + non-`@objc`** → the genuine hold-out: make it settable, else
-  `CANNOT-VERIFY`.
+**A source read through the seams.** Read the value through the capture's context (`int`, `double`,
+`bool` or `string(_:default:)`) and it is recorded from the baseline, replayed into the candidate, and
+swept like any other input. The dogfood fulfillment spec's `StoreClock.now(_:)` parses
+`context.string("Clock.now", default: instants[0])`, and the spec sweeps it over named instants
+(cutoffs, a Saturday, two holidays):
 
-The **chicken-and-egg** — "making it injectable is itself an unverified refactor" — resolves cleanly:
-swizzle the pre-refactor singleton **once** to capture a golden, apply the refactor, diff → EQUIVALENT
-certifies the seam is behavior-preserving; then the swizzle is dropped and every downstream verification
-rides clean DI. This bootstrap is proven end-to-end on a **genuine ObjC `dispatch_once` singleton**
-(`LegacyObjC/LegacyObjCManager.m`, a real `.m`/`.h` target) whose `deviceToken` carries *no annotation at
-all* (`ObjCSeamTests`). Swizzling as a one-shot certifier, never as a standing runtime mechanism — so the
-whole `_objc_msgForward` / `_stret` / struct-arg edge list simply doesn't exist on the canonical path.
+```swift
+.provides((() -> Date).self) { context in { StoreClock.now(context) } }
+.vary {
+    Seam("Clock.now", .oneOf(StoreClock.instants))
+}
+```
 
----
+### Value seams for a harness you hold
 
-## Interception mechanisms (fidelity vs. intrusiveness)
+`HaruspecSeams` also ships ready-made recorders for the common value seams. Each takes a `Cassette` in
+its initializer and records under its own track:
 
-Layered, cheapest-and-most-faithful first:
+| Seam | Type | What it records |
+| --- | --- | --- |
+| Clock | `SeamClock` | each `now()` reading, seconds since 1970 (`clock`) |
+| Randomness | `SeamRNG` | each `next()`, as a `RandomNumberGenerator` for `random(in:using:)` (`rng`) |
+| User defaults | `SeamDefaults` | `string`, `integer` and `bool` reads per key (`defaults.<key>`); writes stay in memory |
+| Keychain | `SeamKeychain` | reads per key (`keychain.<key>`); writes stay in memory and read back |
+| File system | `SeamFileSystem` | reads per path (`fs.read:<path>`); writes stay in memory and read back |
+| Environment | `SeamEnvironment` | locale, time zone and calendar identifiers (`env.locale`, `env.timezone`, `env.calendar`) |
+| Network | `CassetteURLProtocol` | status and body per method and URL, served offline through a real `URLSession`; no headers |
 
-1. **Protocol injection** — the code already takes a protocol; hand it a replay double. Zero
-   intrusiveness, perfect fidelity. Free where the code is clean.
-2. **Injectability precondition (settable-`.shared` behind a protocol)** — the one-file,
-   behavior-preserving refactor that turns an un-injectable singleton *into* case 1: extract a protocol,
-   make the backing store settable, leave all call sites untouched. Certified once by a swizzle bootstrap
-   (case 6), then perfect-fidelity DI forever. The canonical tool for legacy singletons with source.
-3. **Environment / suite override** — `UserDefaults` suites, `TimeZone`/`Locale` overrides,
-   in-memory stores. Cheap, no swizzling.
-4. **`URLProtocol` registration** — Apple's sanctioned network seam. High value, no swizzling.
-5. **Source shim (macro)** — rewrite `Date()` / RNG call-sites through an ambient provider. Built as
-   `@Seamed` for `Date()`/`Date.now`/`UUID()` and **removed 2026-09-27**: an attribute on the production
-   type is exactly what the protocol-only stamp (`@Haruspec`) rules out.
-6. **Swizzle bootstrap (`SeamSwizzle`)** — `method_exchangeImplementations` on an `@objc dynamic`/ObjC
-   method, used **once** to certify that "make this singleton injectable" is EQUIVALENT, then retired
-   (case 2). Also the last reach for a third-party *binary* framework with no source to refactor. Not a
-   standing runtime mechanism. DEBUG-only install.
-7. **DYLD interposing / `lldb` Python** — the last resort for system symbols we cannot annotate or make
-   injectable. Highest reach, highest cost.
+They are for a harness you write yourself. A spec's capture does not hand out its cassette, so inside a
+spec, provide the source as above. In a harness, record with `Cassette()` and replay with
+`Cassette(replaying:)`:
 
-The rule was *"production code is never modified."* It is now the **injectability precondition**: trade a
-*tiny, self-verifying* refactor (one file — a settable `.shared` behind a protocol) for the elimination of
-the entire runtime-interception column. Every mechanism still lives in the external harness behind
-`DEBUG` / opt-in; the one admitted production touch is a bounded, behavior-preserving seam whose safety is
-*certified* by the swizzle bootstrap before anything downstream relies on it.
+```swift
+let recording = Cassette()
+let golden = SeamClock(cassette: recording).now()
 
----
+let replay = Cassette(replaying: recording.snapshot())
+XCTAssertEqual(SeamClock(cassette: replay).now(), golden)
 
-## The record/replay contract
+let session = URLSession(configuration: CassetteURLProtocol.install(cassette: replay))
+```
 
-- **Cassette** — an ordered, keyed transcript of boundary interactions captured during the golden run
-  (same JSON-bundle discipline as trace capture).
-- **Matching** — a seam's track is its generated values in order. A stamped double's answer is also
-  keyed by its call's canonicalized arguments: the first time the baseline asks with a given tuple,
-  the answer is the track's next value, bound to that tuple; every later ask with the same tuple
-  takes its next bound value. The candidate replays the baseline's bindings, so it is answered by
-  arguments, whatever order it asks in, and a tuple the baseline never asked draws the next unbound
-  value. Plans store each probe's bindings.
-- **Unrecorded interaction** — replay hits a call with no matching entry. This is **both** a
-  behavioral-change signal (the change altered the boundary) **and** a coverage event. Policy:
-  **surface it, never fabricate a response.** *Now wired to the verdict:* `Cassette.coverage(declaring:)`
-  turns each `SeamMiss` into an `.unrecorded` coverage gap, and `VerificationResult` downgrades an
-  otherwise-`EQUIVALENT` diff to **`CANNOT-VERIFY`** — the miss means replay fell back to a live read, so
-  the environment wasn't held identical and an equivalent can't be trusted. The declared seam registry is
-  the coverage map (defaulting to the golden's recorded seams); coverage — exercised / declared — is
-  reported with every verdict.
-- **Attribution** — record on the golden branch, replay the same cassette into *both* branches. The
-  golden is self-consistent by construction; any divergence is attributable to the candidate's code.
-- **Determinism** — replay must be order-stable; concurrent seams need the partial-order
-  canonicalization tracked in ROADMAP's open-research section before they leave 🔬.
+## The cassette: record once, replay into both
 
----
+Every seam read in a capture (an operation's argument, a double's answer, a value read through the
+context) lands on the capture's cassette, one ordered track per seam key.
 
-## How the harness gets its inputs
+- The baseline runs first, recording. A seam with a declared domain records the domain's first
+  interior value; any other records its default.
+- Each probe replays a cassette into both sides: the baseline, then the candidate, answered as the
+  baseline was, including the answers it bound to arguments.
+- Probes vary the cassette (and the ordering), never the code: each declared domain is swept across
+  them.
+- A recorded plan stores every probe's cassette, so a replay on a branch is answered exactly as `main`
+  was.
 
-One replay harness, three complementary input sources — recorded gives fidelity, generated gives
-breadth, agentic gives aim:
+A replay that reads past the end of a track gets no invented value. The cassette falls back to the
+live default and records a miss, and an otherwise-equivalent verdict reads `CANNOT-VERIFY` with
+`⚠︎ unrecorded reach: <seam> (replay fell back to live)`. A domain declared for a key nothing read is
+the same kind of gap: `declared domain matched nothing`.
 
-- **Recorded** cassettes — the real inputs the system actually saw (fidelity; proves equivalence on
-  the observed path).
-- **Property-based / fuzz** generation at the seam — inputs the recording never hit (breadth; this is
-  what upgrades "equivalent on one path" toward "equivalent over a surface"). Reuses the seeded-RNG
-  seam above.
-- **Agentic interrogation** — targeted probing of branches the diff or the coverage map flags as thin.
+## Threads as collaborators
 
-Coverage — the fraction of the change's behavioral surface actually exercised — is reported alongside
-every verdict, because `EQUIVALENT` over 20% of the surface is nearly worthless and `EQUIVALENT` over
-95% is the product.
+A subject that hands work to another thread takes the queue, or a task spawner, in its initializer.
+The app owns the protocol and conforms its production queue to it (a `DispatchQueue` extension, or a
+small wrapper class). The test target stamps a protocol that refines it, with the discipline it honors:
 
----
+```swift
+@Haruspec(schedules: .serial)
+protocol StateQueue: SerialQueueing {
+    func async(_ work: @escaping () -> Void)   // held, run in order
+    func sync(_ work: () -> Void)              // the queue's held work, then inline
+}
+```
 
-*Living document. Rows graduate ✅ as record **and** replay land; ROADMAP.md links here from
-"Isolation & headless replay" and "Open research → Legacy reach."*
+A scheduling protocol's requirements take one of five shapes, read off the signature. The stamp
+rejects anything else at compile time, as well as a `sync` on a `.main` protocol and a `sync` beside a
+`spawn`.
+
+| Requirement | Under test |
+| --- | --- |
+| `func async(_ work: @escaping () -> Void)` | held, run in enqueue order |
+| `func after(_ delay: TimeInterval, _ work: @escaping () -> Void)` | held on virtual time; fires once nothing else is ready, recording a `timer` event |
+| `func notify(_ group: DispatchGroup, _ work: @escaping () -> Void)` | held until the group empties |
+| `func sync(_ work: () -> Void)` | the queue's ready held work, then the block, inline |
+| `func spawn(_ operation: @escaping @Sendable () async -> Void)` | an unstructured task, held, then awaited whole |
+
+The discipline names the domain the work records on: `.serial` is `queue(serial):<label>`,
+`.concurrent` is `queue(concurrent):<label>`, and `.main` is `main`, with the work run on the main
+thread. A port that changes discipline depends on a different protocol, and the diff sees a different
+domain.
+
+Under test, the double holds each piece of work in the capture's backlog. The capture runs held work
+one item at a time, in enqueue order, after the operations (and at settle points, below): the same
+order every run. Each item is attributed to the operation that enqueued it. A backlog that never
+empties (a timer that re-arms itself) stops after 10,000 items and leaves the marker
+`⟨haruspec: scheduled work still held at snapshot⟩`. Structured children of held work
+(`withTaskGroup`, `async let`) inherit its domain and finish inside the drain, but run concurrently, so
+their order among themselves is not controlled.
+
+A Combine pipeline reaches the seam through a `Scheduler` the project writes over its queue protocol
+(the dogfood app's `QueueScheduler`). The audit still names `import Combine` as the `Combine` channel.
+
+### Settle points
+
+Running every operation first and the held work last is one legal schedule: the most impatient user. A
+port that only misbehaves once an earlier operation's work has landed would pass it. So when the golden
+run holds work across a gap between operations, exploration also tries settle points. Each gap is held
+(nothing runs), ready (what is ready now runs, the clock stays put) or elapsed (everything runs, timers
+included). Each ordering runs under up to four settle schedules, all-held and all-elapsed first. Both
+sides always run the same schedule, and a failing order shows it: `refresh → settle:elapsed → refresh`.
+
+### Main-actor work
+
+A capture's own frames run off the main thread, so anything on the main thread inside a capture is the
+subject's doing and records on `main`: work handed to a `.main` queue protocol, a `@MainActor` method, a
+held task that hops to the main actor. A port that drops a hop to main diverges with
+`ran on a different domain (main → …)`.
+
+For the same reason, operations must be nonisolated. An operation closure written in a `@MainActor`
+context would run on main and make the subject's nonisolated code read as `main`, so a capture refuses
+it and names the fix. Under default main-actor isolation, mark the spec type `nonisolated`. A subject's
+isolated method is still reachable from a nonisolated operation with `await`.
+
+## Haruspec overrides nothing
+
+Haruspec does not redefine Grand Central Dispatch, swap your queues, or patch `Task`. A subject that
+hands work off directly reaches a thread the capture neither holds nor waits for. The
+capture-completeness audit reads the sources a verdict covered and flags these as the `dispatch`
+channel: the `dispatch_async` family, `DispatchQueue(`, `DispatchQueue.main`, `DispatchQueue.global`,
+`asyncAfter(`, `Task {`, `Task.detached`, `MainActor.run`, and operation-queue `addOperation` blocks.
+Its other channels are `NotificationCenter.default` as a receiver, `Timer / RunLoop`, `Combine`, `KVO`
+and `Core Data`.
+
+The audit runs when `HARUSPEC_SOURCE_ROOT` names the checkout, or when a test calls `.audited()` on the
+verdict. Otherwise every verdict says `blind spots: not audited`.
+
+**When the audit flags dispatch,** the finding is a coverage gap: an otherwise-equivalent verdict reads
+`CANNOT-VERIFY` with `blind spots: dispatch`, and a red stays red and carries it. To clear it, route
+the hop through the subject's injected scheduling protocol: `mainQueue.async { … }` for
+`DispatchQueue.main.async { … }`, `tasks.spawn { … }` for `Task { … }`, a `@MainActor` method for
+`MainActor.run`. If the reach is real and you accept not seeing it, say so by name:
+`.accepts(uncaptured: "dispatch")` on the spec, for a blind spot every candidate shares, or
+`Accepts(uncaptured: "dispatch")` in one check's intent. It stays on the verdict as
+`dispatch (declared)`, and a declared channel the audit no longer finds reads `(declared, not found)`.
+
+## Never silently mock
+
+Wherever Haruspec cannot control a seam, it says so in the verdict's own terms:
+
+| What happened | What you get |
+| --- | --- |
+| A parameter nothing serves | the capture stops, naming the declaration to write |
+| A replay reads past the recording | `CANNOT-VERIFY`, `unrecorded reach: <seam>` |
+| A declared domain nothing read | `CANNOT-VERIFY`, `declared domain matched nothing: <seam>` |
+| The audit finds an unrecorded channel | `CANNOT-VERIFY`, `blind spots: <channel>` |
+| The subject makes up a value | `UNSTABLE`, naming the field |
+
+A double is not a mock in this sense: it answers only with recorded, replayed, sweepable input, and the
+calls made to it are part of what the diff compares.
+
+## When a verdict says UNSTABLE
+
+`UNSTABLE` means identical inputs produced different results, so no comparison can gate. A live check
+reruns a failing input with the baseline on both sides, and a baseline that disagrees with itself reads
+`UNSTABLE`. A plan replay runs three passes, and passes that disagree read `UNSTABLE`. Either way the
+report names each payload field that varied, with its shape and the injection that controls it:
+
+```text
+🌀 UNSTABLE  …
+  stability: the baseline disagreed with itself on the failing input:
+  …
+  uncontrolled seams — values the subject makes up itself:
+    Total.orderID (UUID): a fresh identifier — inject its source (a `() -> UUID` the initializer takes, supplied by the spec's `.provides`)
+```
+
+To fix it, find where the named event's field is made (`Total`, `orderID`), take its source through the
+initializer with the real one as the default, and provide it from the spec: a fixed source, or one read
+through the seams.
+
+An `UNSTABLE` with no named field usually means ordering: work on different domains interleaving
+differently from run to run. If cross-domain order is not part of the contract, compare per domain with
+`.comparing(Comparison(concurrency: .perDomain))`.
+
+A value only the port makes up is the port's divergence, so it reads `DIVERGED`. When both sides of a
+mismatch look minted (two identifiers, or two timestamps of one format), the divergence carries a hint:
+`likely an uncontrolled seam: inject the identifier's source`, or `inject the clock`.
+
+## See also
+
+- [specs.md](specs.md): stamping a protocol, `Amend`, `.vary` and `check`.
+- [verdicts.md](verdicts.md): the four verdicts, the qualification block, and declaring intent.
+- [../README.md](../README.md): what Haruspec is, and how to start.

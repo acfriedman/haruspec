@@ -4,14 +4,14 @@ import HaruspecCore
 /// Which side of the record/replay loop a cassette is on.
 public enum SeamMode: Sendable { case record, replay }
 
-/// A replay hit a seam position with no recorded value — surfaced, never fabricated (SEAMS.md's
-/// "unrecorded interaction" policy: it's both a behavioral-change signal and a coverage gap).
+/// A replay hit a seam position with no recorded value — surfaced, never fabricated (the
+/// "never silently mock" rule in docs/seams.md: it's both a behavioral-change signal and a coverage gap).
 public struct SeamMiss: Sendable, Equatable {
     public var seam: String
     public var ordinal: Int
 }
 
-/// The concrete **cassette** from SEAMS.md: an ordered, keyed transcript of one run's seam
+/// The concrete **cassette** from docs/seams.md: an ordered, keyed transcript of one run's seam
 /// interactions, **recorded once from the golden branch and replayed identically into both branches**,
 /// so any divergence in the diff is attributable to the changed code, not the environment.
 ///

@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
 
-// Time seam — SEAMS.md: `Date()` / `Date.now`. One of the injected, cassette-backed value seams: a
+// Time seam — docs/seams.md: `Date()` / `Date.now`. One of the injected, cassette-backed value seams: a
 // `live` source recorded once on the golden run and replayed identically thereafter, through a clean
 // injected boundary (zero intrusiveness). Reaching the same seam at an *un-injected* call-site (a bare
 // `Date()`) is the later source-shim / swizzle mechanism, layered on this same cassette.

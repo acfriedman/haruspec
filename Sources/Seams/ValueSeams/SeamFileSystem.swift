@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
 
-// File-system seam — SEAMS.md: FileManager / file I/O. An injected, cassette-backed value seam: reads
+// File-system seam — docs/seams.md: FileManager / file I/O. An injected, cassette-backed value seam: reads
 // recorded/replayed by path; writes kept in-memory (sandboxed away from real disk).
 
 /// File **reads** recorded/replayed by path; **writes** kept in-memory (sandboxed away from real disk),

@@ -1,12 +1,12 @@
 import Foundation
 import HaruspecCore
 
-// Randomness seam — SEAMS.md: `SystemRandomNumberGenerator`, `Int.random`, `arc4random`. An injected,
+// Randomness seam — docs/seams.md: `SystemRandomNumberGenerator`, `Int.random`, `arc4random`. An injected,
 // cassette-backed value seam: the entropy stream is recorded once and replayed identically.
 
 /// A `RandomNumberGenerator` whose stream is recorded/replayed. Drop it into any `random(in:using:)`
 /// call — `Int.random(in: 0..<10, using: &rng)` — and the sequence is fixed across replays. Also the
-/// substrate for property-based generation at the seam (see SEAMS.md).
+/// substrate for property-based generation at the seam (see docs/specs.md).
 public struct SeamRNG: RandomNumberGenerator {
     private let cassette: Cassette
     private let seam: String

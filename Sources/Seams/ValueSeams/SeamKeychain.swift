@@ -1,7 +1,7 @@
 import Foundation
 import HaruspecCore
 
-// Keychain seam — SEAMS.md: the common auth-gate seam. An injected, cassette-backed value seam: record
+// Keychain seam — docs/seams.md: the common auth-gate seam. An injected, cassette-backed value seam: record
 // the token once, replay it so an auth gate never blocks a headless run.
 
 /// Keychain reads, recorded/replayed per key — record the token once, replay it so an auth gate never
