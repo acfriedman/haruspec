@@ -33,6 +33,9 @@ extension Spec {
     ///   - cassette: The seam readings to answer with.
     /// - Returns: The trace, and whether held work waited at a gap.
     func captured(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) async -> Captured {
+        for operation in order {
+            Self.refuseIsolated(operation)
+        }
         let recorder = TraceRecorder(name: name, clock: ManualClock())
         // The SUT posts through a center that records, so a notification takes the same path and the
         // same recorder lookup as every other kind of event. There is no second mechanism.
@@ -98,5 +101,37 @@ extension Spec {
             await recorder.snapshot(property.label, value: RuntimeValue.canonical(property.read(system)))
         }
         return Captured(trace: recorder.trace(), heldWorkAtGaps: heldWorkAtGaps)
+    }
+
+    /// Traps on an op whose closure is isolated to an actor, naming the fix.
+    ///
+    /// - Parameter operation: The op about to run.
+    /// - Precondition: `operation`'s closure is nonisolated.
+    private static func refuseIsolated(_ operation: Op<S>) {
+        if let refusal = isolationRefusal(operation) {
+            preconditionFailure(refusal)
+        }
+    }
+
+    /// The teaching message for an op whose closure is isolated to an actor; `nil` for a nonisolated one.
+    ///
+    /// - Parameter operation: The op about to run.
+    /// - Returns: The refusal naming the op, its actor, and the fix; `nil` when the op may run.
+    ///
+    /// A capture reads the main thread as the subject's doing, because its own frames run off main
+    /// (`TraceContext.capturesOffMain`). An op closure written in a `@MainActor` context runs on main,
+    /// so the subject's nonisolated code under it would read `main`, and a port that drops a main hop
+    /// would pass. Every op is nonisolated instead, which also keeps the rule one sentence long.
+    static func isolationRefusal(_ operation: Op<S>) -> String? {
+        guard let isolation = operation.isolation else {
+            return nil
+        }
+        let actor = isolation === MainActor.shared ? "the main actor" : "actor \(type(of: isolation))"
+        return "op '\(operation.label)' runs on \(actor): its closure was written in an isolated context. "
+            + "A capture reads the main thread as the subject's isolation, so an isolated op would "
+            + "make the subject's nonisolated code read as isolated. Write the op where nothing "
+            + "isolates it: mark the spec type `nonisolated` (needed under default MainActor "
+            + "isolation), or move it out of the @MainActor type. A subject's isolated method is "
+            + "still reachable from a nonisolated op with `await`."
     }
 }

@@ -233,15 +233,22 @@ public struct DerivedOp<S> {
     public let label: String
     var arguments: [DerivedArgument]
     let action: (S, [Any]) async -> Void
+    /// The actor the action's closure is isolated to; `nil` when it is nonisolated.
+    let isolation: (any Actor)?
     var structure = OpStructure()
 
-    public init(_ label: String, arguments: [DerivedArgument] = [], action: @escaping (S, [Any]) async -> Void) {
+    public init(
+        _ label: String,
+        arguments: [DerivedArgument] = [],
+        action: @escaping @isolated(any) (S, [Any]) async -> Void
+    ) {
         precondition(
             Set(arguments.map(\.name)).count == arguments.count,
             "\(label) declares two arguments with the same name — they would share one seam track"
         )
         self.label = label
         self.arguments = arguments
+        isolation = action.isolation
         self.action = action
     }
 
@@ -271,6 +278,7 @@ public struct DerivedOp<S> {
             }
             await action(system, values)
         }
+        op.isolation = isolation
         for (position, argument) in arguments.enumerated() {
             let resolution = argument.resolution!
             if resolution.isGenerated {

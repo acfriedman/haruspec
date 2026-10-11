@@ -42,7 +42,7 @@ enum CatalogEmitter {
             systemEntry = """
 
 
-                static var derivedSystem: ((SeamContext, Any.Type) -> \(system))? {
+                nonisolated static var derivedSystem: ((SeamContext, Any.Type) -> \(system))? {
                     { context, type in
                         guard let conformer = type as? any \(protoName).Type else {
                             preconditionFailure("\(refusal)")
@@ -60,7 +60,7 @@ enum CatalogEmitter {
             propertiesEntry = """
 
 
-                static var derivedProperties: [DerivedProperty<\(system)>] {
+                nonisolated static var derivedProperties: [DerivedProperty<\(system)>] {
                     [
             \(properties.joined(separator: ",\n"))
                     ]
@@ -68,10 +68,12 @@ enum CatalogEmitter {
             """
         }
 
+        // `nonisolated` keeps each closure nonisolated under a module's default `MainActor` isolation,
+        // where a capture refuses an op that runs on an actor.
         let source = """
         enum Derived\(protoName): DerivedOperations {
             typealias System = \(system)
-            static var derivedOps: [DerivedOp<\(system)>] {
+            nonisolated static var derivedOps: [DerivedOp<\(system)>] {
                 [
         \(entries.joined(separator: ",\n"))
                 ]
