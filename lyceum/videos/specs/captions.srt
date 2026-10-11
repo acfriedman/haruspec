@@ -1,0 +1,343 @@
+1
+00:00:00,600 --> 00:00:04,780
+Here's a shopping cart written in Objective-C, and its new Swift port.
+
+2
+00:00:05,240 --> 00:00:09,060
+Before the port ships, you want to know it behaves exactly like the original.
+
+3
+00:00:09,810 --> 00:00:14,150
+The usual way is to write down what the original does: expected totals,
+
+4
+00:00:14,370 --> 00:00:16,270
+mocks, one assertion per path.
+
+5
+00:00:16,570 --> 00:00:18,370
+With Haruspec, you don't.
+
+6
+00:00:18,610 --> 00:00:20,730
+The original is the expected value.
+
+7
+00:00:21,130 --> 00:00:24,390
+Both carts get the same inputs, and their behavior is compared.
+
+8
+00:00:24,990 --> 00:00:29,470
+What you write instead is a spec: how to interrogate the cart.
+
+9
+00:00:29,750 --> 00:00:32,430
+For this cart, its heart is three lines.
+
+10
+00:00:32,670 --> 00:00:35,470
+This video is about where everything else comes from.
+
+11
+00:00:37,400 --> 00:00:39,040
+It starts in your test target.
+
+12
+00:00:39,300 --> 00:00:44,860
+Paste the cart's interface into a protocol, initializer included, and stamp it with the Haruspec attribute.
+
+13
+00:00:45,200 --> 00:00:49,100
+Then declare that the original and the port both conform: one line each.
+
+14
+00:00:49,420 --> 00:00:51,720
+The product code never imports Haruspec.
+
+15
+00:00:52,466 --> 00:00:53,626
+The stamp is a macro.
+
+16
+00:00:54,146 --> 00:00:56,986
+From that one protocol, it generates three things.
+
+17
+00:00:57,186 --> 00:01:03,106
+A forwarder, which wraps either cart and records every call, its arguments and its return value.
+
+18
+00:01:03,506 --> 00:01:05,706
+A catalog of operations to drive.
+
+19
+00:01:05,886 --> 00:01:10,446
+And a stand-in, for when some other class takes a cart as a collaborator.
+
+20
+00:01:10,826 --> 00:01:12,146
+That's the seams video.
+
+21
+00:01:12,586 --> 00:01:14,506
+Here, the cart is the subject.
+
+22
+00:01:16,533 --> 00:01:18,873
+The catalog comes straight from the signatures.
+
+23
+00:01:19,273 --> 00:01:21,553
+Every method becomes an operation.
+
+24
+00:01:21,933 --> 00:01:24,453
+Every argument gets a domain from its type.
+
+25
+00:01:25,083 --> 00:01:29,363
+A whole number gets a ladder of magnitudes, out to ten thousand both ways,
+
+26
+00:01:29,743 --> 00:01:33,943
+stepping either side of each power of ten, where off-by-one bugs live.
+
+27
+00:01:34,363 --> 00:01:36,683
+A Boolean gets both values.
+
+28
+00:01:36,983 --> 00:01:40,823
+A model, like the product, is built by its own generator.
+
+29
+00:01:41,063 --> 00:01:46,543
+And each operation repeats zero to three times, so even a checkout on an empty cart
+
+30
+00:01:46,543 --> 00:01:47,243
+gets tried.
+
+31
+00:01:47,703 --> 00:01:51,743
+Any domain the engine chose is marked derived default on the verdict,
+
+32
+00:01:51,963 --> 00:01:54,903
+so a green over guessed inputs says so.
+
+33
+00:01:55,485 --> 00:01:58,585
+The effects worth observing come from the same paste.
+
+34
+00:01:58,805 --> 00:02:00,925
+Calls and returns, at the forwarder.
+
+35
+00:02:01,345 --> 00:02:04,305
+Notifications, through the center the initializer takes.
+
+36
+00:02:04,565 --> 00:02:09,445
+And each property, read after every operation, so the path is compared,
+
+37
+00:02:09,725 --> 00:02:11,145
+not just where it ended.
+
+38
+00:02:13,167 --> 00:02:14,127
+Strings get nothing.
+
+39
+00:02:14,407 --> 00:02:19,647
+A string's interesting values are magic words, like a promo code, and random text only ever
+
+40
+00:02:19,647 --> 00:02:21,247
+reaches the branch where nothing matches.
+
+41
+00:02:21,747 --> 00:02:23,587
+A green from that would be hollow.
+
+42
+00:02:23,987 --> 00:02:28,987
+So a string stays pending, and binding the spec traps, naming the line to write.
+
+43
+00:02:29,737 --> 00:02:31,597
+That's what the three lines are.
+
+44
+00:02:32,237 --> 00:02:37,417
+Amend apply promo, varying the code over save ten, the same in lowercase,
+
+45
+00:02:37,997 --> 00:02:41,897
+and nope: a match, a case-insensitive match, and no match.
+
+46
+00:02:42,397 --> 00:02:46,337
+Amend the remove operation, varying its product code over the catalogue.
+
+47
+00:02:46,837 --> 00:02:49,357
+And amend checkout: it runs last.
+
+48
+00:02:50,035 --> 00:02:57,415
+The rest shapes the orderings: run once, repeat, follow another operation, which exploration still breaks on
+
+49
+00:02:57,415 --> 00:03:00,155
+purpose, or require one, which it never does.
+
+50
+00:03:00,435 --> 00:03:05,535
+When the call itself must differ, a full operation in the block replaces its derived twin.
+
+51
+00:03:07,567 --> 00:03:09,547
+The spec names no implementation.
+
+52
+00:03:10,007 --> 00:03:11,547
+It describes the protocol.
+
+53
+00:03:11,887 --> 00:03:14,767
+The test chooses what to trust, with baselined on.
+
+54
+00:03:15,517 --> 00:03:17,257
+Hand it the original's type.
+
+55
+00:03:17,617 --> 00:03:24,097
+It's built through the pasted initializer, each collaborator resolved for you, and wrapped in the forwarder.
+
+56
+00:03:24,417 --> 00:03:29,897
+Then each port is one check, by its type, built exactly the same way.
+
+57
+00:03:30,337 --> 00:03:34,657
+A port whose dependencies differ is checked through its own initializer instead.
+
+58
+00:03:35,407 --> 00:03:39,807
+A check that should go red says so: expecting diverged.
+
+59
+00:03:40,027 --> 00:03:42,547
+A kept bug proves the oracle still bites.
+
+60
+00:03:43,297 --> 00:03:46,737
+And the spec's name comes from the stamp: Cart.
+
+61
+00:03:46,997 --> 00:03:48,957
+It titles reports and plans.
+
+62
+00:03:49,377 --> 00:03:52,737
+Only when two specs interrogate one protocol do you name each.
+
+63
+00:03:54,600 --> 00:03:56,560
+Here's what the engine does with it.
+
+64
+00:03:56,820 --> 00:04:01,160
+First, the original runs once, to learn which values the cart reads.
+
+65
+00:04:01,540 --> 00:04:06,820
+Then it builds orderings, sequences of operations, and pairs each with seam variants,
+
+66
+00:04:07,060 --> 00:04:08,380
+fresh sets of those values.
+
+67
+00:04:08,920 --> 00:04:12,260
+Every pair runs on both carts, with identical inputs.
+
+68
+00:04:13,002 --> 00:04:18,102
+The space is enormous, so a derived spec spends a budget: about twelve hundred runs,
+
+69
+00:04:18,282 --> 00:04:20,182
+over at most fifty orderings.
+
+70
+00:04:20,522 --> 00:04:25,802
+Where it can't buy everything, both axes shrink together, because they find different bugs.
+
+71
+00:04:26,402 --> 00:04:30,762
+Edge values go first, so a small budget drops random middles, not ends.
+
+72
+00:04:31,382 --> 00:04:32,522
+Vary changes any of it.
+
+73
+00:04:33,156 --> 00:04:38,496
+And when a run goes red, the engine shrinks it, dropping operations one at a time
+
+74
+00:04:38,496 --> 00:04:40,156
+while it still diverges.
+
+75
+00:04:40,456 --> 00:04:42,676
+Reading that verdict is its own video.
+
+76
+00:04:44,700 --> 00:04:48,460
+That's the campaign shape: two implementations, one build.
+
+77
+00:04:49,100 --> 00:04:51,740
+The same spec also drives the continuous shape.
+
+78
+00:04:51,920 --> 00:04:56,340
+Put it in a type and mark it continuous, naming the implementation to watch.
+
+79
+00:04:57,020 --> 00:05:01,520
+Its suite records that behavior on main as a plan, and replays it against every branch.
+
+80
+00:05:02,270 --> 00:05:04,310
+So, the one thing you write.
+
+81
+00:05:04,690 --> 00:05:06,310
+Paste and stamp the protocol.
+
+82
+00:05:06,710 --> 00:05:08,570
+Amend what a signature can't say.
+
+83
+00:05:08,930 --> 00:05:11,950
+Let the test pick the baseline, and check each port.
+
+84
+00:05:12,430 --> 00:05:13,810
+Three lines, for a cart.
+
+85
+00:05:14,290 --> 00:05:16,850
+What the cart talks to is the seams video.
+
+86
+00:05:17,130 --> 00:05:19,390
+What comes back is the verdicts video.

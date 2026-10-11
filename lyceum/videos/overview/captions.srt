@@ -1,0 +1,399 @@
+1
+00:00:00,600 --> 00:00:02,420
+Here's a shopping cart class.
+
+2
+00:00:02,820 --> 00:00:05,420
+Objective-C, years old, and it works.
+
+3
+00:00:05,780 --> 00:00:07,500
+You've been asked to port it to Swift.
+
+4
+00:00:08,100 --> 00:00:12,160
+So you start with a test, and you stall on the first line.
+
+5
+00:00:12,460 --> 00:00:13,820
+What should checkout return?
+
+6
+00:00:14,260 --> 00:00:15,120
+Nobody knows.
+
+7
+00:00:15,460 --> 00:00:17,400
+The people who decided have moved on.
+
+8
+00:00:17,720 --> 00:00:19,840
+All anyone knows is what it does today.
+
+9
+00:00:20,590 --> 00:00:21,830
+That's the oracle problem.
+
+10
+00:00:22,110 --> 00:00:25,830
+A test needs something that knows right from wrong, and for legacy code,
+
+11
+00:00:26,050 --> 00:00:27,290
+nobody can write it down.
+
+12
+00:00:29,267 --> 00:00:31,707
+Haruspec's answer is to stop asking.
+
+13
+00:00:32,027 --> 00:00:35,587
+Whatever the old code does today is what correct means.
+
+14
+00:00:35,887 --> 00:00:38,447
+So the old code becomes the oracle.
+
+15
+00:00:39,197 --> 00:00:43,877
+Haruspec drives the old implementation and the new one with the same generated inputs.
+
+16
+00:00:44,157 --> 00:00:48,197
+It records what each does at its boundary: every call and return,
+
+17
+00:00:48,597 --> 00:00:52,017
+every notification it posts, and the state it leaves behind.
+
+18
+00:00:52,317 --> 00:00:53,837
+Then it compares the two.
+
+19
+00:00:54,587 --> 00:00:55,347
+No mocks.
+
+20
+00:00:55,687 --> 00:00:56,767
+No assertions.
+
+21
+00:00:57,007 --> 00:00:58,347
+No expected values.
+
+22
+00:00:58,667 --> 00:01:01,287
+The legacy code is the expected value.
+
+23
+00:01:01,647 --> 00:01:03,267
+That's differential testing.
+
+24
+00:01:03,837 --> 00:01:09,977
+One honest caveat, stated up front: this is a best-effort oracle, not an omniscient one.
+
+25
+00:01:10,337 --> 00:01:12,417
+Where it can't see, it says so.
+
+26
+00:01:14,300 --> 00:01:16,360
+You'll reach for it in one of two shapes.
+
+27
+00:01:16,950 --> 00:01:18,310
+The first is a campaign.
+
+28
+00:01:18,790 --> 00:01:24,050
+You're rewriting something that mustn't change behavior: an Objective-C class moving to Swift,
+
+29
+00:01:24,250 --> 00:01:26,350
+or a serial queue becoming an actor.
+
+30
+00:01:26,930 --> 00:01:29,590
+The old code and its port live in the same build.
+
+31
+00:01:29,870 --> 00:01:34,310
+The old one runs live as the baseline, and every port is checked against it,
+
+32
+00:01:34,490 --> 00:01:37,230
+until the port ships and the old code is deleted.
+
+33
+00:01:37,968 --> 00:01:39,468
+The second is continuous.
+
+34
+00:01:39,868 --> 00:01:44,428
+There's one implementation and two builds: main, and your branch.
+
+35
+00:01:44,908 --> 00:01:49,808
+Main's behavior is recorded once, as a plan, and your branch replays it,
+
+36
+00:01:49,928 --> 00:01:52,148
+to catch changes nobody meant to make.
+
+37
+00:01:52,448 --> 00:01:56,008
+When your branch merges, its behavior becomes the next baseline.
+
+38
+00:01:56,758 --> 00:01:58,778
+The same spec drives both.
+
+39
+00:02:00,600 --> 00:02:04,160
+Here's the whole authored surface for a small promo cart.
+
+40
+00:02:04,780 --> 00:02:05,860
+Three operations.
+
+41
+00:02:06,280 --> 00:02:07,360
+Add some coffee.
+
+42
+00:02:07,580 --> 00:02:08,560
+Apply the promo.
+
+43
+00:02:08,940 --> 00:02:10,920
+Check out, which always runs last.
+
+44
+00:02:11,200 --> 00:02:16,880
+The coffee quantity is a seam: a value the oracle controls, swept from one to twenty.
+
+45
+00:02:16,880 --> 00:02:21,080
+And the operations run in every order the spec allows, some of them twice.
+
+46
+00:02:21,740 --> 00:02:22,560
+Then one line.
+
+47
+00:02:22,980 --> 00:02:25,360
+The legacy cart is the baseline.
+
+48
+00:02:26,340 --> 00:02:28,120
+Verify the Swift port against it.
+
+49
+00:02:28,870 --> 00:02:30,130
+Notice what's missing.
+
+50
+00:02:30,470 --> 00:02:32,150
+No expected total anywhere.
+
+51
+00:02:32,570 --> 00:02:35,470
+Nobody worked out what ten coffees and a promo should cost.
+
+52
+00:02:37,500 --> 00:02:42,680
+Now suppose the port truncates the discount where the legacy code rounded it.
+
+53
+00:02:43,430 --> 00:02:48,230
+At ten coffees, the two carts agree to the cent, so a test written at ten
+
+54
+00:02:48,230 --> 00:02:48,850
+would pass.
+
+55
+00:02:49,530 --> 00:02:51,510
+Haruspec doesn't stop at ten.
+
+56
+00:02:51,510 --> 00:02:54,990
+Across a few hundred runs, the verdict comes back diverged.
+
+57
+00:02:55,740 --> 00:02:58,080
+The port charges one cent more.
+
+58
+00:02:58,320 --> 00:03:02,820
+The report names both places that shows: the total in the checkout notification,
+
+59
+00:03:02,820 --> 00:03:05,080
+and the value checkout returns.
+
+60
+00:03:05,340 --> 00:03:08,600
+Then the input that triggers it: a quantity of one.
+
+61
+00:03:09,350 --> 00:03:13,710
+And beneath it, what the verdict was measured over: how much was explored,
+
+62
+00:03:14,050 --> 00:03:16,730
+what was covered, and what the oracle could not see.
+
+63
+00:03:17,130 --> 00:03:20,410
+Every verdict carries that block, green or red.
+
+64
+00:03:22,433 --> 00:03:24,593
+That's one of four verdicts.
+
+65
+00:03:24,913 --> 00:03:26,733
+Equivalent: every probe matched.
+
+66
+00:03:27,313 --> 00:03:30,793
+Diverged: behavior differs, and the report says where.
+
+67
+00:03:31,253 --> 00:03:36,793
+Cannot verify: capture or coverage fell short, so the oracle refuses to claim what it didn't
+
+68
+00:03:36,793 --> 00:03:38,433
+see, and names the gap.
+
+69
+00:03:38,973 --> 00:03:44,073
+Unstable: identical runs disagreed, usually because the subject made up a value itself,
+
+70
+00:03:44,393 --> 00:03:46,633
+like a fresh identifier or a clock reading.
+
+71
+00:03:47,383 --> 00:03:48,383
+Why four?
+
+72
+00:03:48,383 --> 00:03:52,123
+Because the worst thing a tool like this can do is print green over behavior it
+
+73
+00:03:52,123 --> 00:03:52,623
+never saw.
+
+74
+00:03:52,923 --> 00:03:54,663
+A false alarm costs you an hour.
+
+75
+00:03:54,943 --> 00:03:57,783
+A false green ships a bug past a check you trusted.
+
+76
+00:03:58,243 --> 00:04:00,443
+That's why it would rather say cannot verify.
+
+77
+00:04:02,467 --> 00:04:04,427
+Starting takes three steps.
+
+78
+00:04:05,077 --> 00:04:09,477
+Add the package with Swift Package Manager, and depend on one product,
+
+79
+00:04:09,777 --> 00:04:10,477
+Haruspec.
+
+80
+00:04:11,227 --> 00:04:12,087
+Write a spec.
+
+81
+00:04:12,687 --> 00:04:17,827
+Stamp the protocol your class already speaks, and its operations derive from its signatures.
+
+82
+00:04:18,367 --> 00:04:23,307
+The spec says only what a signature can't: here, which promo codes matter,
+
+83
+00:04:23,547 --> 00:04:25,027
+and that checkout runs last.
+
+84
+00:04:25,693 --> 00:04:26,473
+Then check.
+
+85
+00:04:26,813 --> 00:04:30,833
+In a test, bind the legacy class as the baseline and check the port.
+
+86
+00:04:31,093 --> 00:04:33,453
+The port carries no Haruspec attribute.
+
+87
+00:04:34,093 --> 00:04:36,433
+Conforming to the protocol is the whole adoption.
+
+88
+00:04:37,183 --> 00:04:42,123
+For the continuous shape, opt the repository in once, mark the spec continuous,
+
+89
+00:04:42,423 --> 00:04:44,643
+and run haruspec check on any branch.
+
+90
+00:04:44,983 --> 00:04:50,783
+It records behavior where your branch left main, then replays only the specs your change touches,
+
+91
+00:04:50,783 --> 00:04:51,943
+on your machine.
+
+92
+00:04:53,967 --> 00:04:56,027
+That's Haruspec in five minutes.
+
+93
+00:04:56,027 --> 00:04:57,847
+Three videos go deeper.
+
+94
+00:04:58,457 --> 00:05:00,477
+Specs: the one thing you write.
+
+95
+00:05:01,157 --> 00:05:06,437
+Seams: what the oracle controls, and why a value it doesn't control reads unstable.
+
+96
+00:05:07,197 --> 00:05:12,477
+And verdicts: the four answers, the block that qualifies them, and how to declare the change
+
+97
+00:05:12,477 --> 00:05:13,377
+you meant to make.
+
+98
+00:05:14,127 --> 00:05:15,807
+And that test we couldn't finish?
+
+99
+00:05:16,087 --> 00:05:18,427
+We never had to know what checkout should return.
+
+100
+00:05:18,787 --> 00:05:20,707
+The old code already knew.

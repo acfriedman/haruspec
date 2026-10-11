@@ -1,0 +1,335 @@
+1
+00:00:00,600 --> 00:00:04,300
+This is a real verdict Haruspec printed in August.
+
+2
+00:00:04,640 --> 00:00:05,360
+Equivalent.
+
+3
+00:00:05,360 --> 00:00:10,240
+Sixty-four runs, sixty-four seam variants, and full coverage.
+
+4
+00:00:10,990 --> 00:00:12,350
+It meant almost nothing.
+
+5
+00:00:12,710 --> 00:00:16,290
+The spec had a mistyped seam key, so nothing ever read it.
+
+6
+00:00:16,670 --> 00:00:21,670
+All sixty-four variants were the same input, and the coverage was measured over a surface that
+
+7
+00:00:21,670 --> 00:00:22,590
+had quietly shrunk.
+
+8
+00:00:23,248 --> 00:00:25,208
+A red that's wrong costs you an hour.
+
+9
+00:00:25,468 --> 00:00:28,648
+A green that's wrong ships a bug through a gate you trusted.
+
+10
+00:00:29,028 --> 00:00:32,848
+For an oracle, a false equivalent is the one catastrophic outcome.
+
+11
+00:00:33,208 --> 00:00:35,308
+So a verdict has to say what it saw.
+
+12
+00:00:37,333 --> 00:00:42,533
+Underneath, the diff can only say two things: the traces matched, or they didn't.
+
+13
+00:00:42,893 --> 00:00:46,133
+Two layers above it turn that into one of four verdicts.
+
+14
+00:00:46,735 --> 00:00:47,515
+Coverage first.
+
+15
+00:00:47,775 --> 00:00:49,335
+It never hides a divergence.
+
+16
+00:00:49,755 --> 00:00:53,375
+But an equivalent survives only when the coverage can stand behind it.
+
+17
+00:00:53,715 --> 00:00:55,935
+Otherwise it becomes cannot verify.
+
+18
+00:00:56,685 --> 00:00:58,005
+Then stability.
+
+19
+00:00:58,465 --> 00:01:03,445
+If runs over identical inputs disagree, any verdict becomes unstable.
+
+20
+00:01:04,195 --> 00:01:08,295
+Each verdict has an exit code, so one command is the gate.
+
+21
+00:01:08,595 --> 00:01:14,395
+Zero for equivalent, three for diverged, four for cannot verify, five for unstable.
+
+22
+00:01:14,715 --> 00:01:17,395
+And six for a declared change that never happened.
+
+23
+00:01:17,655 --> 00:01:19,375
+Only zero is a pass.
+
+24
+00:01:21,400 --> 00:01:25,960
+That's why every verdict, green or red, carries a qualification block.
+
+25
+00:01:26,280 --> 00:01:29,280
+This one is real, from the engine's tests.
+
+26
+00:01:30,030 --> 00:01:36,890
+Explored: almost four hundred runs, all seven orderings, each with fifty-five sets of seam values.
+
+27
+00:01:37,470 --> 00:01:40,410
+Stability: three replays, all identical.
+
+28
+00:01:41,150 --> 00:01:43,810
+Coverage: every declared boundary exercised.
+
+29
+00:01:44,210 --> 00:01:48,490
+Covered: the class and operations the claim is about, and where they're declared.
+
+30
+00:01:49,050 --> 00:01:54,250
+Seams: each seam that varied, how many readings it took, and how many boundary values ran.
+
+31
+00:01:55,000 --> 00:01:58,400
+And blind spots: what the capture couldn't see.
+
+32
+00:01:58,860 --> 00:02:00,680
+Not audited means nobody looked.
+
+33
+00:02:01,040 --> 00:02:04,800
+An empty list would be a claim: someone looked, and found nothing.
+
+34
+00:02:06,800 --> 00:02:09,440
+Below the block, a red says what changed.
+
+35
+00:02:09,760 --> 00:02:15,580
+Two divergences: the checkout event's total and checkout's return value, each one cent higher in the
+
+36
+00:02:15,580 --> 00:02:15,900
+candidate.
+
+37
+00:02:16,280 --> 00:02:19,180
+The port truncates a discount the old code rounded.
+
+38
+00:02:19,930 --> 00:02:25,090
+To reproduce it, the failing order: two adds, two promos, then checkout.
+
+39
+00:02:25,630 --> 00:02:30,310
+And the counterexample: the seam values that case read, a quantity of one,
+
+40
+00:02:30,530 --> 00:02:30,870
+twice.
+
+41
+00:02:31,620 --> 00:02:36,100
+A red keeps every failing case and reports the most informative one.
+
+42
+00:02:36,620 --> 00:02:42,920
+On a live campaign check, it also shrinks the order, dropping operations while the divergence holds.
+
+43
+00:02:43,320 --> 00:02:45,640
+A replay reports the order it recorded.
+
+44
+00:02:47,667 --> 00:02:51,607
+Cannot verify is the oracle declining to claim more than it saw.
+
+45
+00:02:51,907 --> 00:02:57,307
+Here's that mistake today, and the report names it: the declared domain matched nothing.
+
+46
+00:02:58,057 --> 00:03:00,357
+Four gaps take a green away.
+
+47
+00:03:00,757 --> 00:03:05,497
+A replay that fell back to a live read, for an input the recording never answered.
+
+48
+00:03:05,917 --> 00:03:07,797
+A declared seam nothing read.
+
+49
+00:03:07,797 --> 00:03:13,977
+An effect the source audit finds escaping capture, like a post to the global notification center.
+
+50
+00:03:14,777 --> 00:03:16,537
+And source the audit couldn't read at all.
+
+51
+00:03:17,275 --> 00:03:21,275
+A boundary the run just never reached only lowers the percentage.
+
+52
+00:03:21,655 --> 00:03:24,335
+Each gap is named, so you know where to look.
+
+53
+00:03:26,367 --> 00:03:29,807
+Unstable means the same inputs gave different answers.
+
+54
+00:03:30,087 --> 00:03:34,627
+A plan replays three times by default, and every pass must agree,
+
+55
+00:03:34,867 --> 00:03:36,907
+down to each divergence's values.
+
+56
+00:03:37,657 --> 00:03:41,937
+Here, runs one and three diverged, and run two matched.
+
+57
+00:03:42,337 --> 00:03:46,137
+Without repetition, the gate would show whichever color it landed on.
+
+58
+00:03:46,697 --> 00:03:51,257
+Instead, the report shows the delta between runs, and names the field that moved:
+
+59
+00:03:51,497 --> 00:03:53,557
+a value the subject makes up for itself.
+
+60
+00:03:54,307 --> 00:03:59,187
+On a red, a live campaign check reruns the baseline against itself instead.
+
+61
+00:03:59,627 --> 00:04:03,267
+A fresh identifier or a clock reading usually turns up here.
+
+62
+00:04:03,667 --> 00:04:06,187
+The seams video shows how to inject one.
+
+63
+00:04:08,200 --> 00:04:10,020
+Some differences aren't behavior.
+
+64
+00:04:10,440 --> 00:04:16,160
+A spec declares them once, in its comparison: numeric jitter, a timing budget,
+
+65
+00:04:16,600 --> 00:04:22,960
+two independent notifications in either order, a noisy channel to ignore, or comparison per concurrency domain.
+
+66
+00:04:23,710 --> 00:04:25,590
+It applies at diff time.
+
+67
+00:04:25,930 --> 00:04:30,750
+The recorded traces stay complete; the comparison only changes how they're read.
+
+68
+00:04:31,090 --> 00:04:34,130
+And it can't excuse a value the subject makes up.
+
+69
+00:04:34,490 --> 00:04:36,170
+That's an uncontrolled seam.
+
+70
+00:04:36,920 --> 00:04:39,460
+Concurrency changes go the other way.
+
+71
+00:04:39,820 --> 00:04:45,720
+Work that moved to another domain, an ordering guarantee relaxed, or a synchronization the port dropped:
+
+72
+00:04:46,180 --> 00:04:49,540
+each gates by default, until you say you meant it.
+
+73
+00:04:51,533 --> 00:04:53,393
+Which is what intent is for.
+
+74
+00:04:53,733 --> 00:04:58,833
+A branch doubles loyalty points, and the check goes red: sixty-three points before,
+
+75
+00:04:58,833 --> 00:05:00,413
+a hundred and twenty-six after.
+
+76
+00:05:00,773 --> 00:05:05,193
+The report ends with the command that declares it, as narrow as the failing cases allow:
+
+77
+00:05:05,553 --> 00:05:08,193
+the points field, increasing, only in checkout.
+
+78
+00:05:08,943 --> 00:05:13,523
+Run it, and the line lands in your branch's intent file, in the block a pull
+
+79
+00:05:13,523 --> 00:05:14,763
+request description carries.
+
+80
+00:05:15,183 --> 00:05:18,783
+The next check absorbs that change, and gates on whatever is left.
+
+81
+00:05:19,103 --> 00:05:21,483
+Green, and it still shows what it absorbed.
+
+82
+00:05:21,823 --> 00:05:24,653
+A declaration nothing matched fails with code six.
+
+83
+00:05:25,403 --> 00:05:28,583
+That August green would read cannot verify today.
+
+84
+00:05:28,963 --> 00:05:32,843
+A verdict proves what its block says it saw, and nothing more.
