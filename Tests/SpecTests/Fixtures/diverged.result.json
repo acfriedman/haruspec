@@ -19,6 +19,8 @@
     "orderingsAvailable" : 7,
     "orderingsExplored" : 7,
     "outOfOrderExplored" : 0,
+    "settledOrderingsExplored" : 7,
+    "settleSchedulesPerOrdering" : 1,
     "variantsPerOrdering" : 55
   },
   "failingCases" : {
@@ -1994,7 +1996,7 @@
     },
     "verdict" : "diverged"
   },
-  "schemaVersion" : 8,
+  "schemaVersion" : 9,
   "stability" : {
     "outcomes" : [
       {

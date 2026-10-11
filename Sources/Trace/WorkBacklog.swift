@@ -30,12 +30,29 @@ public enum ScheduleDiscipline: Sendable, Equatable {
     }
 }
 
+/// How far a capture lets held work run in a gap between two operations: a *settle point*.
+///
+/// A capture with no settle points runs every operation first and the held work only after the
+/// last one, which is the most impatient user there is: no operation ever meets an earlier one's
+/// work landed, and the clock never moves between them. A settle point lets the work land. Held,
+/// running nothing, is the absence of one, which is why it has no case here.
+public enum Settle: String, Sendable, CaseIterable, Codable {
+    /// Runs the work that is ready now, and the work that work hands on, but leaves the clock where
+    /// it is: the queues caught up while the user kept going. A timer still waiting stays held.
+    case ready
+    /// Runs everything, timers included, advancing virtual time until the backlog is empty: the
+    /// user paused.
+    case elapsed
+}
+
 /// The work a capture's scheduling doubles were handed, held until the engine runs it.
 ///
 /// A stamped scheduling protocol (`@Haruspec(schedules: .serial)`) is the project's own thread seam:
 /// production conforms a real queue to it, and under test its double hands every enqueue here
 /// instead of to a thread. Nothing runs until the engine drains the backlog, and then it runs one
-/// item at a time, in enqueue order, on the draining task. That is one legal schedule of the
+/// item at a time, in enqueue order, on the draining task. The engine drains at the capture's
+/// settle points (a gap between two operations its settle schedule lets work land in, see
+/// ``Settle``) and after the last operation. Each settle schedule is one legal schedule of the
 /// program, and the same one every run, so seamed work is stable by construction.
 ///
 /// Holding the work at the enqueue is what makes the three facts a trace needs exact:
@@ -200,23 +217,40 @@ public final class WorkBacklog: @unchecked Sendable {
     ///   release (a group that never empties) or the drain hit ``stepLimit``.
     @discardableResult
     public func drain(recorder: TraceRecorder?) async -> Bool {
+        await settle(.elapsed, recorder: recorder)
+    }
+
+    /// Runs held work as far as a settle point lets it: everything for ``Settle/elapsed``, only what
+    /// is ready without moving the clock for ``Settle/ready``.
+    ///
+    /// - Parameters:
+    ///   - settle: How far the work may run.
+    ///   - recorder: The capture's recorder, bound around each item.
+    /// - Returns: `true` when the backlog settled as far as asked: empty for ``Settle/elapsed``,
+    ///   nothing ready for ``Settle/ready``; `false` when an elapsed settle leaves work nothing will
+    ///   release, or either hits ``stepLimit``.
+    @discardableResult
+    public func settle(_ settle: Settle, recorder: TraceRecorder?) async -> Bool {
+        let advancing = settle == .elapsed
         var steps = 0
-        while await step(recorder: recorder) {
+        while await step(recorder: recorder, advancingClock: advancing) {
             steps += 1
             if steps >= Self.stepLimit {
                 return false
             }
         }
-        return pendingCount == 0
+        return advancing ? pendingCount == 0 : true
     }
 
-    /// Runs the next item: the earliest ready one, or, when none is ready, the delayed one with the
-    /// earliest deadline, advancing virtual time to it.
+    /// Runs the next item: the earliest ready one, or, when none is ready and `advancingClock`
+    /// allows, the delayed one with the earliest deadline, advancing virtual time to it.
     ///
-    /// - Parameter recorder: The capture's recorder, bound around the item.
+    /// - Parameters:
+    ///   - recorder: The capture's recorder, bound around the item.
+    ///   - advancingClock: Whether virtual time may jump to a deadline when nothing is ready.
     /// - Returns: `false` when nothing could run.
-    public func step(recorder: TraceRecorder?) async -> Bool {
-        guard let item = takeNext() else { return false }
+    public func step(recorder: TraceRecorder?, advancingClock: Bool = true) async -> Bool {
+        guard let item = takeNext(advancingClock: advancingClock) else { return false }
         switch item.body {
         case let .sync(body):
             let job = Job { self.invoke(body, of: item, recorder: recorder) }
@@ -296,11 +330,14 @@ public final class WorkBacklog: @unchecked Sendable {
         }
     }
 
-    private func takeNext() -> Item? {
+    private func takeNext(advancingClock: Bool) -> Item? {
         lock.lock(); defer { lock.unlock() }
         releaseEmptiedGroups()
         if let index = items.firstIndex(where: { $0.isReady(at: virtualNow) }) {
             return items.remove(at: index)
+        }
+        guard advancingClock else {
+            return nil
         }
         // Nothing ready: jump the clock to the earliest deadline. Ties keep enqueue order.
         let delayed = items.indices.filter { items[$0].deadline != nil }

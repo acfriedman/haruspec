@@ -60,23 +60,21 @@ extension Spec {
         // Sweep-wide intent facts (disclosure + unobserved intersection) — see `IntentSweep`.
         var sweep = IntentSweep(intent: intent)
         var reds = RedCases<DivergedRun>()
-        for (index, order) in plan.orderings.enumerated() {
-            for cassette in plan.cassettes(forOrdering: index) {
-                let run = await compare(
-                    make: baseline,
-                    candidate: candidate,
-                    order: order,
-                    cassette: cassette,
-                    declaring: intent
-                )
-                sweep.observe(run, ordering: order.map(\.label), inputs: cassette)
-                reds.observe(
-                    DivergedRun(diff: run.diff, candidateReplay: run.candidateReplay, order: order, cassette: cassette),
-                    ordering: order.map(\.label),
-                    inputs: cassette,
-                    diff: run.diff
-                )
-            }
+        for (order, cassette) in plan.runs() {
+            let run = await compare(
+                make: baseline,
+                candidate: candidate,
+                order: order,
+                cassette: cassette,
+                declaring: intent
+            )
+            sweep.observe(run, ordering: order.map(\.label), inputs: cassette)
+            reds.observe(
+                DivergedRun(diff: run.diff, candidateReplay: run.candidateReplay, order: order, cassette: cassette),
+                ordering: order.map(\.label),
+                inputs: cassette,
+                diff: run.diff
+            )
         }
         if let reported = reds.reported {
             return await divergedLiveVerdict(
@@ -153,7 +151,10 @@ extension Spec {
             )
         }
         let coverage = plannedCoverage(replay: run.candidateReplay, domainHeld: false, plan: surface.plan)
-        let failing = exploreOrdering ? shrunk.map(\.label) : nil
+        // A settle schedule is part of what failed, so a red names its order whenever either the
+        // ordering or the schedule was explored.
+        let explored = exploreOrdering || surface.plan.settleSchedulesPerOrdering > 1
+        let failing = explored ? shrunk.map(\.label) : nil
         return SpecVerdict(
             result: VerificationResult(diff: diff, coverage: coverage),
             orderingsExplored: surface.plan.orderings.count,
@@ -182,9 +183,10 @@ extension Spec {
     /// - Returns: The baseline, its golden cassette, the exploration plan, and the qualification.
     private func goldenSurface(baseline: @escaping (SeamContext) -> S) async -> GoldenSurface<S> {
         let recording = Cassette(recordingPreferring: goldenReadings)
-        let goldenTrace = await capture(make: baseline, order: explorationOrder(), cassette: recording)
+        let goldenCapture = await captured(make: baseline, order: explorationOrder(), cassette: recording)
+        let goldenTrace = goldenCapture.trace
         let golden = recording.snapshot()
-        let plan = explorationPlan(golden: golden)
+        let plan = explorationPlan(golden: golden, heldWorkAtGaps: goldenCapture.heldWorkAtGaps)
         let qualification = liveQualification(
             goldenTrace: goldenTrace,
             golden: golden,
@@ -206,57 +208,6 @@ extension Spec {
         return operations.flatMap { operation in
             Array(repeating: operation, count: operation.occurrences(default: orderingRepeats).upperBound)
         }
-    }
-
-    /// Drives one (system, ordering, cassette) and returns its behavior trace — the recorder, interceptor,
-    /// and ambient context the developer never touches. (Internal: `record`/`verify(replaying:)` drive
-    /// the same primitive across a build boundary.)
-    func capture(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) async -> Trace {
-        let recorder = TraceRecorder(name: name, clock: ManualClock())
-        // The SUT posts through a center that records, so a notification takes the same path and the
-        // same recorder lookup as every other kind of event. There is no second mechanism.
-        let center = RecordingNotificationCenter()
-        let context = SeamContext(
-            notifications: center,
-            cassette: cassette,
-            makers: valueMakers,
-            resourceMakers: specResourceMakers
-        )
-        // Every build records through the spec's capture boundary, however it was constructed — the
-        // one choke point for baseline, candidate, record and replay alike.
-        let wrap = wrapCandidate ?? StampedForwarderRegistry.wrap(S.self)
-        let system = wrap(make(context))
-        let sampler = StateSampler(system: system, properties: observedProperties, recorder: recorder)
-        context.backlog.settled = { await sampler.sample() }
-        // Task-locals are inherited across `await`, so binding once around the whole loop still
-        // reaches an operation that suspends — which is what lets an op drive an actor. The op
-        // identity is bound per operation, so every event — and every block or task the op spawns,
-        // which the seams carry it into — is attributed to the declared op that caused it.
-        await sampler.sample()
-        await TraceContext.$current.withValue(recorder) {
-            await WorkBacklog.$current.withValue(context.backlog) {
-                for (position, operation) in order.enumerated() {
-                    await TraceContext.$currentOp.withValue(OpIdentity(label: operation.label, position: position)) {
-                        await operation.action(system, context)
-                        await sampler.sample()
-                    }
-                }
-            }
-        }
-        // Drain *after* the window, not inside it. Held work carries the op and cause it was enqueued
-        // under, and runs with the recorder rebound — but it has to have run, or the snapshot is a
-        // reading of a program that has not finished. Delayed work fires on virtual time once nothing
-        // else is ready, so a debounce's deferred tail lands inside the capture too.
-        if await context.backlog.drain(recorder: recorder) == false {
-            recorder.marker("⟨haruspec: scheduled work still held at snapshot⟩")
-        }
-        // The end-state snapshots: after quiescence (a racing read is not a reading), the harness
-        // itself reads each observed property back. Harness-read on both sides by construction — the
-        // state contract, which gates.
-        for property in observedProperties {
-            await recorder.snapshot(property.label, value: RuntimeValue.canonical(property.read(system)))
-        }
-        return recorder.trace()
     }
 
     /// One differential run. The diff is already intent-classified: with a declared intent the loop
@@ -363,6 +314,10 @@ extension Spec {
     /// Delta-debugs the failing call sequence: drops ops that aren't needed to reproduce → the minimal
     /// order that still diverges (the "localize" the north star asks for, applied to sequencing).
     ///
+    /// Settle steps shrink the same way: dropping one turns its gap back to held, so the red keeps
+    /// only the settle points it needs. A dropped op can strand a step at either end or leave two
+    /// side by side, which `normalizedSettles` folds back into one per gap.
+    ///
     /// - Parameters:
     ///   - baseline: Builds a fresh baseline per capture.
     ///   - candidate: Builds a fresh candidate per capture.
@@ -382,7 +337,8 @@ extension Spec {
         while index < minimal.count {
             var trial = minimal
             trial.remove(at: index)
-            if !trial.isEmpty, await diverges(
+            trial = normalizedSettles(trial)
+            if trial.contains(where: { $0.settle == nil }), await diverges(
                 baseline: baseline,
                 candidate: candidate,
                 order: trial,

@@ -1,6 +1,7 @@
 import Foundation
 import HaruspecCore
 import HaruspecSeams
+import HaruspecTrace
 
 // A recorded plan, read through the build that is replaying it. The plan pins what *was* explored;
 // what that means today — which probes can still replay, what the ordering denominator is, what the
@@ -12,8 +13,11 @@ extension Spec {
     /// exploration/qualification the verdict will carry either way — resolved once per pass, shared
     /// by both exits so a divergence and a hold describe the same surface.
     func replaySurface(of plan: SpecPlan) -> ReplaySurface<S> {
-        let opsByLabel = Dictionary(uniqueKeysWithValues: operations.map { ($0.label, $0) })
-        let planOps = orderedUnion(plan.probes.map(\.ordering))
+        // Settle steps are the engine's, so every build can replay them; they are not ops, so they
+        // stay out of the op surface coverage reports.
+        let settleSteps = Settle.allCases.map { (stepLabel: $0.stepLabel, step: Op<S>.settling($0)) }
+        let opsByLabel = Dictionary(uniqueKeysWithValues: operations.map { ($0.label, $0) } + settleSteps)
+        let planOps = orderedUnion(plan.probes.map { operationLabels($0.ordering) })
         let replayable = plan.probes.filter { $0.ordering.allSatisfy { opsByLabel[$0] != nil } }
         return ReplaySurface(
             opsByLabel: opsByLabel,
@@ -32,11 +36,13 @@ extension Spec {
     /// out-of-order — comes from this build's constraints, so a replay reports the same fraction a live
     /// verify would, and a spec that softened an `.after` since recording says so.
     private func exploration(recordedIn plan: SpecPlan) -> Exploration {
-        let orderings = Set(plan.probes.map(\.ordering))
+        let settledOrderings = Set(plan.probes.map(\.ordering))
+        let orderings = Set(settledOrderings.map(operationLabels))
+        let schedulesPerOrdering = Dictionary(grouping: settledOrderings, by: operationLabels).values.map(\.count)
         let available = exploreOrdering
             ? countLinearExtensions(operations, repeating: orderingRepeats, limit: SpecDefaults.orderingCountLimit)
             : (count: 1, exact: true)
-        let variants = Swift.max(1, plan.probes.count / Swift.max(1, orderings.count))
+        let variants = Swift.max(1, plan.probes.count / Swift.max(1, settledOrderings.count))
         // The boundary schedule is deterministic from (declared domains × the golden template), and
         // the plan's first probe *is* the golden — so the count is recomputed here rather than stored,
         // the same way the ordering denominator is: read through the current build's declarations.
@@ -57,7 +63,9 @@ extension Spec {
             // `variants` is derived from probe counts (deduped at record), so these can undercount by
             // one near the boundary — never overcount, which is the honest direction for a coverage claim.
             boundaryEdgesCovered: generator?.boundaryEdgesCovered(within: variants) ?? 0,
-            combinedVariantsCovered: generator?.combinedVariantsCovered(within: variants) ?? 0
+            combinedVariantsCovered: generator?.combinedVariantsCovered(within: variants) ?? 0,
+            settleSchedulesPerOrdering: schedulesPerOrdering.max() ?? 1,
+            settledOrderingsExplored: settledOrderings.count
         )
     }
 

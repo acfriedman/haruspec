@@ -202,6 +202,30 @@ final class WorkBacklogTests: XCTestCase {
         XCTAssertEqual(delays, [.int(300), .int(500)], "each fire records the delay it was handed")
     }
 
+    /// A ready settle point runs what is ready, and what that hands on, but never moves the clock: a
+    /// delayed item stays held until an elapsed one.
+    func testAReadySettleRunsReadyWorkAndLeavesTheClock() async {
+        let recorder = TraceRecorder(name: "settle")
+        let backlog = WorkBacklog()
+        let queue = Queue()
+
+        TraceContext.$current.withValue(recorder) {
+            backlog.enqueue(on: queue, label: "Q", discipline: .main, after: 0.3) { Haruspec.marker("late") }
+            backlog.enqueue(on: queue, label: "Q", discipline: .main) {
+                Haruspec.marker("now")
+                backlog.enqueue(on: queue, label: "Q", discipline: .main) { Haruspec.marker("handed on") }
+            }
+        }
+        let settled = await backlog.settle(.ready, recorder: recorder)
+
+        XCTAssertTrue(settled)
+        XCTAssertEqual(labels(recorder), ["now", "handed on"])
+        XCTAssertEqual(backlog.pendingCount, 1, "the timer is still waiting")
+
+        await backlog.settle(.elapsed, recorder: recorder)
+        XCTAssertEqual(labels(recorder), ["now", "handed on", "timer", "late"])
+    }
+
     /// A debounce, as Combine builds one: each input re-arms a timer, and only the timer armed by the
     /// last input finds no newer one when it fires. The quiet period arrives at the settled point.
     func testADebounceFiresOnceForTheLastInput() async {

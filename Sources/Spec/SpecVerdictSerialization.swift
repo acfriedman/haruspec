@@ -44,8 +44,10 @@ public extension SpecVerdict {
     /// Version 7 stamps every divergence with the declared op it was recorded under (`op`), which
     /// an op-scoped declaration matches and a report names. Version 8 records on a collateral
     /// divergence which declarations rejected it (`rejectedBy`), so the report names the author's
-    /// own tripwire instead of offering a wider line.
-    static let supportedSchemaVersion = 8
+    /// own tripwire instead of offering a wider line. Version 9 added the exploration's settle
+    /// schedules (`settleSchedulesPerOrdering`, `settledOrderingsExplored`), which an earlier artifact
+    /// never ran and would otherwise read as having run one each.
+    static let supportedSchemaVersion = 9
 
     static func canonicalEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()

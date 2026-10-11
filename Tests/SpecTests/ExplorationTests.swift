@@ -174,7 +174,7 @@ final class ExplorationTests: XCTestCase {
         let spec = wideSpec(orderingMax: 4)
         let recording = Cassette()
         _ = await spec.capture(make: makeGood, order: spec.explorationOrder(), cassette: recording)
-        let plan = spec.explorationPlan(golden: recording.snapshot())
+        let plan = spec.explorationPlan(golden: recording.snapshot(), heldWorkAtGaps: false)
 
         XCTAssertGreaterThan(plan.orderings.count, 1)
         XCTAssertNotEqual(
@@ -188,7 +188,7 @@ final class ExplorationTests: XCTestCase {
         let spec = wideSpec(orderingMax: 4)
         let recording = Cassette()
         _ = await spec.capture(make: makeGood, order: spec.explorationOrder(), cassette: recording)
-        let plan = spec.explorationPlan(golden: recording.snapshot())
+        let plan = spec.explorationPlan(golden: recording.snapshot(), heldWorkAtGaps: false)
 
         XCTAssertEqual(plan.cassettes(forOrdering: 2), plan.cassettes(forOrdering: 2))
     }

@@ -145,6 +145,9 @@ public struct Op<S> {
     var generatedArgumentFields: [(seam: String, domain: SeamDomain)] = []
     /// Factories a `.generated(_:)` argument carries, registered so the read can build the model.
     var argumentMakers: [(type: ObjectIdentifier, make: (SeamContext, String) -> Any)] = []
+    /// Set on the engine's own settle steps, which a settle schedule interleaves between the
+    /// declared ops: the capture lets held work land here instead of running an action.
+    var settle: Settle?
 
     /// A simple op.
     public init(_ label: String, _ action: @escaping (S) async -> Void) {
@@ -418,6 +421,11 @@ public struct Spec<S> {
         var copy = self
         copy.operations = ops
         for operation in copy.operations {
+            precondition(
+                Settle(stepLabel: operation.label) == nil,
+                "op \"\(operation.label)\" takes a label the engine reserves for its settle steps "
+                    + "(\(Settle.allCases.map(\.stepLabel).joined(separator: ", "))) — rename the op"
+            )
             for argument in operation.argumentDomains {
                 precondition(
                     copy.seamDomains[argument.seam] == nil,

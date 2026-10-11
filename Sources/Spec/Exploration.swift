@@ -40,6 +40,12 @@ public struct Exploration: Codable, Sendable, Equatable {
     /// no probe ever paired two seams' values, which is the honest thing to say about a sweep that
     /// spent its whole budget one factor at a time.
     public let combinedVariantsCovered: Int
+    /// The settle schedules the budget bought each ordering (see `SettlePoints.swift`): 1 when the
+    /// subject never held work across a gap, so settle points had nothing to land.
+    public let settleSchedulesPerOrdering: Int
+    /// Orderings run once per settle schedule: `orderingsExplored` when settle points are off, fewer
+    /// than `orderingsExplored × settleSchedulesPerOrdering` when short orderings ran out of gaps.
+    public let settledOrderingsExplored: Int
 
     public init(
         orderingsExplored: Int,
@@ -49,7 +55,9 @@ public struct Exploration: Codable, Sendable, Equatable {
         outOfOrderExplored: Int,
         boundaryEdgesScheduled: Int,
         boundaryEdgesCovered: Int,
-        combinedVariantsCovered: Int
+        combinedVariantsCovered: Int,
+        settleSchedulesPerOrdering: Int = 1,
+        settledOrderingsExplored: Int? = nil
     ) {
         self.orderingsExplored = orderingsExplored
         self.orderingsAvailable = orderingsAvailable
@@ -59,11 +67,13 @@ public struct Exploration: Codable, Sendable, Equatable {
         self.boundaryEdgesScheduled = boundaryEdgesScheduled
         self.boundaryEdgesCovered = boundaryEdgesCovered
         self.combinedVariantsCovered = combinedVariantsCovered
+        self.settleSchedulesPerOrdering = settleSchedulesPerOrdering
+        self.settledOrderingsExplored = settledOrderingsExplored ?? orderingsExplored
     }
 
     /// Differential runs spent: each drives the baseline and the candidate once.
     public var runs: Int {
-        orderingsExplored * variantsPerOrdering
+        settledOrderingsExplored * variantsPerOrdering
     }
 
     /// The share of valid orderings explored, or `nil` when the available count is a lower bound with
@@ -82,7 +92,7 @@ public struct Exploration: Codable, Sendable, Equatable {
     }
 
     /// One line for the verdict:
-    /// `3200 runs · 50 of 2520 orderings (2%) × 64 seam variants · 12 out-of-order`.
+    /// `3200 runs · 50 of 2520 orderings (2%) × 4 settle schedules × 16 seam variants · 12 out-of-order`.
     public var summary: String {
         var text = "\(runs) run\(runs == 1 ? "" : "s") · "
         if isExhaustive {
@@ -93,6 +103,11 @@ public struct Exploration: Codable, Sendable, Equatable {
             if let fraction = orderingFraction {
                 text += " (\(Self.percent(fraction)))"
             }
+        }
+        if settleSchedulesPerOrdering > 1 {
+            // Short orderings have fewer gaps, so fewer schedules than the budget offered them.
+            let every = settledOrderingsExplored >= orderingsExplored * settleSchedulesPerOrdering
+            text += " × \(every ? "" : "up to ")\(settleSchedulesPerOrdering) settle schedules"
         }
         if variantsPerOrdering > 1 {
             text += " × \(variantsPerOrdering) seam variants"
@@ -155,6 +170,10 @@ enum SpecDefaults {
     /// reaches the states a fixed count never does (a checkout on an empty cart) — the same reasoning
     /// as `.repeating(0 ... n)`, applied as the default rather than the exception.
     static let derivedRepetition: ClosedRange<Int> = 0 ... 3
+    /// Settle schedules per ordering when no `Budget(runs:)` is declared and the subject holds work
+    /// across a gap: both corners and the first two single flips
+    /// (``SettleSchedules/sample(gaps:max:seed:)``).
+    static let settleSchedules = 4
 }
 
 // MARK: - The resolved plan
@@ -164,7 +183,10 @@ enum SpecDefaults {
 /// the live differential and the recorded plan explore the same surface by construction rather than
 /// by two copies of the same loop.
 struct ExplorationPlan<S> {
+    /// The declared operations of each ordering, without settle steps: the ordering axis.
     let orderings: [[Op<S>]]
+    /// The most settle schedules any one ordering runs under; 1 when settle points are off.
+    let settleSchedulesPerOrdering: Int
     let variantsPerOrdering: Int
     let exploration: Exploration
     private let golden: CassetteData
@@ -175,6 +197,7 @@ struct ExplorationPlan<S> {
 
     init(
         orderings: [[Op<S>]],
+        settleSchedulesPerOrdering: Int,
         variantsPerOrdering: Int,
         exploration: Exploration,
         golden: CassetteData,
@@ -182,11 +205,40 @@ struct ExplorationPlan<S> {
         seed: UInt64
     ) {
         self.orderings = orderings
+        self.settleSchedulesPerOrdering = settleSchedulesPerOrdering
         self.variantsPerOrdering = variantsPerOrdering
         self.exploration = exploration
         self.golden = golden
         self.domains = domains
         self.seed = seed
+    }
+
+    /// Every run the plan makes, in sweep order: each ordering under each of its settle schedules,
+    /// against each of the ordering's cassettes.
+    ///
+    /// - Returns: One entry per differential run; the schedules of one ordering share its cassettes,
+    ///   so a schedule is all that differs between those runs.
+    func runs() -> [(order: [Op<S>], cassette: CassetteData)] {
+        orderings.indices.flatMap { index in
+            let cassettes = cassettes(forOrdering: index)
+            return settledOrders(forOrdering: index).flatMap { order in
+                cassettes.map { (order: order, cassette: $0) }
+            }
+        }
+    }
+
+    /// Ordering `index` under each settle schedule it runs, the all-held one first.
+    ///
+    /// - Parameter index: The ordering's place in ``orderings``.
+    /// - Returns: The orderings a capture drives, settle steps interleaved.
+    func settledOrders(forOrdering index: Int) -> [[Op<S>]] {
+        let order = orderings[index]
+        return SettleSchedules.sample(
+            gaps: Swift.max(0, order.count - 1),
+            max: settleSchedulesPerOrdering,
+            seed: seed &+ UInt64(index)
+        )
+        .map { interleaving($0, into: order) }
     }
 
     /// The seam cassettes to drive ordering `index` with — an *independent* sample per ordering, which
@@ -211,7 +263,13 @@ struct ExplorationPlan<S> {
 extension Spec {
     /// Resolves what this spec declared into the work a run will actually do — plus the packaged
     /// sweeps the golden's reach earned (`resourceSweeps`), which join the declared surface here.
-    func explorationPlan(golden: CassetteData) -> ExplorationPlan<S> {
+    ///
+    /// - Parameters:
+    ///   - golden: The golden template's seam readings.
+    ///   - heldWorkAtGaps: Whether the golden capture held work across a gap. Only then do settle
+    ///     schedules buy anything, so only then do they take a share of the budget.
+    /// - Returns: The plan both sides of a run explore.
+    func explorationPlan(golden: CassetteData, heldWorkAtGaps: Bool) -> ExplorationPlan<S> {
         let seamDomains = seamDomains.merging(resourceSweeps(reaching: golden.tracks.keys)) { declared, _ in declared }
         // Against what the golden actually recorded, not what was declared: a domain whose key nothing
         // reads moves nothing, and buying it a seam axis spends the budget generating identical
@@ -225,12 +283,16 @@ extension Spec {
         // partial order admits 2 orderings would otherwise spend a 200-run budget on 22 runs.
         let split = ExplorationBudget.split(
             orderingCap: exploreOrdering ? Swift.min(maxOrderings, available.count) : 1,
+            scheduleCap: heldWorkAtGaps ? SpecDefaults.settleSchedules : 1,
             variants: hasSeams ? SpecDefaults.variantCount : 1,
             budget: explorationBudget
         )
         let orderings = exploreOrdering
             ? linearExtensions(operations, max: split.orderings, repeating: orderingRepeats)
             : [operations]
+        let settledOrderings = orderings.reduce(0) { total, order in
+            total + Swift.min(split.schedules, SettleSchedules.spaceSize(gaps: Swift.max(0, order.count - 1)))
+        }
 
         // The schedule is deterministic from (domains × golden tracks), so its shape is knowable
         // here without running generation — and recomputable at replay from the plan's golden probe.
@@ -240,6 +302,7 @@ extension Spec {
 
         return ExplorationPlan(
             orderings: orderings,
+            settleSchedulesPerOrdering: split.schedules,
             variantsPerOrdering: split.variants,
             exploration: Exploration(
                 orderingsExplored: orderings.count,
@@ -249,7 +312,9 @@ extension Spec {
                 outOfOrderExplored: outOfOrderCount(among: orderings.map { $0.map(\.label) }),
                 boundaryEdgesScheduled: generator?.scheduledBoundaryEdges ?? 0,
                 boundaryEdgesCovered: generator?.boundaryEdgesCovered(within: split.variants) ?? 0,
-                combinedVariantsCovered: generator?.combinedVariantsCovered(within: split.variants) ?? 0
+                combinedVariantsCovered: generator?.combinedVariantsCovered(within: split.variants) ?? 0,
+                settleSchedulesPerOrdering: split.schedules,
+                settledOrderingsExplored: settledOrderings
             ),
             golden: golden,
             domains: seamDomains,
@@ -293,8 +358,53 @@ extension Spec {
     }
 }
 
-/// Splitting a declared run budget across the two axes.
+/// Splitting a declared run budget across the axes.
 enum ExplorationBudget {
+    /// Splits the budget three ways when the subject holds work across a gap, and two ways otherwise.
+    ///
+    /// - Parameters:
+    ///   - orderingCap: The most orderings the declaration admits.
+    ///   - scheduleCap: The settle schedules each ordering would get unbounded; 1 when settle
+    ///     points are off.
+    ///   - variants: The seam variants each run would get unbounded; 1 with no seam axis.
+    ///   - budget: The declared `Budget(runs:)`, if any.
+    /// - Returns: Orderings, settle schedules per ordering, and seam variants per settled ordering.
+    ///
+    /// Every ordering runs under the same settle schedules, so the schedule axis is split as part
+    /// of the ordering one (orderings × schedules, against seam variants), then taken back out at
+    /// the ordering axis's aspect ratio. It never drops below the two corners while the budget
+    /// buys two runs: the all-held corner is the capture as it ran before settle points, and the
+    /// all-elapsed corner is the one a second schedule exists for.
+    static func split(orderingCap: Int, scheduleCap: Int, variants: Int, budget: Int?) -> Split {
+        let schedules = Swift.max(1, scheduleCap)
+        let orderings = Swift.max(1, orderingCap)
+        guard schedules > 1 else {
+            let twoWay = Self.split(orderingCap: orderings, variants: variants, budget: budget)
+            return Split(orderings: twoWay.orderings, schedules: 1, variants: twoWay.variants)
+        }
+        let combined = Self.split(orderingCap: orderings * schedules, variants: variants, budget: budget)
+        let pairs = combined.orderings
+        guard pairs < orderings * schedules else {
+            return Split(orderings: orderings, schedules: schedules, variants: combined.variants)
+        }
+        let scale = (Double(pairs) / Double(orderings * schedules)).squareRoot()
+        let corners = Swift.min(2, pairs)
+        let perOrdering = Swift.min(schedules, Swift.max(corners, Int((Double(schedules) * scale).rounded())))
+        let orderingCount = Swift.min(orderings, Swift.max(1, pairs / perOrdering))
+        let variantCount = variants > 1 ? Swift.max(1, (budget ?? pairs) / (orderingCount * perOrdering)) : 1
+        return Split(orderings: orderingCount, schedules: perOrdering, variants: variantCount)
+    }
+
+    /// What one run's budget buys on each axis.
+    struct Split: Equatable {
+        /// Orderings explored.
+        let orderings: Int
+        /// Settle schedules each ordering runs under.
+        let schedules: Int
+        /// Seam variants each settled ordering runs against.
+        let variants: Int
+    }
+
     /// Shrinks both axes by the same factor rather than draining one to fill the other: the two find
     /// different bugs (ordering reaches code a second seam value cannot; a seam value is what caught
     /// the dogfood's one-cent divergence), so a budget that zeroes either axis is not a smaller sweep,

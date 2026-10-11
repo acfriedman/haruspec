@@ -130,7 +130,7 @@ final class TypedArgumentTests: XCTestCase {
         let spec = addSpec("typed.sweep").vary { Ordering(max: 4, repeating: 2) }
         let recording = Cassette()
         _ = await spec.capture(make: makeGood, order: spec.explorationOrder(), cassette: recording)
-        let plan = spec.explorationPlan(golden: recording.snapshot())
+        let plan = spec.explorationPlan(golden: recording.snapshot(), heldWorkAtGaps: false)
 
         let quantities = Set(plan.cassettes(forOrdering: 0).flatMap { cassette in
             (cassette.tracks["add.1"] ?? []).compactMap {

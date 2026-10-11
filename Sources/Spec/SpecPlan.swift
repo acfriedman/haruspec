@@ -20,6 +20,8 @@ import HaruspecTrace
 public struct SpecProbe: Codable, Sendable, Equatable {
     /// Op labels in execution order — the replay contract. Labels are the cross-build identity of an
     /// operation (the analog of a stamp's stable labels), so renaming an op orphans recorded input.
+    /// The probe's settle schedule rides here too, as the engine's reserved settle steps
+    /// (`settle:elapsed`) between the ops whose gap they settle.
     public var ordering: [String]
     /// The seam values replayed into this run.
     public var cassette: CassetteData
@@ -60,7 +62,10 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// never hold against it and every such intent would read as unobserved. Bumped to 10 when a
     /// stamped double's answers became per argument tuple: a probe's cassette now carries the
     /// baseline's bindings, and a version-9 probe without them would answer a candidate by position.
-    public static let supportedSchemaVersion = 10
+    /// Bumped to 11 when settle points landed: a probe's ordering may carry settle steps, and a
+    /// version-10 plan recorded every gap held, so it replays only the schedule settle points exist
+    /// to widen.
+    public static let supportedSchemaVersion = 11
 
     public var schemaVersion: Int
     public var specName: String
@@ -185,20 +190,19 @@ extension Spec {
     /// - Returns: The plan, named for the spec.
     func record(baseline: (SeamContext) -> S) async -> SpecPlan {
         let recording = Cassette(recordingPreferring: goldenReadings)
-        _ = await capture(make: baseline, order: explorationOrder(), cassette: recording)
+        let goldenCapture = await captured(make: baseline, order: explorationOrder(), cassette: recording)
         let golden = recording.snapshot()
 
         // The same resolved surface `verify(candidate:)` explores — one budget, spent identically on
         // both sides of the build boundary, so the plan's size is the dial the author declared.
-        let plan = explorationPlan(golden: golden)
+        let plan = explorationPlan(golden: golden, heldWorkAtGaps: goldenCapture.heldWorkAtGaps)
 
         let declaredLabels = operations.map(\.label)
         var probes = await [probe(baseline, order: operations, cassette: golden)]
-        for (index, order) in plan.orderings.enumerated() {
-            for cassette in plan.cassettes(forOrdering: index)
-                where !(order.map(\.label) == declaredLabels && cassette.tracks == golden.tracks) {
-                await probes.append(probe(baseline, order: order, cassette: cassette))
-            }
+        // Each settle schedule is its own probe: its settle steps ride in the recorded ordering.
+        for (order, cassette) in plan.runs()
+            where !(order.map(\.label) == declaredLabels && cassette.tracks == golden.tracks) {
+            await probes.append(probe(baseline, order: order, cassette: cassette))
         }
 
         return SpecPlan(
@@ -322,7 +326,7 @@ extension Spec {
         )
         return SpecVerdict(
             result: VerificationResult(diff: diff, coverage: coverage),
-            orderingsExplored: surface.distinctOrderings,
+            orderingsExplored: surface.exploration.orderingsExplored,
             failingOrder: nil,
             counterexample: nil,
             exploration: surface.exploration,
@@ -352,7 +356,7 @@ extension Spec {
         )
         return SpecVerdict(
             result: VerificationResult(diff: diff, coverage: coverage),
-            orderingsExplored: surface.distinctOrderings,
+            orderingsExplored: surface.exploration.orderingsExplored,
             failingOrder: surface.distinctOrderings > 1 ? probe.ordering : nil,
             counterexample: surface.variedInputs ? probe.cassette : nil,
             exploration: surface.exploration,
