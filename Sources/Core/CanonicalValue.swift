@@ -22,18 +22,109 @@ public indirect enum CanonicalValue: Sendable, Equatable {
 public extension CanonicalValue {
     /// A stable, key-sorted textual form of the value. It exists for human-readable diff messages
     /// and as an exact-equality fallback, never for re-parsing; `Codable` handles serialization.
+    ///
+    /// A string, and an object key, is a JSON string literal with everything that would not show as
+    /// itself escaped: a quote, a backslash, a line break, a tab, a control, an invisible or
+    /// look-alike space, an unassigned code point. So a rendering is always one line, and two
+    /// different values never render alike.
     var canonicalString: String {
         switch self {
         case .null: return "null"
         case let .bool(bool): return bool ? "true" : "false"
         case let .int(int): return String(int)
         case let .double(double): return String(double)
-        case let .string(string): return "\"\(string)\""
+        case let .string(string): return Self.quoted(string)
         case let .array(array): return "[" + array.map(\.canonicalString).joined(separator: ",") + "]"
         case let .object(object):
-            let inner = object.keys.sorted().map { "\"\($0)\":\(object[$0]!.canonicalString)" }
+            let inner = object.keys.sorted().map { "\(Self.quoted($0)):\(object[$0]!.canonicalString)" }
             return "{" + inner.joined(separator: ",") + "}"
         }
+    }
+}
+
+// MARK: - String escaping
+
+private extension CanonicalValue {
+    /// The tag characters, which spell a subdivision flag inside an emoji.
+    static let emojiTags: ClosedRange<Unicode.Scalar> = "\u{E0020}" ... "\u{E007F}"
+
+    /// Returns `text` as a JSON string literal that shows every character in it.
+    ///
+    /// - Parameter text: Any string.
+    /// - Returns: `text` in double quotes; visible characters as themselves, everything else escaped.
+    static func quoted(_ text: String) -> String {
+        var result = "\""
+        for character in text {
+            // A joiner or a tag inside an emoji is part of how it draws: escaping it would split
+            // one visible glyph into several.
+            let isEmoji = character.unicodeScalars.contains(where: \.properties.isEmojiPresentation)
+            for (position, scalar) in character.unicodeScalars.enumerated() {
+                if isEmoji, scalar == "\u{200D}" || emojiTags.contains(scalar) {
+                    result.unicodeScalars.append(scalar)
+                } else if position == 0, isMark(scalar) {
+                    // A mark with no base in the string would draw onto the quote or escape before it.
+                    result += unicodeEscape(scalar)
+                } else {
+                    result += escaped(scalar)
+                }
+            }
+        }
+        return result + "\""
+    }
+
+    /// Returns whether `scalar` is a combining mark, which draws onto the character before it.
+    ///
+    /// - Parameter scalar: Any Unicode scalar.
+    /// - Returns: `true` for a nonspacing, spacing, or enclosing mark.
+    static func isMark(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.properties.generalCategory {
+        case .nonspacingMark, .spacingMark, .enclosingMark: true
+        default: false
+        }
+    }
+
+    /// Returns one scalar as it appears inside a quoted string.
+    ///
+    /// - Parameter scalar: Any Unicode scalar.
+    /// - Returns: The scalar itself when it shows as itself; otherwise its JSON escape — the short
+    ///   form for a quote, backslash, line feed, carriage return, or tab, and `\uXXXX` (a surrogate
+    ///   pair above the Basic Multilingual Plane) for anything else.
+    static func escaped(_ scalar: Unicode.Scalar) -> String {
+        switch scalar {
+        case "\"": return "\\\""
+        case "\\": return "\\\\"
+        case "\n": return "\\n"
+        case "\r": return "\\r"
+        case "\t": return "\\t"
+        default: break
+        }
+        switch scalar.properties.generalCategory {
+        case .control, .format, .lineSeparator, .paragraphSeparator, .unassigned:
+            break
+        case .spaceSeparator where scalar != " ":
+            break
+        default:
+            return String(scalar)
+        }
+        return unicodeEscape(scalar)
+    }
+
+    /// Returns `scalar` as JSON's `\uXXXX` escape.
+    ///
+    /// - Parameter scalar: Any Unicode scalar.
+    /// - Returns: One escape for a scalar in the Basic Multilingual Plane, a surrogate pair of two
+    ///   above it.
+    static func unicodeEscape(_ scalar: Unicode.Scalar) -> String {
+        String(scalar).utf16.map { "\\u" + hex($0) }.joined()
+    }
+
+    /// Returns `unit` as four uppercase hex digits.
+    ///
+    /// - Parameter unit: A UTF-16 code unit.
+    /// - Returns: The digits, zero-padded.
+    static func hex(_ unit: UInt16) -> String {
+        let digits = String(unit, radix: 16, uppercase: true)
+        return String(repeating: "0", count: 4 - digits.count) + digits
     }
 }
 

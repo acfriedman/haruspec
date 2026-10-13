@@ -93,12 +93,33 @@ extension SpecVerdict {
         return rendered.sorted { $0.key < $1.key }.map { (key: $0.key, value: $0.value) }
     }
 
-    /// Unquoted for a report line — `add.sku=COFFEE` reads better than `add.sku="COFFEE"`, and the
-    /// serialized cassette is the artifact anything machine-read should use.
+    /// Returns one seam value as a report line shows it: a plain string bare — `add.sku=COFFEE`
+    /// reads better than `add.sku="COFFEE"` — and anything else as its ``CanonicalValue/canonicalString``.
+    ///
+    /// - Parameter value: A value the counterexample read.
+    /// - Returns: A string bare when it reads unambiguously as itself; quoted and escaped when it is
+    ///   empty, holds a space, a comma, or a character that must be escaped, or would read as a
+    ///   number, a Boolean, or `null`.
+    ///
+    /// The serialized cassette is the artifact anything machine-read should use.
     private static func render(_ value: CanonicalValue) -> String {
-        if case let .string(text) = value {
+        if case let .string(text) = value, readsBare(text) {
             return text
         }
         return value.canonicalString
+    }
+
+    /// Returns whether `text` can stand in a report line without quotes: a comma separates a seam's
+    /// positions and a space separates seams, so either would misread.
+    ///
+    /// - Parameter text: A string seam value.
+    /// - Returns: `true` when `text` is non-empty, needs no escaping, holds no space or comma, and
+    ///   would not read as another kind of value.
+    private static func readsBare(_ text: String) -> Bool {
+        guard !text.isEmpty,
+              CanonicalValue.string(text).canonicalString == "\"\(text)\"",
+              !text.unicodeScalars.contains(where: { $0 == " " || $0 == "," })
+        else { return false }
+        return Double(text) == nil && !["true", "false", "null"].contains(text)
     }
 }
