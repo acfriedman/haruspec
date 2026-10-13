@@ -166,6 +166,9 @@ protocol StateQueue: SerialQueueing {
 }
 ```
 
+A subject that takes a Combine `Scheduler` needs no stamp: `context.scheduler(.main)` hands it one
+whose work the capture holds, on virtual time.
+
 Haruspec overrides nothing. A subject that calls GCD, `Task {}`, or `MainActor.run` directly is
 an audit finding (`dispatch`), never a silent green.
 

@@ -145,6 +145,13 @@ public final class WorkBacklog: @unchecked Sendable {
 
     public init() {}
 
+    /// The capture's virtual time, in seconds since the capture began: the deadline of the latest
+    /// delayed work to fire, and zero before any has.
+    public var virtualTime: TimeInterval {
+        lock.lock(); defer { lock.unlock() }
+        return virtualNow
+    }
+
     /// How many items are held, ready or not.
     public var pendingCount: Int {
         lock.lock(); defer { lock.unlock() }
