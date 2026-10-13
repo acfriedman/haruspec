@@ -248,8 +248,31 @@ empties (a timer that re-arms itself) stops after 10,000 items and leaves the ma
 (`withTaskGroup`, `async let`) inherit its domain and finish inside the drain, but run concurrently, so
 their order among themselves is not controlled.
 
-A Combine pipeline reaches the seam through a `Scheduler` the project writes over its queue protocol
-(the dogfood app's `QueueScheduler`). The audit still names `import Combine` as the `Combine` channel.
+A subject that takes an injected Combine `Scheduler` gets one from the capture, with no stamp:
+`Scheduler` has associated types, so no protocol can paste it, and `context.scheduler(_:)` is the
+double for that boundary.
+
+```swift
+.baselined { context in
+    PhotoUploader(scheduler: context.scheduler(.main))   // or .serial("uploads"), .concurrent("thumbnails")
+}
+```
+
+It holds work the way a stamped scheduling double does, and its time and option types are
+`DispatchQueue`'s, so a project's type-erased scheduler takes it too (`AnySchedulerOf<DispatchQueue>`
+through `eraseToAnyScheduler()`).
+
+| Scheduler call | Under test |
+| --- | --- |
+| `schedule(options:_:)` | held, run in enqueue order, on the queue's domain; a `group` option holds the work in the group until it runs |
+| `schedule(after:…)` | held on virtual time, recording a `timer` event with the delay it was handed |
+| `schedule(after:interval:…)` | re-armed on virtual time until cancelled; one never cancelled stops at the backlog cap |
+| `now` | the capture's virtual time, the same on every run |
+
+Its clock is the reason to take it over a hand-written adapter. An adapter over a queue protocol whose
+`now` reads the wall clock leaves `measureInterval`, `throttle` and `timeout` reading real time while
+their work runs on virtual time: a baseline checked against itself comes back `UNSTABLE`. The audit
+still names `import Combine` as the `Combine` channel.
 
 ### Settle points
 
