@@ -169,6 +169,41 @@ final class HeldSchedulerTests: XCTestCase {
         XCTAssertTrue(settled, "a cancelled repetition leaves nothing held")
     }
 
+    /// A schedule its own action cancels records no fire after that one: `debounce` cancels its
+    /// repeating schedule once it emits, and a dead fire would be a `timer` no queue makes.
+    func testARepetitionItsActionCancelsRecordsNoFurtherTimer() async {
+        let context = context()
+        let recorder = TraceRecorder(name: "repetition")
+        let scheduler = context.scheduler(.main)
+        nonisolated(unsafe) var repetition: Cancellable?
+
+        repetition = scheduler.schedule(after: scheduler.now, interval: .milliseconds(100)) {
+            repetition?.cancel()
+        }
+        await context.backlog.drain(recorder: recorder)
+
+        XCTAssertEqual(recorder.trace().events.filter { $0.kind == .timer }.count, 1)
+    }
+
+    func testADebounceRecordsOneTimerPerValueItWaitsOn() async {
+        let context = context()
+        let recorder = TraceRecorder(name: "debounce")
+        let values = PassthroughSubject<Int, Never>()
+        nonisolated(unsafe) var emitted: [Int] = []
+        let subscription = values
+            .debounce(for: .milliseconds(300), scheduler: context.scheduler(.main))
+            .sink { emitted.append($0) }
+
+        values.send(1)
+        await context.backlog.drain(recorder: recorder)
+        values.send(2)
+        await context.backlog.drain(recorder: recorder)
+
+        XCTAssertEqual(emitted, [1, 2])
+        XCTAssertEqual(recorder.trace().events.filter { $0.kind == .timer }.count, 2)
+        subscription.cancel()
+    }
+
     func testARepetitionCancelledBeforeItsFirstFireNeverRuns() async {
         let context = context()
         let scheduler = context.scheduler(.main)
