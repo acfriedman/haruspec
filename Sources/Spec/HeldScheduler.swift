@@ -128,6 +128,8 @@ public struct HeldScheduler: Scheduler, Sendable {
             hold(after: delay) {
                 guard !repetition.isCancelled else { return }
                 action()
+                // An action may cancel its own schedule: `debounce` does once it emits.
+                guard !repetition.isCancelled else { return }
                 arm(after: period)
             }
         }
