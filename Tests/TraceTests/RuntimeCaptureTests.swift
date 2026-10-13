@@ -84,6 +84,85 @@ final class RuntimeValueTests: XCTestCase {
         XCTAssertNotEqual(RuntimeValue.thrown(Refusal.short(units: 1)), RuntimeValue.thrown(Refusal.short(units: 2)))
     }
 
+    /// Two pointers to different storage canonicalize the same, whatever the pointer kind: the
+    /// address is where a value lives this run, and two ports put the same flag in different frames.
+    func testAPointerRecordsNoAddress() {
+        let first = UnsafeMutablePointer<ObjCBool>.allocate(capacity: 2)
+        let second = UnsafeMutablePointer<ObjCBool>.allocate(capacity: 2)
+        defer {
+            first.deallocate()
+            second.deallocate()
+        }
+        let kinds: [(name: String, wrap: (UnsafeMutablePointer<ObjCBool>) -> Any)] = [
+            ("UnsafeMutablePointer", { $0 }),
+            ("UnsafePointer", { UnsafePointer($0) }),
+            ("UnsafeMutableRawPointer", { UnsafeMutableRawPointer($0) }),
+            ("UnsafeRawPointer", { UnsafeRawPointer($0) }),
+            ("OpaquePointer", { OpaquePointer($0) })
+        ]
+
+        for kind in kinds {
+            XCTAssertEqual(RuntimeValue.canonical(kind.wrap(first)), .string("<pointer>"), kind.name)
+            XCTAssertEqual(RuntimeValue.canonical(kind.wrap(second)), .string("<pointer>"), kind.name)
+        }
+        XCTAssertEqual(autoreleasing(), .string("<pointer>"), "an imported NSError ** out-parameter")
+    }
+
+    /// A buffer pointer keeps its count, which is how much the subject handed over, and drops its
+    /// start address like any other pointer.
+    func testABufferPointerRecordsItsCountAndNoAddress() {
+        let storage = UnsafeMutablePointer<Int32>.allocate(capacity: 3)
+        defer { storage.deallocate() }
+
+        XCTAssertEqual(
+            RuntimeValue.canonical(UnsafeMutableBufferPointer(start: storage, count: 3)),
+            .string("<buffer pointer, count 3>")
+        )
+        XCTAssertEqual(
+            RuntimeValue.canonical(UnsafeBufferPointer(start: storage, count: 3)),
+            .string("<buffer pointer, count 3>")
+        )
+        XCTAssertEqual(
+            RuntimeValue.canonical(UnsafeMutableRawBufferPointer(start: storage, count: 12)),
+            .string("<buffer pointer, count 12>"),
+            "a raw buffer counts bytes"
+        )
+        XCTAssertEqual(
+            RuntimeValue.canonical(UnsafeRawBufferPointer(start: nil, count: 0)),
+            .string("<buffer pointer, count 0>")
+        )
+    }
+
+    /// Recording a pointer never reads through it: an address nothing is mapped at canonicalizes
+    /// like any other.
+    ///
+    /// - Throws: `XCTUnwrap`'s error when no pointer has the chosen bit pattern.
+    func testAPointerIsNeverDereferenced() throws {
+        let unmapped = try XCTUnwrap(UnsafeMutablePointer<ObjCBool>(bitPattern: 0x10))
+
+        XCTAssertEqual(RuntimeValue.canonical(unmapped), .string("<pointer>"))
+        XCTAssertEqual(
+            RuntimeValue.canonical(UnsafeBufferPointer(start: unmapped, count: 4)),
+            .string("<buffer pointer, count 4>")
+        )
+    }
+
+    /// Whether a pointer was passed at all is still compared: a nil one is `.null`, also nested.
+    func testANilPointerIsNullAndANestedPointerRecordsNoAddress() {
+        struct Request {
+            let stop: UnsafeMutablePointer<ObjCBool>?
+            let error: UnsafeMutablePointer<ObjCBool>?
+        }
+        let flag = UnsafeMutablePointer<ObjCBool>.allocate(capacity: 1)
+        defer { flag.deallocate() }
+
+        XCTAssertEqual(RuntimeValue.canonical(UnsafeMutablePointer<ObjCBool>?.none as Any), .null)
+        XCTAssertEqual(RuntimeValue.canonical(UnsafeMutablePointer<ObjCBool>?.some(flag) as Any), "<pointer>")
+        XCTAssertEqual(RuntimeValue.canonical(Request(stop: flag, error: nil)), ["stop": "<pointer>", "error": .null])
+        XCTAssertEqual(RuntimeValue.canonical([flag, OpaquePointer(flag)] as [Any]), ["<pointer>", "<pointer>"])
+        XCTAssertEqual(RuntimeValue.canonical(["stop": flag] as [String: Any]), ["stop": "<pointer>"])
+    }
+
     func testStillFallsBackToDescriptionForStructurelessValues() {
         let closure: () -> Void = {}
         if case .string = RuntimeValue.canonical(closure) { /* ok */ } else {
@@ -229,4 +308,20 @@ final class IntervalTests: XCTestCase {
     func testIntervalRunsBodyWithoutActiveCapture() {
         XCTAssertEqual(Haruspec.interval("x") { 7 }, 7) // no recorder bound → just runs the body
     }
+}
+
+/// Returns how an imported `NSError **` out-parameter canonicalizes.
+///
+/// - Returns: What ``RuntimeValue/canonical(_:)`` records for a pointer to a local `NSError?`.
+private func autoreleasing() -> CanonicalValue {
+    var error: NSError?
+    return canonical(of: &error)
+}
+
+/// Returns `pointer` canonicalized; a function, so `&` can pass an autoreleasing pointer.
+///
+/// - Parameter pointer: An out-parameter slot, as Swift imports an Obj-C `NSError **`.
+/// - Returns: What ``RuntimeValue/canonical(_:)`` records for it.
+private func canonical(of pointer: AutoreleasingUnsafeMutablePointer<NSError?>) -> CanonicalValue {
+    RuntimeValue.canonical(pointer)
 }
