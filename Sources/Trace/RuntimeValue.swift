@@ -10,7 +10,8 @@ import ObjectiveC
 /// `Encodable` bridge, this must cope with whatever the runtime hands us: bridged JSON scalars are
 /// claimed first, then we reach for structure (`Encodable`, then reflection) so a non-`Codable`
 /// object still produces a *diffable* tree instead of an opaque `String(describing:)` id, and only
-/// truly structureless values degrade to a stable string as a last resort.
+/// truly structureless values degrade to a stable string as a last resort. A pointer is recorded
+/// without its address, which no two runs share.
 public enum RuntimeValue {
     /// Deepest structural nesting we'll reflect through before bailing to a string. The visited set
     /// already breaks reference cycles; this additionally bounds pathologically deep object graphs.
@@ -66,6 +67,15 @@ public enum RuntimeValue {
             return .object(Dictionary(uniqueKeysWithValues: dict.map {
                 (String(describing: $0.key), canonical($0.value, depth: depth, visited: visited))
             }))
+
+        // A pointer's address is where a value happens to live this run, not what the program did:
+        // two ports hand a block the same `BOOL *stop` at different addresses. A nil pointer is
+        // still `.null`, by way of the optional below, so whether one was passed stays compared.
+        case let buffer as any BufferAddress:
+            return .string("<buffer pointer, count \(buffer.count)>")
+
+        case is any Address:
+            return .string("<pointer>")
 
         // An enum or option set reads as its raw value: an imported Obj-C enum otherwise prints
         // its type name alone, whatever the case.
@@ -191,3 +201,28 @@ public enum RuntimeValue {
         return result.isEmpty ? nil : .object(result)
     }
 }
+
+// MARK: - Pointers
+
+/// A pointer, which ``RuntimeValue`` records as `"<pointer>"`. Its address differs between two runs
+/// and between two implementations of the same behavior, so it is never compared.
+private protocol Address {}
+
+extension UnsafePointer: Address {}
+extension UnsafeMutablePointer: Address {}
+extension UnsafeRawPointer: Address {}
+extension UnsafeMutableRawPointer: Address {}
+extension OpaquePointer: Address {}
+extension AutoreleasingUnsafeMutablePointer: Address {}
+
+/// A buffer pointer, which ``RuntimeValue`` records by its count alone. The count is how much the
+/// subject handed over; the start address is a pointer like any other.
+private protocol BufferAddress {
+    /// The number of elements, or of bytes for a raw buffer.
+    var count: Int { get }
+}
+
+extension UnsafeBufferPointer: BufferAddress {}
+extension UnsafeMutableBufferPointer: BufferAddress {}
+extension UnsafeRawBufferPointer: BufferAddress {}
+extension UnsafeMutableRawBufferPointer: BufferAddress {}
