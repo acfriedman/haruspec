@@ -274,6 +274,34 @@ Its clock is the reason to take it over a hand-written adapter. An adapter over 
 their work runs on virtual time: a baseline checked against itself comes back `UNSTABLE`. The audit
 still names `import Combine` as the `Combine` channel.
 
+A subject that takes an injected `OperationQueue` gets one from the capture the same way:
+`context.operationQueue(_:)` returns a `HeldOperationQueue`, an `OperationQueue` subclass whose
+operations start as held work.
+
+```swift
+.baselined { context in
+    PhotoUploader(queue: context.operationQueue(.serial("uploads")))   // or .main, .concurrent("thumbnails")
+}
+```
+
+A real queue delivers each `completionBlock` on a thread of its own, after the operation, so a spec
+over one records none of it: a port that never uploads reads `EQUIVALENT`. The held queue takes the
+block before the start, so Foundation has nothing to deliver, and runs it itself as held work.
+
+| Queue behavior | Under test |
+| --- | --- |
+| `addOperation`, its block form, `addOperations(_:waitUntilFinished: false)` | held; started once ready and the queue has room, highest `queuePriority` first, then in the order added |
+| an asynchronous operation | keeps its place until it reports `isFinished`, from later held work |
+| a finished operation | leaves `operations`, then its completion runs, then the next one starts |
+| `cancel()`, `cancelAllOperations()` | the operation becomes ready, skips `main()`, and still completes |
+| dependencies | an operation waits until they finish, on this queue or any other |
+| `maxConcurrentOperationCount` | how many run at once; the domain is `queue(serial):<label>` while it is 1, `queue(concurrent):<label>` otherwise |
+| `addBarrierBlock`, `isSuspended` | as Foundation's |
+| `waitUntilAllOperationsAreFinished()`, `addOperations(_:waitUntilFinished: true)` | trap, naming the call: the work runs only once the capture drains |
+
+`Operation.waitUntilFinished()` belongs to the operation, so no queue can catch it: it hangs. The
+audit still names `addOperation` blocks as the `dispatch` channel.
+
 ### Settle points
 
 Running every operation first and the held work last is one legal schedule: the most impatient user. A

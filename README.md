@@ -167,7 +167,9 @@ protocol StateQueue: SerialQueueing {
 ```
 
 A subject that takes a Combine `Scheduler` needs no stamp: `context.scheduler(.main)` hands it one
-whose work the capture holds, on virtual time.
+whose work the capture holds, on virtual time. One that takes an `OperationQueue` gets
+`context.operationQueue(.serial("uploads"))`, which holds its operations and runs their completion
+blocks itself.
 
 Haruspec overrides nothing. A subject that calls GCD, `Task {}`, or `MainActor.run` directly is
 an audit finding (`dispatch`), never a silent green.
