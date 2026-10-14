@@ -27,7 +27,7 @@ import HaruspecTrace
 ///   ``addOperations(_:waitUntilFinished:)`` with `true` would wait on work that runs only once the
 ///   capture drains, after the subject returns. ``Operation/waitUntilFinished()`` belongs to the
 ///   operation, so no queue can catch it: it hangs.
-public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
+public final class HeldOperationQueue: OperationQueue, QueueNaming, @unchecked Sendable {
     /// The queue a held operation queue stands in for, which names its domain.
     ///
     /// A serial queue starts with a `maxConcurrentOperationCount` of 1, a concurrent one with
@@ -61,6 +61,11 @@ public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
         if discipline != .concurrent {
             maxConcurrentOperationCount = 1
         }
+    }
+
+    // gloss:exempt implements QueueNaming.naming(_:), documented on the protocol
+    public func naming(_ label: String) -> String {
+        "context.operationQueue(.\(discipline == .concurrent ? "concurrent" : "serial")(\"\(label)\"))"
     }
 
     // MARK: - Adding work

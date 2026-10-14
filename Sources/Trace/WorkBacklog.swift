@@ -140,6 +140,8 @@ public final class WorkBacklog: @unchecked Sendable {
     // supports macOS 13, where `Mutex` does not exist.
     private let lock = NSLock()
     private var items: [Item] = []
+    /// The queue each domain belongs to in this capture; see ``DomainOwners``.
+    private var owners = DomainOwners()
     private var nextSeq = 0
     private var virtualNow: Double = 0
 
@@ -227,15 +229,8 @@ public final class WorkBacklog: @unchecked Sendable {
         discipline: ScheduleDiscipline,
         _ operation: @escaping () async -> Void
     ) {
-        hold(
-            queue: queue,
-            label: label,
-            discipline: discipline,
-            body: .async(operation),
-            delay: nil,
-            group: nil,
-            cause: nil
-        )
+        let body = Body.async(operation)
+        hold(queue: queue, label: label, discipline: discipline, body: body, delay: nil, group: nil, cause: nil)
     }
 
     /// Runs `work` as `queue` would run a `sync`: after every ready item already held for that queue,
@@ -253,6 +248,7 @@ public final class WorkBacklog: @unchecked Sendable {
         _ work: () -> Void
     ) {
         let recorder = TraceContext.active
+        lock.withLock { owners.claimOrTrap(discipline.domain(label: label), for: queue) }
         // The sync waits behind what is on the queue *now*. Work released while it waits (a group
         // emptying) is enqueued behind it, as GCD would enqueue it.
         let ahead = readySeqs(on: ObjectIdentifier(queue))
@@ -355,6 +351,7 @@ public final class WorkBacklog: @unchecked Sendable {
         let cause = (cause ?? Self.causeHere()).seq
         let op = TraceContext.activeOp
         lock.lock(); defer { lock.unlock() }
+        owners.claimOrTrap(discipline.domain(label: label), for: queue)
         items.append(Item(
             seq: nextSeq,
             queue: ObjectIdentifier(queue),

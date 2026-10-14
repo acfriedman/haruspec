@@ -95,9 +95,11 @@ enum SchedulerEmitter {
         let boundaries = ([protoName] + refined).map { "\($0).self" }.joined(separator: ", ")
 
         let source = """
-        final class \(generatedName): NSObject, \(protoName), SeamDouble, @unchecked Sendable {
+        final class \(generatedName): NSObject, \(protoName), NamedQueueDouble, @unchecked Sendable {
             private let __seams: SeamContext
             init(_ seams: SeamContext) { __seams = seams; super.init() }
+
+            var queueLabel: String = \(quotedLiteral(label))
 
             nonisolated var traceLabel: String { \(quotedLiteral(label)) }
 
@@ -113,10 +115,10 @@ enum SchedulerEmitter {
     private static func method(
         _ function: FunctionDeclSyntax,
         shape: SchedulingShape,
-        label: String,
+        label _: String,
         discipline: String
     ) -> String {
-        let queue = "on: self, label: \(quotedLiteral(label)), discipline: .\(discipline)"
+        let queue = "on: self, label: queueLabel, discipline: .\(discipline)"
         let body = switch shape {
         case let .enqueue(work):
             "__seams.backlog.enqueue(\(queue), \(work))"

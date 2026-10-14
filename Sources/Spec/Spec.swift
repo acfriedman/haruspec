@@ -23,6 +23,20 @@ public protocol SeamDouble: TraceLabeled {
     static var servedBoundaries: [Any.Type] { get }
 }
 
+/// A stamped scheduling double (`@Haruspec(schedules:)`), whose label names the domain its work records
+/// on. The stamp's protocol name by default; ``SeamContext/double(_:label:)`` names one queue of several.
+public protocol NamedQueueDouble: SeamDouble, QueueNaming {
+    /// The queue's name in the trace: `queue(serial):<queueLabel>`.
+    var queueLabel: String { get set }
+}
+
+public extension NamedQueueDouble {
+    // gloss:exempt implements QueueNaming.naming(_:), documented on the protocol
+    func naming(_ label: String) -> String {
+        "context.double(\(Self.self).self, label: \"\(label)\")"
+    }
+}
+
 /// A generated forwarder's registry entry (`@Haruspec` emits the conformance on its
 /// `Traced<Protocol>`): which boundary it forwards, how to wrap a conformer of it, and the op catalog
 /// derived beside it. This is how a spec over `any Cart` records through `TracedCart`, and drives
@@ -85,6 +99,21 @@ public struct SeamContext {
     /// registers it as an injected collaborator.
     public func double<D: SeamDouble>(_ type: D.Type) -> D {
         inject(type.init(self))
+    }
+
+    /// Constructs a stamped scheduling double named `label`, which becomes the domain its work records
+    /// on: `queue(serial):io`. Name each queue when a subject takes two of one protocol.
+    ///
+    /// - Parameters:
+    ///   - type: The stamp's scheduling double, `Double<Protocol>`.
+    ///   - label: The queue's name, the same on both sides of the spec.
+    /// - Returns: The double, registered as an injected collaborator.
+    /// - Precondition: `label` is non-empty.
+    public func double<D: NamedQueueDouble>(_ type: D.Type, label: String) -> D {
+        precondition(!label.isEmpty, "a queue's label names its domain, so it can't be empty")
+        let double = type.init(self)
+        double.queueLabel = label
+        return inject(double)
     }
 
     /// Returns this context answering every read for the call whose arguments are `arguments`, so a
