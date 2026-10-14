@@ -71,7 +71,7 @@ public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
             !operation.isExecuting && !operation.isFinished,
             "an operation can't be added to a queue once it has started"
         )
-        add(Entry(operation, isBarrier: false))
+        add(Entry(operation, isBarrier: false, cause: WorkBacklog.causeHere()))
     }
 
     // gloss:exempt overrides OperationQueue.addOperation(_:), documented on the type
@@ -94,7 +94,7 @@ public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
 
     // gloss:exempt overrides OperationQueue.addBarrierBlock(_:), documented on the type
     override public func addBarrierBlock(_ barrier: @escaping @Sendable () -> Void) {
-        add(Entry(BlockOperation(block: barrier), isBarrier: true))
+        add(Entry(BlockOperation(block: barrier), isBarrier: true, cause: WorkBacklog.causeHere()))
     }
 
     // MARK: - Reading and steering it
@@ -189,7 +189,7 @@ public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
             return claimed
         }
         for (entry, discipline) in starting {
-            hold(discipline) { [self] in start(entry, on: discipline) }
+            hold(discipline, causedBy: entry.cause) { [self] in start(entry, on: discipline) }
         }
     }
 
@@ -265,7 +265,7 @@ public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
             return true
         }
         guard first else { return }
-        hold(discipline) { [self] in complete(entry) }
+        hold(discipline, causedBy: entry.cause) { [self] in complete(entry) }
     }
 
     /// Removes `entry`, runs its operation's completion block, then starts what its room lets start.
@@ -287,9 +287,14 @@ public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
     ///
     /// - Parameters:
     ///   - discipline: How the queue orders its work, which names the domain the work records on.
+    ///   - cause: The call that added the operation the work runs or completes.
     ///   - work: The work.
-    private func hold(_ discipline: ScheduleDiscipline, _ work: @escaping () -> Void) {
-        backlog.enqueue(on: self, label: label, discipline: discipline, work)
+    private func hold(
+        _ discipline: ScheduleDiscipline,
+        causedBy cause: WorkBacklog.Cause,
+        _ work: @escaping () -> Void
+    ) {
+        backlog.enqueue(on: self, label: label, discipline: discipline, causedBy: cause, work)
     }
 
     /// Where an entry is between its add and its completion.
@@ -307,6 +312,9 @@ public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
     private final class Entry: @unchecked Sendable {
         let operation: Operation
         let isBarrier: Bool
+        /// The call that added the operation: the cause of its start and its completion, whichever held
+        /// work happens to release them.
+        let cause: WorkBacklog.Cause
         var state = EntryState.waiting
         /// The block taken from the operation before its start, which the queue runs once it finishes.
         var completion: (() -> Void)?
@@ -318,9 +326,11 @@ public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
         /// - Parameters:
         ///   - operation: The operation added.
         ///   - isBarrier: Whether it is a barrier, which runs alone once everything ahead of it is done.
-        init(_ operation: Operation, isBarrier: Bool) {
+        ///   - cause: The cause at the add.
+        init(_ operation: Operation, isBarrier: Bool, cause: WorkBacklog.Cause) {
             self.operation = operation
             self.isBarrier = isBarrier
+            self.cause = cause
         }
     }
 }

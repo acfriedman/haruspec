@@ -42,13 +42,23 @@ public enum TraceContext {
     /// cleared once bound, and the edge belongs to the held work's *first* event — so consuming has to
     /// mutate something the binding merely points at.
     final class SpawnCause: @unchecked Sendable {
+        /// The cause as bound, claimed or not: what work this work hands on inherits when no traced call
+        /// encloses the hand-off.
+        let origin: Int?
         private let lock = NSLock()
         private var cause: Int?
 
+        /// Creates a cause not yet claimed.
+        ///
+        /// - Parameter cause: The causing call's sequence number; `nil` for work no call caused.
         init(_ cause: Int?) {
+            origin = cause
             self.cause = cause
         }
 
+        /// Claims the cause, once: the held work's first event takes it, and later ones find none.
+        ///
+        /// - Returns: The cause the first time; `nil` after that, or when there was none.
         func take() -> Int? {
             lock.lock(); defer { lock.unlock() }
             defer { cause = nil }

@@ -337,4 +337,31 @@ final class HeldOperationQueueTests: XCTestCase {
         let domains = recorder.trace().events.map(\.domain.description)
         XCTAssertEqual(domains, ["queue(concurrent):uploads", "queue(serial):uploads"])
     }
+
+    /// An operation's start and its completion both name the call that added it, never the held work
+    /// that released them: the last completion releases a serial queue's next start.
+    func testAStartAndACompletionNameTheCallThatAddedTheOperation() async throws {
+        let context = context()
+        let recorder = TraceRecorder(name: "causes")
+        let queue = context.operationQueue(.serial("uploads"))
+
+        TraceContext.$current.withValue(recorder) {
+            for name in ["cat", "dog"] {
+                recorder.call("upload \(name)")
+                let operation = BlockOperation { Haruspec.marker("sent \(name)") }
+                operation.completionBlock = { Haruspec.marker("confirmed \(name)") }
+                queue.addOperation(operation)
+                recorder.ret("upload \(name)")
+            }
+        }
+        await context.backlog.drain(recorder: recorder)
+
+        let events = recorder.trace().events
+        let seq = { (label: String) in try XCTUnwrap(events.first { $0.label == label }) }
+        for name in ["cat", "dog"] {
+            let upload = try seq("upload \(name)").seq
+            XCTAssertEqual(try seq("sent \(name)").spawnedBy, upload, "\(name)'s start")
+            XCTAssertEqual(try seq("confirmed \(name)").spawnedBy, upload, "\(name)'s completion")
+        }
+    }
 }
