@@ -296,16 +296,17 @@ public final class TraceRecorder: @unchecked Sendable {
         payload: CanonicalValue?,
         tier: EventTier = .structural
     ) {
+        let domain = attributedDomainLocked(isolation, kind: kind)
         appendLocked(TraceEvent(
             seq: seqCounter,
             kind: kind,
             label: label,
-            domain: attributedDomainLocked(isolation, kind: kind),
+            domain: domain,
             subject: symbolicIDLocked(subject),
             payload: payload,
             depth: depth,
             tier: tier,
-            spawnedBy: TraceContext.consumePendingSpawnCause(),
+            spawnedBy: TraceContext.consumePendingSpawnCause(in: domain),
             op: TraceContext.activeOp
         ))
     }
@@ -318,15 +319,16 @@ public final class TraceRecorder: @unchecked Sendable {
         subject: AnyObject?,
         durationTicks: Int64
     ) {
+        let domain = attributedDomainLocked(isolation, kind: .signpost)
         appendLocked(TraceEvent(
             seq: seqCounter,
             kind: .signpost,
             label: label,
-            domain: attributedDomainLocked(isolation, kind: .signpost),
+            domain: domain,
             subject: symbolicIDLocked(subject),
             durationTicks: durationTicks,
             depth: depth,
-            spawnedBy: TraceContext.consumePendingSpawnCause(),
+            spawnedBy: TraceContext.consumePendingSpawnCause(in: domain),
             op: TraceContext.activeOp
         ))
     }

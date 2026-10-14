@@ -3,11 +3,14 @@ import Foundation
 /// The happens-before pass: compare the **constraints** the recorded spawn edges imply, never the
 /// raw edges. An edge disappearing is not by itself a lost ordering — an actor port replaces
 /// `dispatch_async` with `await`, and the constraint survives *more* strongly, as program order
-/// inside one ordered domain. So the recorded facts admit exactly two proofs that X happens-before Y:
+/// inside one ordered domain. So the recorded facts admit two steps of proof that X happens-before Y:
 ///
 ///  1. a **spawn edge** — Y's work was enqueued by X, or
 ///  2. **program order in an ordered domain** — X and Y share a domain whose order is a runtime
-///     guarantee, X first.
+///     guarantee, X first,
+///
+/// and happens-before is transitive, so any chain of those steps from X to Y proves it too: a
+/// completion two hops from the call that queued its work is still after that call.
 ///
 /// A baseline constraint the candidate can prove neither way is **`orderingLost`** — a dropped
 /// synchronization, said from a passing run, which is the claim dynamic race detection cannot make.
@@ -16,10 +19,9 @@ import Foundation
 /// `spawnEdges` policy: **red until declared** by default, through `Intent.expectedOrderingLosses`
 /// and `expectedOrderingAdditions`.
 ///
-/// Honest limits, stated rather than hidden: the recorded edge set under-approximates true
-/// happens-before (no lock or shared-memory edges), and this pass does not chase transitive chains —
-/// a constraint preserved only through an intermediate hop reports as lost. A spec hitting that
-/// over-report drops the policy to `.advisory`; the rate on real subjects is an open measurement.
+/// Honest limit, stated rather than hidden: the recorded edge set under-approximates true
+/// happens-before (no lock or shared-memory edges), so a constraint the program keeps only through
+/// one of those reports as lost. A spec hitting that over-report drops the policy to `.advisory`.
 extension BehavioralDiff {
     static func compareSpawnEdges(
         baseline: [TraceEvent],
@@ -32,6 +34,8 @@ extension BehavioralDiff {
         }
         let baselineBySeq = Dictionary(uniqueKeysWithValues: baseline.map { ($0.seq, $0) })
         let candidateBySeq = Dictionary(uniqueKeysWithValues: candidate.map { ($0.seq, $0) })
+        var baselineOrder = HappensBefore(baseline)
+        var candidateOrder = HappensBefore(candidate)
         var counterpartOfBaseline: [Int: TraceEvent] = [:]
         var counterpartOfCandidate: [Int: TraceEvent] = [:]
         for (baselineEvent, candidateEvent) in scratch.alignedPairs {
@@ -45,7 +49,7 @@ extension BehavioralDiff {
             if let causeSeq = baselineEvent.spawnedBy,
                let spawner = baselineBySeq[causeSeq],
                let spawnerCounterpart = counterpartOfBaseline[causeSeq],
-               !constrained(spawnerCounterpart, before: candidateEvent) {
+               !candidateOrder.precedes(spawnerCounterpart, candidateEvent) {
                 scratch.divergences.append(
                     Divergence(
                         kind: .orderingLost,
@@ -62,7 +66,7 @@ extension BehavioralDiff {
             if let causeSeq = candidateEvent.spawnedBy,
                let spawner = candidateBySeq[causeSeq],
                let spawnerCounterpart = counterpartOfCandidate[causeSeq],
-               !constrained(spawnerCounterpart, before: baselineEvent) {
+               !baselineOrder.precedes(spawnerCounterpart, baselineEvent) {
                 scratch.divergences.append(
                     Divergence(
                         kind: .orderingAdded,
@@ -77,11 +81,56 @@ extension BehavioralDiff {
             }
         }
     }
+}
 
-    /// `earlier` happens-before `later`, as far as the recorded facts can prove: a spawn edge, or
-    /// program order within one ordered domain.
-    private static func constrained(_ earlier: TraceEvent, before later: TraceEvent) -> Bool {
-        later.spawnedBy == earlier.seq
-            || (earlier.domain == later.domain && earlier.domain.isOrdered && earlier.seq < later.seq)
+/// What one trace's recorded facts prove happens-before: the transitive closure of its spawn edges and
+/// of program order within each ordered domain.
+struct HappensBefore {
+    /// For each event, the events one step after it: those it spawned, and the next in its domain when
+    /// that domain is ordered. Every step runs forward in sequence order.
+    private let steps: [Int: [Int]]
+    /// Each source asked about, and everything it reaches.
+    private var reached: [Int: Set<Int>] = [:]
+
+    /// Builds the steps from `events`, in recorded order.
+    ///
+    /// - Parameter events: One trace's events.
+    init(_ events: [TraceEvent]) {
+        var steps: [Int: [Int]] = [:]
+        var lastInDomain: [ConcurrencyDomain: Int] = [:]
+        for event in events.sorted(by: { $0.seq < $1.seq }) {
+            if let cause = event.spawnedBy {
+                steps[cause, default: []].append(event.seq)
+            }
+            guard event.domain.isOrdered else { continue }
+            if let previous = lastInDomain[event.domain] {
+                steps[previous, default: []].append(event.seq)
+            }
+            lastInDomain[event.domain] = event.seq
+        }
+        self.steps = steps
+    }
+
+    /// Returns whether the recorded facts prove `earlier` happens-before `later`.
+    ///
+    /// - Parameters:
+    ///   - earlier: The event that would come first.
+    ///   - later: The event that would come after it.
+    /// - Returns: `true` when a chain of spawn edges and ordered program order leads from `earlier` to
+    ///   `later`.
+    mutating func precedes(_ earlier: TraceEvent, _ later: TraceEvent) -> Bool {
+        guard earlier.seq < later.seq else { return false }
+        if let known = reached[earlier.seq] {
+            return known.contains(later.seq)
+        }
+        var seen: Set<Int> = []
+        var frontier = [earlier.seq]
+        while let next = frontier.popLast() {
+            for step in steps[next] ?? [] where seen.insert(step).inserted {
+                frontier.append(step)
+            }
+        }
+        reached[earlier.seq] = seen
+        return seen.contains(later.seq)
     }
 }

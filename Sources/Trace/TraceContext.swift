@@ -38,41 +38,49 @@ public enum TraceContext {
     /// work it calls stays `ambient`.
     @TaskLocal public static var capturesOffMain = false
 
-    /// A cause that has not been claimed yet. A box rather than a value because a task-local cannot be
-    /// cleared once bound, and the edge belongs to the held work's *first* event — so consuming has to
-    /// mutate something the binding merely points at.
+    /// The cause of the held work now running, and where it has been claimed. A box rather than a value
+    /// because a task-local cannot be rebound mid-work, and claiming has to mutate something the
+    /// binding merely points at.
+    ///
+    /// The edge belongs to the work's first event in each domain it records on. Program order carries
+    /// the cause through the rest of a domain whose order is guaranteed, but a held task that hops to
+    /// another domain leaves that order behind, so its first event there claims the cause again.
     final class SpawnCause: @unchecked Sendable {
         /// The cause as bound, claimed or not: what work this work hands on inherits when no traced call
         /// encloses the hand-off.
         let origin: Int?
         private let lock = NSLock()
-        private var cause: Int?
+        private var claimedIn: ConcurrencyDomain?
 
         /// Creates a cause not yet claimed.
         ///
         /// - Parameter cause: The causing call's sequence number; `nil` for work no call caused.
         init(_ cause: Int?) {
             origin = cause
-            self.cause = cause
         }
 
-        /// Claims the cause, once: the held work's first event takes it, and later ones find none.
+        /// Claims the cause for an event in `domain`, unless the last claim was in that domain.
         ///
-        /// - Returns: The cause the first time; `nil` after that, or when there was none.
-        func take() -> Int? {
+        /// - Parameter domain: The domain the event records on.
+        /// - Returns: The cause for the work's first event in a domain; `nil` for later ones there, or
+        ///   when no call caused the work.
+        func take(in domain: ConcurrencyDomain) -> Int? {
             lock.lock(); defer { lock.unlock() }
-            defer { cause = nil }
-            return cause
+            guard origin != nil, claimedIn != domain else { return nil }
+            claimedIn = domain
+            return origin
         }
     }
 
     /// The call that enqueued the held work now running, bound by ``WorkBacklog`` around each item.
     @TaskLocal static var pendingSpawnCause: SpawnCause?
 
-    /// Takes the pending spawn cause, if this is the first event since the held work began. Consumed
-    /// rather than read: the edge belongs to the work's first event, and program order does the rest.
-    static func consumePendingSpawnCause() -> Int? {
-        pendingSpawnCause?.take()
+    /// Takes the pending spawn cause for an event in `domain`.
+    ///
+    /// - Parameter domain: The domain the event records on.
+    /// - Returns: The cause when this is the held work's first event in `domain`; otherwise `nil`.
+    static func consumePendingSpawnCause(in domain: ConcurrencyDomain) -> Int? {
+        pendingSpawnCause?.take(in: domain)
     }
 }
 
