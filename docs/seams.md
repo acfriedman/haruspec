@@ -242,8 +242,8 @@ domain.
 
 Under test, the double holds each piece of work in the capture's backlog. The capture runs held work
 one item at a time, in enqueue order, after the operations (and at settle points, below): the same
-order every run. Each item is attributed to the operation that enqueued it, and its first event names
-the traced call that enqueued it as its cause. Work one held item hands on, with no traced call open,
+order every run. Each item is attributed to the operation that enqueued it, and its first event in
+each domain names the traced call that enqueued it as its cause. Work one held item hands on, with no traced call open,
 carries that item's cause forward: a block queued from inside a block still names the call that queued
 the first. A backlog that never
 empties (a timer that re-arms itself) stops after 10,000 items and leaves the marker

@@ -62,7 +62,7 @@ public enum Settle: String, Sendable, CaseIterable, Codable {
 /// - **Quiescence:** the capture has settled when the backlog is empty. There is no thread to wait
 ///   for, so "has the work finished?" is a question about this list.
 /// - **Happens-before:** the enqueueing call and op are read at the enqueue, the one moment both ends
-///   of the edge are in hand, and the item's first event claims the call as its cause.
+///   of the edge are in hand, and the item's first event in each domain claims the call as its cause.
 ///
 /// Delayed work runs on virtual time. It becomes ready only when nothing else is, in deadline order,
 /// and the clock jumps to its deadline. A debounce therefore fires once the input has settled, which

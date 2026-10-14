@@ -85,4 +85,33 @@ final class WorkBacklogCauseTests: XCTestCase {
         let upload = try XCTUnwrap(events(recorder).first { $0.label == "Uploader.upload" })
         XCTAssertEqual(events(recorder).first { $0.label == "started" }?.spawnedBy, upload.seq)
     }
+
+    /// A held task that hops to another domain leaves that domain's program order behind, so its first
+    /// event there claims the cause again; a later event in the same domain does not.
+    func testAHeldTaskClaimsItsCauseAgainInEachDomainItReaches() async throws {
+        let recorder = TraceRecorder(name: "hop")
+        let backlog = WorkBacklog()
+
+        TraceContext.$current.withValue(recorder) {
+            recorder.call("Recommendations.refresh")
+            backlog.spawn(on: Queue(), label: "TaskSpawner", discipline: .concurrent) {
+                Haruspec.marker("checked")
+                await MainActor.run {
+                    Haruspec.marker("published")
+                    Haruspec.marker("announced")
+                }
+            }
+            recorder.ret("Recommendations.refresh")
+        }
+        await TraceContext.$capturesOffMain.withValue(true) {
+            await backlog.drain(recorder: recorder)
+        }
+
+        let refresh = try XCTUnwrap(events(recorder).first { $0.label == "Recommendations.refresh" })
+        let byLabel = Dictionary(events(recorder).map { ($0.label, $0) }) { first, _ in first }
+        XCTAssertEqual(byLabel["published"]?.domain, .main, "the hop landed on main")
+        XCTAssertEqual(byLabel["checked"]?.spawnedBy, refresh.seq)
+        XCTAssertEqual(byLabel["published"]?.spawnedBy, refresh.seq, "first on main")
+        XCTAssertNil(byLabel["announced"]?.spawnedBy, "main's program order carries the rest")
+    }
 }

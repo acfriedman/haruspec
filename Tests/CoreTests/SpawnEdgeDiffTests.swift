@@ -122,6 +122,42 @@ final class SpawnEdgeDiffTests: XCTestCase {
         )
     }
 
+    /// Happens-before is transitive: the candidate keeps the constraint through a chain, an edge onto
+    /// work on an ordered queue and that queue's program order, so nothing was dropped.
+    func testAConstraintKeptThroughAChainIsNotALoss() {
+        let baseline = trace("b", [
+            event(0, "Cart.checkout", on: .main),
+            event(1, "Inventory.reserve", on: .ambient, spawnedBy: 0)
+        ])
+        let candidate = trace("c", [
+            event(0, "Cart.checkout", on: .main),
+            event(1, "Inventory.lookup", on: cart, spawnedBy: 0),
+            event(2, "Inventory.reserve", on: cart)
+        ])
+
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
+
+        XCTAssertTrue(edgeDivergences(diff).isEmpty, "the chain proves the constraint: \(diff.divergences)")
+    }
+
+    /// A chain proves nothing through a domain whose order is noise: work after the edge on a concurrent
+    /// queue may have run first.
+    func testAChainThroughAnUnorderedDomainProvesNothing() {
+        let baseline = trace("b", [
+            event(0, "Cart.checkout", on: .main),
+            event(1, "Inventory.reserve", on: cart, spawnedBy: 0)
+        ])
+        let candidate = trace("c", [
+            event(0, "Cart.checkout", on: .main),
+            event(1, "Inventory.lookup", on: .ambient, spawnedBy: 0),
+            event(2, "Inventory.reserve", on: .ambient)
+        ])
+
+        let diff = BehavioralDiff.compare(baseline: baseline, candidate: candidate)
+
+        XCTAssertEqual(edgeDivergences(diff).map(\.kind), [.orderingLost], "\(diff.divergences)")
+    }
+
     /// The reverse shape: the candidate synchronizes a pair the baseline left concurrent — the
     /// awaited port of fire-and-forget work. A real behavioral change (everything downstream now
     /// waits), so it gates until declared, exactly like a loss.
