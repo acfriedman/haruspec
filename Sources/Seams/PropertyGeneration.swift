@@ -316,7 +316,10 @@ public extension CassetteData {
         for variant in 0 ..< max(0, count) {
             generator.beginVariant(variant)
             var newTracks = tracks
-            for (seam, track) in tracks {
+            // In seam order: the generator draws from one random stream, and a dictionary's own order
+            // moves between processes, which would hand a seam another seam's draws.
+            for seam in tracks.keys.sorted() {
+                let track = tracks[seam] ?? []
                 var newTrack: [CanonicalValue] = []
                 newTrack.reserveCapacity(track.count)
                 for (position, value) in track.enumerated() {
