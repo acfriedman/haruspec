@@ -36,6 +36,22 @@ public struct HeldScheduler: Scheduler, Sendable {
         case serial(String)
         /// A concurrent queue, whose order is noise, in the domain `queue(concurrent):<label>`.
         case concurrent(String)
+
+        /// The label that names the queue's domain, and how the queue orders its work.
+        ///
+        /// - Precondition: A serial or concurrent queue's label is non-empty.
+        var named: (label: String, discipline: ScheduleDiscipline) {
+            switch self {
+            case .main:
+                return ("main", .main)
+            case let .serial(label), let .concurrent(label):
+                precondition(
+                    !label.isEmpty,
+                    "a held queue needs a label, which names its domain: .serial(\"uploads\")"
+                )
+                return (label, self == .serial(label) ? .serial : .concurrent)
+            }
+        }
     }
 
     /// The uptime `now` reads at virtual time zero. Fixed, so a reading is the same every run, and
@@ -55,26 +71,7 @@ public struct HeldScheduler: Scheduler, Sendable {
     /// - Precondition: A serial or concurrent queue's label is non-empty.
     init(_ queue: Queue, backlog: WorkBacklog) {
         self.backlog = backlog
-        switch queue {
-        case .main:
-            (label, discipline) = ("main", .main)
-        case let .serial(label):
-            (self.label, discipline) = (Self.checked(label), .serial)
-        case let .concurrent(label):
-            (self.label, discipline) = (Self.checked(label), .concurrent)
-        }
-    }
-
-    /// Returns `label`, trapping when it is empty.
-    ///
-    /// - Parameter label: A serial or concurrent queue's label.
-    /// - Returns: `label`, which names the queue's domain.
-    private static func checked(_ label: String) -> String {
-        precondition(
-            !label.isEmpty,
-            "a held scheduler's queue needs a label, which names its domain: .serial(\"uploads\")"
-        )
-        return label
+        (label, discipline) = queue.named
     }
 
     // gloss:exempt implements Scheduler.now, documented on the type
