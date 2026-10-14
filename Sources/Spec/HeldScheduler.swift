@@ -19,9 +19,10 @@ import HaruspecTrace
 /// - The repeating form re-arms on virtual time until it is cancelled. One that never is stops at
 ///   the backlog's step limit, leaving the held-work marker.
 ///
-/// A copy is the same queue; two calls to ``SeamContext/scheduler(_:)`` are two queues, even with
-/// one label. Of `SchedulerOptions`, only `group` has meaning under test, and only on the immediate
-/// form, where `DispatchQueue` honors it too: the work is in the group until it has run.
+/// A copy is the same queue; two calls to ``SeamContext/scheduler(_:)`` are two queues, and two queues
+/// may not share a label in one capture (the capture traps, naming them). Of `SchedulerOptions`, only
+/// `group` has meaning under test, and only on the immediate form, where `DispatchQueue` honors it too:
+/// the work is in the group until it has run.
 public struct HeldScheduler: Scheduler, Sendable {
     // gloss:exempt implements Scheduler.SchedulerTimeType; DispatchQueue's, documented on the type
     public typealias SchedulerTimeType = DispatchQueue.SchedulerTimeType
@@ -59,7 +60,7 @@ public struct HeldScheduler: Scheduler, Sendable {
     private static let epoch: UInt64 = 1_000_000_000
 
     private let backlog: WorkBacklog
-    private let identity = Identity()
+    let identity: Identity
     private let label: String
     private let discipline: ScheduleDiscipline
 
@@ -72,6 +73,7 @@ public struct HeldScheduler: Scheduler, Sendable {
     init(_ queue: Queue, backlog: WorkBacklog) {
         self.backlog = backlog
         (label, discipline) = queue.named
+        identity = Identity(discipline)
     }
 
     // gloss:exempt implements Scheduler.now, documented on the type
@@ -160,7 +162,23 @@ public struct HeldScheduler: Scheduler, Sendable {
     }
 
     /// The queue's identity in the backlog, shared by every copy of one scheduler.
-    private final class Identity: Sendable {}
+    final class Identity: QueueNaming, Sendable {
+        let queueKind = "HeldScheduler"
+        private let discipline: ScheduleDiscipline
+
+        /// Creates the identity of a scheduler whose queue orders its work by `discipline`.
+        ///
+        /// - Parameter discipline: How the queue orders its work, which the naming example shows.
+        init(_ discipline: ScheduleDiscipline) {
+            self.discipline = discipline
+        }
+
+        // gloss:exempt implements QueueNaming.naming(_:), documented on the protocol
+        func naming(_ label: String) -> String {
+            let kind = discipline == .concurrent ? "concurrent" : "serial"
+            return "context.scheduler(.\(kind)(\"\(label)\"))"
+        }
+    }
 
     /// The cancellation a repeating schedule returns, read before each fire.
     private final class Repetition: Cancellable, @unchecked Sendable {

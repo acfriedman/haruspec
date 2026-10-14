@@ -240,13 +240,31 @@ The discipline names the domain the work records on: `.serial` is `queue(serial)
 thread. A port that changes discipline depends on a different protocol, and the diff sees a different
 domain.
 
+A domain is a label and a discipline, nothing more, so every queue of one protocol records as the same
+domain. When a subject takes two queues of one protocol, name each where you inject it, the same way
+on both sides of the spec; the name becomes the domain:
+
+```swift
+TwoQueueJournal(
+    state: context.double(DoubleJournalQueue.self, label: "state"),   // queue(serial):state
+    io: context.double(DoubleJournalQueue.self, label: "io")          // queue(serial):io
+)
+```
+
+Left unnamed, the capture traps the first time the second queue hands over work, naming both and the
+fix. One domain would read their order against each other, which is noise, as a guarantee: work moved
+from one to the other would go unseen, and order across them would be compared. `main` is exempt,
+since every main-queue seam is the one main queue. Derived construction (`baselined(on:)`) never names
+queues for you, because a baseline's `workQueue` and a port's `stateQueue` would read as a move; wire
+such a subject in `.baselined { context in … }`.
+
 Under test, the double holds each piece of work in the capture's backlog. The capture runs held work
 one item at a time, in enqueue order, after the operations (and at settle points, below): the same
 order every run. Each item is attributed to the operation that enqueued it, and its first event in
-each domain names the traced call that enqueued it as its cause. Work one held item hands on, with no traced call open,
-carries that item's cause forward: a block queued from inside a block still names the call that queued
-the first. A backlog that never
-empties (a timer that re-arms itself) stops after 10,000 items and leaves the marker
+each domain names the traced call that enqueued it as its cause. Work one held item hands on, with no
+traced call open, carries that item's cause forward: a block queued from inside a block still names the
+call that queued the first. A backlog that never empties (a timer that re-arms itself) stops after
+10,000 items and leaves the marker
 `⟨haruspec: scheduled work still held at snapshot⟩`. Structured children of held work
 (`withTaskGroup`, `async let`) inherit its domain and finish inside the drain, but run concurrently, so
 their order among themselves is not controlled.
@@ -261,9 +279,10 @@ double for that boundary.
 }
 ```
 
-It holds work the way a stamped scheduling double does, and its time and option types are
-`DispatchQueue`'s, so a project's type-erased scheduler takes it too (`AnySchedulerOf<DispatchQueue>`
-through `eraseToAnyScheduler()`).
+It holds work the way a stamped scheduling double does, and its label is its domain just as a
+double's is: two schedulers, or a scheduler and an operation queue, on one label in a capture trap.
+Its time and option types are `DispatchQueue`'s, so a project's type-erased scheduler takes it too
+(`AnySchedulerOf<DispatchQueue>` through `eraseToAnyScheduler()`).
 
 | Scheduler call | Under test |
 | --- | --- |
