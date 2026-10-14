@@ -1,9 +1,8 @@
 import Foundation
 import HaruspecTrace
 
-/// An `OperationQueue` whose operations the capture holds, as a stamped scheduling double's work is.
-/// It is what a spec hands a subject that takes an injected queue, from
-/// ``SeamContext/operationQueue(_:)``.
+/// An `OperationQueue` whose operations the capture holds, as a stamped scheduling double's work is:
+/// what a spec hands a subject that takes an injected queue, from ``SeamContext/operationQueue(_:)``.
 ///
 /// Foundation runs an operation on a thread of its own and delivers its `completionBlock` on yet
 /// another, so neither reaches the capture. This queue starts each operation as held work instead,
@@ -29,9 +28,10 @@ import HaruspecTrace
 ///   capture drains, after the subject returns. ``Operation/waitUntilFinished()`` belongs to the
 ///   operation, so no queue can catch it: it hangs.
 public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
-    /// The queue a held operation queue stands in for: `.main`, `.serial(label)` or
-    /// `.concurrent(label)`. A serial queue starts with a `maxConcurrentOperationCount` of 1, a
-    /// concurrent one with Foundation's default.
+    /// The queue a held operation queue stands in for, which names its domain.
+    ///
+    /// A serial queue starts with a `maxConcurrentOperationCount` of 1, a concurrent one with
+    /// Foundation's default.
     public typealias Queue = HeldScheduler.Queue
 
     private let backlog: WorkBacklog
@@ -292,22 +292,22 @@ public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
         backlog.enqueue(on: self, label: label, discipline: discipline, work)
     }
 
+    /// Where an entry is between its add and its completion.
+    private enum EntryState {
+        /// Added, and not yet handed to the backlog.
+        case waiting
+        /// Handed to the backlog, or running: it holds one of the queue's places.
+        case started
+        /// Finished, its completion held: off ``HeldOperationQueue/operations``, still in its place.
+        case finished
+    }
+
     /// One operation on the queue, from its add to its completion. Its `state` changes under the
     /// queue's lock; the rest is touched only by the held work running it, one item at a time.
     private final class Entry: @unchecked Sendable {
-        /// Where an entry is between its add and its completion.
-        enum State {
-            /// Added, and not yet handed to the backlog.
-            case waiting
-            /// Handed to the backlog, or running: it holds one of the queue's places.
-            case started
-            /// Finished, its completion held: off ``HeldOperationQueue/operations``, still in its place.
-            case finished
-        }
-
         let operation: Operation
         let isBarrier: Bool
-        var state = State.waiting
+        var state = EntryState.waiting
         /// The block taken from the operation before its start, which the queue runs once it finishes.
         var completion: (() -> Void)?
         var readiness: NSKeyValueObservation?
@@ -327,12 +327,13 @@ public final class HeldOperationQueue: OperationQueue, @unchecked Sendable {
 
 public extension SeamContext {
     /// Returns an `OperationQueue` whose operations this capture holds, for a subject that takes one.
-    /// It is the double for that boundary: the subject depends on Foundation's class, so no stamp can
-    /// paste it.
     ///
     /// - Parameter queue: The queue the subject's stands in for, which names its domain.
     /// - Returns: A queue over this capture's backlog; see ``HeldOperationQueue``.
     /// - Precondition: A serial or concurrent queue's label is non-empty.
+    ///
+    /// It is the double for that boundary: the subject depends on Foundation's class, so no stamp can
+    /// paste it.
     ///
     /// ```swift
     /// .baselined { context in
