@@ -158,6 +158,28 @@ public final class WorkBacklog: @unchecked Sendable {
         return items.count
     }
 
+    /// The happens-before cause of work handed over at one moment: the traced call that handed it over.
+    ///
+    /// Inside held work that no traced call encloses, it is that work's own cause, carried forward. Work
+    /// one held item hands on was caused by whatever caused the item, so a completion held from inside
+    /// an operation still names the call that queued the operation, however many hops away it lands.
+    public struct Cause: Sendable, Equatable {
+        /// The sequence number of the causing call's event; `nil` when no traced call caused the work.
+        let seq: Int?
+    }
+
+    /// Returns the cause work handed over here and now would carry.
+    ///
+    /// - Returns: The traced call open here; inside held work no call encloses, that work's cause; or
+    ///   no cause, outside both.
+    ///
+    /// A seam that holds work later than its subject handed it over (an operation queue waiting on a
+    /// dependency) reads this at the hand-off and passes it to
+    /// ``enqueue(on:label:discipline:after:notifying:causedBy:_:)``.
+    public static func causeHere() -> Cause {
+        Cause(seq: TraceContext.active?.enclosingCallSeq() ?? TraceContext.pendingSpawnCause?.origin)
+    }
+
     // MARK: - Enqueue (what a scheduling double does)
 
     /// Holds synchronous work handed to `queue`.
@@ -168,6 +190,8 @@ public final class WorkBacklog: @unchecked Sendable {
     ///   - discipline: How the double's protocol orders its work.
     ///   - delay: Seconds of virtual time before the work is ready; `nil` for ready at once.
     ///   - group: A group whose emptying releases the work; `nil` for work not gated on one.
+    ///   - cause: The work's happens-before cause, read earlier with ``causeHere()``; `nil` for the
+    ///     cause at this enqueue.
     ///   - work: The work.
     public func enqueue(
         on queue: AnyObject,
@@ -175,9 +199,18 @@ public final class WorkBacklog: @unchecked Sendable {
         discipline: ScheduleDiscipline,
         after delay: TimeInterval? = nil,
         notifying group: DispatchGroup? = nil,
+        causedBy cause: Cause? = nil,
         _ work: @escaping () -> Void
     ) {
-        hold(queue: queue, label: label, discipline: discipline, body: .sync(work), delay: delay, group: group)
+        hold(
+            queue: queue,
+            label: label,
+            discipline: discipline,
+            body: .sync(work),
+            delay: delay,
+            group: group,
+            cause: cause
+        )
     }
 
     /// Holds an unstructured task's operation handed to `queue`: the project's `Task { … }`, spawned
@@ -194,7 +227,15 @@ public final class WorkBacklog: @unchecked Sendable {
         discipline: ScheduleDiscipline,
         _ operation: @escaping () async -> Void
     ) {
-        hold(queue: queue, label: label, discipline: discipline, body: .async(operation), delay: nil, group: nil)
+        hold(
+            queue: queue,
+            label: label,
+            discipline: discipline,
+            body: .async(operation),
+            delay: nil,
+            group: nil,
+            cause: nil
+        )
     }
 
     /// Runs `work` as `queue` would run a `sync`: after every ready item already held for that queue,
@@ -304,11 +345,11 @@ public final class WorkBacklog: @unchecked Sendable {
         discipline: ScheduleDiscipline,
         body: Body,
         delay: TimeInterval?,
-        group: DispatchGroup?
+        group: DispatchGroup?,
+        cause: Cause?
     ) {
         // Read at the enqueue: the only moment the enqueueing call and op are both in hand.
-        let recorder = TraceContext.active
-        let cause = recorder?.enclosingCallSeq()
+        let cause = (cause ?? Self.causeHere()).seq
         let op = TraceContext.activeOp
         lock.lock(); defer { lock.unlock() }
         items.append(Item(

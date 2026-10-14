@@ -7,7 +7,7 @@ import XCTest
 /// run by the engine, one item at a time, in one order: the same order every run.
 ///
 /// These drive the backlog directly, as a stamped scheduling double does (`DoubleCartQueue` hands
-/// each `async` to ``WorkBacklog/enqueue(on:label:discipline:after:notifying:_:)``).
+/// each `async` to ``WorkBacklog/enqueue(on:label:discipline:after:notifying:causedBy:_:)``).
 final class WorkBacklogTests: XCTestCase {
     /// Stands in for a scheduling double: the identity `sync` drains by.
     private final class Queue {}

@@ -242,7 +242,10 @@ domain.
 
 Under test, the double holds each piece of work in the capture's backlog. The capture runs held work
 one item at a time, in enqueue order, after the operations (and at settle points, below): the same
-order every run. Each item is attributed to the operation that enqueued it. A backlog that never
+order every run. Each item is attributed to the operation that enqueued it, and its first event names
+the traced call that enqueued it as its cause. Work one held item hands on, with no traced call open,
+carries that item's cause forward: a block queued from inside a block still names the call that queued
+the first. A backlog that never
 empties (a timer that re-arms itself) stops after 10,000 items and leaves the marker
 `⟨haruspec: scheduled work still held at snapshot⟩`. Structured children of held work
 (`withTaskGroup`, `async let`) inherit its domain and finish inside the drain, but run concurrently, so
@@ -286,7 +289,9 @@ operations start as held work.
 
 A real queue delivers each `completionBlock` on a thread of its own, after the operation, so a spec
 over one records none of it: a port that never uploads reads `EQUIVALENT`. The held queue takes the
-block before the start, so Foundation has nothing to deliver, and runs it itself as held work.
+block before the start, so Foundation has nothing to deliver, and runs it itself as held work. The
+operation's start and its completion both name the call that added the operation as their cause,
+whichever held work releases them.
 
 | Queue behavior | Under test |
 | --- | --- |

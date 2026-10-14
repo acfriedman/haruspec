@@ -64,8 +64,10 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     /// baseline's bindings, and a version-9 probe without them would answer a candidate by position.
     /// Bumped to 11 when settle points landed: a probe's ordering may carry settle steps, and a
     /// version-10 plan recorded every gap held, so it replays only the schedule settle points exist
-    /// to widen.
-    public static let supportedSchemaVersion = 11
+    /// to widen. Bumped to 12 when held work began carrying its cause forward: work one held item
+    /// hands on now names the call that caused the item, and a version-11 golden's missing edge would
+    /// read as the candidate adding synchronization.
+    public static let supportedSchemaVersion = 12
 
     public var schemaVersion: Int
     public var specName: String
