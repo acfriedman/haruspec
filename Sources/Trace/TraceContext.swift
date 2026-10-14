@@ -38,6 +38,66 @@ public enum TraceContext {
     /// work it calls stays `ambient`.
     @TaskLocal public static var capturesOffMain = false
 
+    /// A traced call that has not returned: its event's sequence number and the domain it recorded on.
+    public struct OpenCall: Sendable, Equatable {
+        /// The call event's sequence number, which work it hands on names as its cause.
+        public let seq: Int
+        /// The domain the call recorded on, which an `ambient` event inside it inherits.
+        public let domain: ConcurrencyDomain
+    }
+
+    /// The traced calls an event may count as enclosing, bound for a task rather than a thread.
+    ///
+    /// A forwarder binds the call it opened around the body it forwards to, so the call still encloses
+    /// that body after an `await` resumes it on another thread: a `@MainActor` method runs on main while
+    /// its call was recorded on the capture's thread. Held work binds no call, so a call open on the
+    /// thread that runs it (a `sync` inside a traced call) is not its cause.
+    ///
+    /// Calls recorded straight on the recorder, with no forwarder, still sit on its per-thread stack; one
+    /// pushed at or after `floor` encloses too, and the latest of the two wins.
+    struct CallScope: Sendable {
+        /// The call the forwarder opened; `nil` inside held work.
+        let call: OpenCall?
+        /// The first sequence number a per-thread call must have to count inside this scope.
+        let floor: Int
+    }
+
+    /// The call scope bound for the running task; `nil` outside any forwarder or held work.
+    @TaskLocal static var callScope: CallScope?
+
+    /// Runs `body` with `call` as the traced call enclosing it, wherever `body` resumes.
+    ///
+    /// - Parameters:
+    ///   - call: The call a forwarder just recorded; `nil` when nothing is recording, which binds nothing.
+    ///   - body: The forwarded method.
+    /// - Returns: What `body` returns.
+    /// - Throws: What `body` throws.
+    public static func withOpenCall<Result>(_ call: OpenCall?, _ body: () throws -> Result) rethrows -> Result {
+        guard let call else {
+            return try body()
+        }
+        return try $callScope.withValue(CallScope(call: call, floor: call.seq), operation: body)
+    }
+
+    /// Runs `body` with `call` as the traced call enclosing it, wherever `body` resumes.
+    ///
+    /// - Parameters:
+    ///   - call: The call a forwarder just recorded; `nil` when nothing is recording, which binds nothing.
+    ///   - isolation: The caller's isolation, which `body` keeps.
+    ///   - body: The forwarded method.
+    /// - Returns: What `body` returns.
+    /// - Throws: What `body` throws.
+    public static func withOpenCall<Result>(
+        _ call: OpenCall?,
+        isolation _: isolated (any Actor)? = #isolation,
+        _ body: () async throws -> Result
+    ) async rethrows -> Result {
+        guard let call else {
+            return try await body()
+        }
+        return try await $callScope.withValue(CallScope(call: call, floor: call.seq), operation: body)
+    }
+
     /// The cause of the held work now running, and where it has been claimed. A box rather than a value
     /// because a task-local cannot be rebound mid-work, and claiming has to mutate something the
     /// binding merely points at.

@@ -319,11 +319,14 @@ public final class WorkBacklog: @unchecked Sendable {
                 job.run()
             }
         case let .async(operation):
+            let scope = Self.heldScope(recorder ?? TraceContext.current)
             await TraceContext.$current.withValue(recorder ?? TraceContext.current) {
                 await TraceContext.$currentOp.withValue(item.op) {
                     await TraceContext.$pendingSpawnCause.withValue(TraceContext.SpawnCause(item.cause)) {
-                        await Self.$entered.withValue(Entered(domain: item.domain, isTask: true)) {
-                            await operation()
+                        await TraceContext.$callScope.withValue(scope) {
+                            await Self.$entered.withValue(Entered(domain: item.domain, isTask: true)) {
+                                await operation()
+                            }
                         }
                     }
                 }
@@ -370,21 +373,33 @@ public final class WorkBacklog: @unchecked Sendable {
     /// Runs one synchronous item with the capture bound: the recorder, the op it was enqueued under,
     /// its spawn cause, and the domain it was handed to.
     private func invoke(_ body: () -> Void, of item: Item, recorder: TraceRecorder?) {
-        TraceContext.$current.withValue(recorder ?? TraceContext.active) {
+        let recorder = recorder ?? TraceContext.active
+        TraceContext.$current.withValue(recorder) {
             TraceContext.$currentOp.withValue(item.op) {
                 TraceContext.$pendingSpawnCause.withValue(TraceContext.SpawnCause(item.cause)) {
-                    Self.$entered.withValue(Entered(domain: item.domain, isTask: false)) {
-                        if let delay = item.delay {
-                            TraceContext.active?.timerFired(
-                                delay: .int(Int64((delay * 1000).rounded())),
-                                isolation: nil
-                            )
+                    TraceContext.$callScope.withValue(Self.heldScope(recorder)) {
+                        Self.$entered.withValue(Entered(domain: item.domain, isTask: false)) {
+                            if let delay = item.delay {
+                                TraceContext.active?.timerFired(
+                                    delay: .int(Int64((delay * 1000).rounded())),
+                                    isolation: nil
+                                )
+                            }
+                            body()
                         }
-                        body()
                     }
                 }
             }
         }
+    }
+
+    /// The call scope held work runs in: no call encloses it, so a call still open on the draining
+    /// thread is not its cause, but a call it opens itself is.
+    ///
+    /// - Parameter recorder: The capture's recorder, whose next sequence number is the scope's floor.
+    /// - Returns: A scope with no call, floored at the work's first event.
+    private static func heldScope(_ recorder: TraceRecorder?) -> TraceContext.CallScope {
+        TraceContext.CallScope(call: nil, floor: recorder?.nextSeq ?? 0)
     }
 
     private func takeNext(advancingClock: Bool) -> Item? {

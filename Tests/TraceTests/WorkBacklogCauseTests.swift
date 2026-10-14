@@ -114,4 +114,50 @@ final class WorkBacklogCauseTests: XCTestCase {
         XCTAssertEqual(byLabel["published"]?.spawnedBy, refresh.seq, "first on main")
         XCTAssertNil(byLabel["announced"]?.spawnedBy, "main's program order carries the rest")
     }
+
+    /// A call bound for its task still encloses work handed over after an await moved it to main: a
+    /// `@MainActor` method runs there while its call was recorded on the capture's thread.
+    func testACallStillEnclosesWorkHandedOverAfterAHopToMain() async throws {
+        let recorder = TraceRecorder(name: "hop to main")
+        let backlog = WorkBacklog()
+
+        await TraceContext.$current.withValue(recorder) {
+            let refresh = recorder.call("Shelf.refresh")
+            await TraceContext.withOpenCall(refresh) {
+                await MainActor.run {
+                    backlog.enqueue(on: Queue(), label: "Lookups", discipline: .concurrent) {
+                        Haruspec.marker("looked up")
+                    }
+                }
+            }
+            recorder.ret("Shelf.refresh")
+        }
+        await backlog.drain(recorder: recorder)
+
+        let refresh = try XCTUnwrap(events(recorder).first { $0.label == "Shelf.refresh" })
+        XCTAssertEqual(events(recorder).first { $0.label == "looked up" }?.spawnedBy, refresh.seq)
+    }
+
+    /// Held work a `sync` runs inline inside a traced call was not caused by that call: what it hands on
+    /// carries the held work's own cause.
+    func testHeldWorkRunInsideASyncHandsOnItsOwnCause() async throws {
+        let recorder = TraceRecorder(name: "sync")
+        let backlog = WorkBacklog()
+        let queue = Queue()
+
+        TraceContext.$current.withValue(recorder) {
+            recorder.call("Till.ring")
+            backlog.enqueue(on: queue, label: "Till", discipline: .serial) {
+                backlog.enqueue(on: queue, label: "Till", discipline: .serial) { Haruspec.marker("posted") }
+            }
+            recorder.ret("Till.ring")
+            recorder.call("Till.readTotal")
+            backlog.runSync(on: queue, label: "Till", discipline: .serial) {}
+            recorder.ret("Till.readTotal")
+        }
+        await backlog.drain(recorder: recorder)
+
+        let ring = try XCTUnwrap(events(recorder).first { $0.label == "Till.ring" })
+        XCTAssertEqual(events(recorder).first { $0.label == "posted" }?.spawnedBy, ring.seq, "not Till.readTotal")
+    }
 }
