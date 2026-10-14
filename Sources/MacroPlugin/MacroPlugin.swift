@@ -41,10 +41,12 @@ func tracedBody(
 ) -> String {
     let label = literalString(rawLabel)
 
-    let effects = function.signature.effectSpecifiers
-    let isAsync = effects?.asyncSpecifier != nil
-    let isThrows = effects?.throwsClause != nil
-    let invoke = "\(isThrows ? "try " : "")\(isAsync ? "await " : "")__oracleBody()"
+    let specifiers = function.signature.effectSpecifiers
+    let isAsync = specifiers?.asyncSpecifier != nil
+    let isThrows = specifiers?.throwsClause != nil
+    let effects = "\(isThrows ? "try " : "")\(isAsync ? "await " : "")"
+    // The open call is bound for the task, so it still encloses the body after an await moves it.
+    let invoke = "\(effects)TraceContext.withOpenCall(__oracleCall) { \(effects)__oracleBody() }"
 
     let returnType = function.signature.returnClause?.type.trimmedDescription
     let isVoid = returnType == nil || returnType == "Void" || returnType == "()"
@@ -69,7 +71,7 @@ func tracedBody(
     var lines: [String] = [
         "let __oracle = TraceContext.active",
         "__oracle?.noteOrigin(\(origin))",
-        "__oracle?.call(\(label), subject: self\(callArgs)\(isolation))",
+        "let __oracleCall = __oracle?.call(\(label), subject: self\(callArgs)\(isolation))",
         "\(nestedSignature) { \(innerBody)",
         "}"
     ]

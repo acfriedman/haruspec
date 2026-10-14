@@ -20,11 +20,8 @@ public final class TraceRecorder: @unchecked Sendable {
     private var seqCounter = 0
     private var depth = 0
 
-    /// The domain of each traced call still in progress, per thread. An effect emitted inside a call
-    /// belongs to the domain of the work that caused it, even when the machinery that carried it —
-    /// Foundation's notification dispatch, a collaborator decorator — sits one frame away and is
-    /// isolated to nothing itself.
-    private var callDomains: [ObjectIdentifier: [(seq: Int, domain: ConcurrencyDomain)]] = [:]
+    /// The traced calls still in progress, per thread; see ``CallStacks``.
+    private var calls = CallStacks()
 
     // Symbolic identity, assigned in first-seen order for run-stability. Covers traced subjects and
     // actor domain instances alike.
@@ -69,15 +66,19 @@ public final class TraceRecorder: @unchecked Sendable {
     ///   - subject: The instance the call was made on; `nil` for a static or free function.
     ///   - args: The arguments, canonicalized and keyed by internal parameter name; `nil` records none.
     ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
+    /// - Returns: The call, which a forwarder binds around its body with ``TraceContext/withOpenCall(_:_:)``.
+    @discardableResult
     public func call(
         _ label: String,
         subject: AnyObject? = nil,
         args: CanonicalValue? = nil,
         isolation: (any Actor)? = #isolation
-    ) {
+    ) -> TraceContext.OpenCall {
         lock.lock(); defer { lock.unlock() }
+        let seq = seqCounter
         appendLocked(isolation: isolation, kind: .call, label: label, subject: subject, payload: args)
         depth += 1
+        return TraceContext.OpenCall(seq: seq, domain: events[events.count - 1].domain)
     }
 
     /// Records a function or method return and shallows call nesting by one, never below zero. The
@@ -266,7 +267,14 @@ public final class TraceRecorder: @unchecked Sendable {
     /// edge are known.
     public func enclosingCallSeq() -> Int? {
         lock.lock(); defer { lock.unlock() }
-        return callDomains[ObjectIdentifier(Thread.current)]?.last?.seq
+        return calls.enclosing()?.seq
+    }
+
+    /// The sequence number the next event will carry: the floor held work binds, so a call it opens
+    /// encloses and a call already open on its thread does not.
+    var nextSeq: Int {
+        lock.lock(); defer { lock.unlock() }
+        return seqCounter
     }
 
     /// The current clock reading, in ticks. Used by a timed forwarder's generated timing.
@@ -369,21 +377,15 @@ public final class TraceRecorder: @unchecked Sendable {
     /// Only `ambient` inherits. An event that resolved to an actor or a queue knows its own domain and
     /// is never overridden by its caller's.
     private func attributedDomainLocked(_ isolation: (any Actor)?, kind: EventKind) -> ConcurrencyDomain {
-        let key = ObjectIdentifier(Thread.current)
         var domain = domainLocked(isolation)
-        if domain == .ambient, let enclosing = callDomains[key]?.last?.domain {
+        if domain == .ambient, let enclosing = calls.enclosing()?.domain {
             domain = enclosing
         }
         switch kind {
         case .call:
-            callDomains[key, default: []].append((seq: seqCounter, domain: domain))
+            calls.push(TraceContext.OpenCall(seq: seqCounter, domain: domain))
         case .ret:
-            // Defensive rather than symmetric: an async traced call may resume on another thread,
-            // leaving this one's stack short. Popping what is not there would attribute later events
-            // to a caller that has already returned.
-            if callDomains[key]?.isEmpty == false {
-                callDomains[key]?.removeLast()
-            }
+            calls.pop()
         default:
             break
         }
