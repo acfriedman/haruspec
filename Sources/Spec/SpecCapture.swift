@@ -69,15 +69,18 @@ extension Spec {
                 await WorkBacklog.$current.withValue(context.backlog) {
                     for operation in order {
                         if let settle = operation.settle {
-                            await context.backlog.settle(settle, recorder: recorder)
+                            await Self.settleHeld(settle, context.backlog, recorder: recorder)
                             continue
                         }
                         await TraceContext.$currentOp.withValue(OpIdentity(
                             label: operation.label,
                             position: position
                         )) {
-                            await operation.action(system, context)
-                            await sampler.sample()
+                            let region = "operation '\(operation.label)'"
+                            await HeldWorkWatchdog.watching(region, backlog: context.backlog, recorder: recorder) {
+                                await operation.action(system, context)
+                                await sampler.sample()
+                            }
                         }
                         position += 1
                         if position < operationCount, context.backlog.pendingCount > 0 {
@@ -90,9 +93,7 @@ extension Spec {
             // under, and runs with the recorder rebound — but it has to have run, or the snapshot is a
             // reading of a program that has not finished. Delayed work fires on virtual time once nothing
             // else is ready, so a debounce's deferred tail lands inside the capture too.
-            if await context.backlog.drain(recorder: recorder) == false {
-                recorder.marker("⟨haruspec: scheduled work still held at snapshot⟩")
-            }
+            await Self.drainHeld(context.backlog, recorder: recorder)
         }
         // The end-state snapshots: after quiescence (a racing read is not a reading), the harness
         // itself reads each observed property back. Harness-read on both sides by construction — the
@@ -101,6 +102,34 @@ extension Spec {
             await recorder.snapshot(property.label, value: RuntimeValue.canonical(property.read(system)))
         }
         return Captured(trace: recorder.trace(), heldWorkAtGaps: heldWorkAtGaps)
+    }
+
+    /// Runs held work as far as `settle` lets it, watched for a stall.
+    ///
+    /// - Parameters:
+    ///   - settle: How far the work may run at this gap.
+    ///   - backlog: The capture's held work.
+    ///   - recorder: The capture's recorder.
+    private static func settleHeld(_ settle: Settle, _ backlog: WorkBacklog, recorder: TraceRecorder) async {
+        await HeldWorkWatchdog.watching("settle:\(settle.rawValue) step", backlog: backlog, recorder: recorder) {
+            await backlog.settle(settle, recorder: recorder)
+        }
+    }
+
+    /// Runs the work a capture's settle schedule left held, watched for a stall, and marks the trace
+    /// when some is still held after it.
+    ///
+    /// - Parameters:
+    ///   - backlog: The capture's held work.
+    ///   - recorder: The capture's recorder.
+    private static func drainHeld(_ backlog: WorkBacklog, recorder: TraceRecorder) async {
+        let region = "drain after the last operation"
+        let drained = await HeldWorkWatchdog.watching(region, backlog: backlog, recorder: recorder) {
+            await backlog.drain(recorder: recorder)
+        }
+        if drained == false {
+            recorder.marker("⟨haruspec: scheduled work still held at snapshot⟩")
+        }
     }
 
     /// Traps on an op whose closure is isolated to an actor, naming the fix.

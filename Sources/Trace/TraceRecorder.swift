@@ -250,6 +250,12 @@ public final class TraceRecorder: @unchecked Sendable {
         return result
     }
 
+    /// How many events have been recorded so far: progress, for a watchdog.
+    var eventCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return events.count
+    }
+
     /// A snapshot of the trace captured so far.
     public func trace() -> Trace {
         lock.lock(); defer { lock.unlock() }

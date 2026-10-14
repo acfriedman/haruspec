@@ -143,6 +143,7 @@ public final class WorkBacklog: @unchecked Sendable {
     // supports macOS 13, where `Mutex` does not exist.
     private let lock = NSLock()
     private var items: [Item] = []
+    private var taken = 0
     /// The queue each domain belongs to in this capture; see ``DomainOwners``.
     private var owners = DomainOwners()
     private var nextSeq = 0
@@ -406,11 +407,16 @@ public final class WorkBacklog: @unchecked Sendable {
     private static func heldScope(_ recorder: TraceRecorder?) -> TraceContext.CallScope {
         TraceContext.CallScope(call: nil, floor: recorder?.nextSeq ?? 0)
     }
+}
 
+// MARK: - Taking held work
+
+extension WorkBacklog {
     private func takeNext(advancingClock: Bool) -> Item? {
         lock.lock(); defer { lock.unlock() }
         releaseEmptiedGroups()
         if let index = items.firstIndex(where: { $0.isReady(at: virtualNow) }) {
+            taken += 1
             return items.remove(at: index)
         }
         guard advancingClock else {
@@ -422,6 +428,7 @@ public final class WorkBacklog: @unchecked Sendable {
             return nil
         }
         virtualNow = items[earliest].deadline!
+        taken += 1
         return items.remove(at: earliest)
     }
 
@@ -462,6 +469,31 @@ public final class WorkBacklog: @unchecked Sendable {
     private func take(where matches: (Item) -> Bool) -> Item? {
         lock.lock(); defer { lock.unlock() }
         guard let index = items.firstIndex(where: matches) else { return nil }
+        taken += 1
         return items.remove(at: index)
+    }
+}
+
+// MARK: - What a stalled capture reads
+
+extension WorkBacklog {
+    /// How many held items have been taken to run so far: progress, for a watchdog that has to tell a
+    /// slow capture from a stuck one.
+    var itemsTaken: Int {
+        lock.lock(); defer { lock.unlock() }
+        return taken
+    }
+
+    /// Describes the held work, by the domain each item records on, for a message about it.
+    ///
+    /// - Returns: For example `2 on queue(serial):CatalogQueue, 1 on main`; `nothing` when none is held.
+    func heldSummary() -> String {
+        lock.lock(); defer { lock.unlock() }
+        guard !items.isEmpty else { return "nothing" }
+        var counts: [String: Int] = [:]
+        for item in items {
+            counts[item.domain.description, default: 0] += 1
+        }
+        return counts.sorted { $0.key < $1.key }.map { "\($0.value) on \($0.key)" }.joined(separator: ", ")
     }
 }

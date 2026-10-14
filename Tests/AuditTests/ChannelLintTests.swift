@@ -138,6 +138,26 @@ final class ChannelLintTests: XCTestCase {
         XCTAssertEqual(Set(report.blindSpots), ["Combine", "Timer / RunLoop", "dispatch"])
     }
 
+    /// A wait on work handed to a queue is a dispatch reach: under test the capture holds that work,
+    /// so the wait never returns. Each spelling is flagged on its own.
+    func testFindsWaitsOnQueuedWork() throws {
+        let waits = [
+            "let done = DispatchSemaphore(value: 0)",
+            "dispatch_semaphore_wait(done, DISPATCH_TIME_FOREVER);",
+            "dispatch_group_wait(group, DISPATCH_TIME_FOREVER);",
+            "group.wait()",
+            "_ = loaded.wait(timeout: .now() + 1)"
+        ]
+        for (index, wait) in waits.enumerated() {
+            let path = "App/Wait\(index).swift"
+            try write("final class Loader {\n    func load() {\n        \(wait)\n    }\n}\n", to: path)
+
+            let report = audit([TraceOrigin(label: "L", symbol: "Loader", source: path)])
+
+            XCTAssertEqual(report.blindSpots, ["dispatch"], wait)
+        }
+    }
+
     /// A class that keeps to the injected center is clean — and only an audit that ran may say so.
     func testAnInjectedCenterIsNotAFinding() throws {
         try write(
