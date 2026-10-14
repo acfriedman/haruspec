@@ -88,6 +88,9 @@ public final class WorkBacklog: @unchecked Sendable {
         /// Whether the work is a task, which can hop to another executor mid-body. A block runs
         /// where it was entered, start to finish.
         let isTask: Bool
+        /// The queue the work is running on, which a `sync` onto the same serial queue would wait
+        /// for forever.
+        let queue: ObjectIdentifier
     }
 
     /// Runs after each held item, on the draining task, attributed to the item's op. A capture reads
@@ -248,6 +251,9 @@ public final class WorkBacklog: @unchecked Sendable {
         _ work: () -> Void
     ) {
         let recorder = TraceContext.active
+        if let refusal = Self.syncRefusal(onto: queue, label: label, discipline: discipline) {
+            preconditionFailure(refusal)
+        }
         lock.withLock { owners.claimOrTrap(discipline.domain(label: label), for: queue) }
         // The sync waits behind what is on the queue *now*. Work released while it waits (a group
         // emptying) is enqueued behind it, as GCD would enqueue it.
@@ -258,7 +264,8 @@ public final class WorkBacklog: @unchecked Sendable {
             }
             invoke(body, of: item, recorder: recorder)
         }
-        Self.$entered.withValue(Entered(domain: discipline.domain(label: label), isTask: false)) { work() }
+        let entered = Entered(domain: discipline.domain(label: label), isTask: false, queue: ObjectIdentifier(queue))
+        Self.$entered.withValue(entered) { work() }
     }
 
     // MARK: - Drain (what the engine does)
@@ -320,7 +327,8 @@ public final class WorkBacklog: @unchecked Sendable {
                 await TraceContext.$currentOp.withValue(item.op) {
                     await TraceContext.$pendingSpawnCause.withValue(TraceContext.SpawnCause(item.cause)) {
                         await TraceContext.$callScope.withValue(scope) {
-                            await Self.$entered.withValue(Entered(domain: item.domain, isTask: true)) {
+                            let entered = Entered(domain: item.domain, isTask: true, queue: item.queue)
+                            await Self.$entered.withValue(entered) {
                                 await operation()
                             }
                         }
@@ -375,7 +383,7 @@ public final class WorkBacklog: @unchecked Sendable {
             TraceContext.$currentOp.withValue(item.op) {
                 TraceContext.$pendingSpawnCause.withValue(TraceContext.SpawnCause(item.cause)) {
                     TraceContext.$callScope.withValue(Self.heldScope(recorder)) {
-                        Self.$entered.withValue(Entered(domain: item.domain, isTask: false)) {
+                        Self.$entered.withValue(Entered(domain: item.domain, isTask: false, queue: item.queue)) {
                             if let delay = item.delay {
                                 TraceContext.active?.timerFired(
                                     delay: .int(Int64((delay * 1000).rounded())),
