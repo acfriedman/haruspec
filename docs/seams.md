@@ -269,6 +269,16 @@ call that queued the first. A backlog that never empties (a timer that re-arms i
 (`withTaskGroup`, `async let`) inherit its domain and finish inside the drain, but run concurrently, so
 their order among themselves is not controlled.
 
+Held work runs only when an operation returns (at settle points and the drain), inside a `sync`, and
+while a derived operation waits for a completion block. Code that waits for held work any other way
+would wait forever: an operation awaiting a continuation that queued work resumes
+(`withCheckedContinuation { c in queue.async { c.resume() } }`), a semaphore or group wait on queued
+work, a held task awaiting work queued after it. Each runs fine in production, but the capture can't
+reach it yet. Instead of hanging, the capture fails after 10 seconds with no progress (nothing recorded,
+no held work run) while work is held, naming the operation, the held work, and these shapes. A slow
+operation that holds no work, or keeps recording, is never stopped. The audit names semaphore and group
+waits as the `dispatch` channel.
+
 A subject that takes an injected Combine `Scheduler` gets one from the capture, with no stamp:
 `Scheduler` has associated types, so no protocol can paste it, and `context.scheduler(_:)` is the
 double for that boundary.

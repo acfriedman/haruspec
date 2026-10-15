@@ -110,7 +110,13 @@ public struct ChannelLint: Sendable {
                 "Task.detached",
                 "MainActor.run",
                 "addOperationWithBlock",
-                "addOperation {"
+                "addOperation {",
+                // Waits: a wait on work handed to a queue the capture holds never returns under test.
+                "DispatchSemaphore",
+                "dispatch_semaphore_wait",
+                "dispatch_group_wait",
+                ".wait()",
+                ".wait(timeout:"
             ]
         ),
         // Position decides: a typed context *parameter* is the injection point doing its job (the
