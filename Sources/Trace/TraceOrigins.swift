@@ -47,6 +47,7 @@ public final class OriginCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var origins: Set<TraceOrigin> = []
     private var injected: Set<String> = []
+    private var held: Set<String> = []
 
     public init() {}
 
@@ -60,6 +61,23 @@ public final class OriginCollector: @unchecked Sendable {
     public func noteInjected(label: String) {
         lock.lock(); defer { lock.unlock() }
         injected.insert(label)
+    }
+
+    /// Records that the capture held work through a stand-in it handed the subject.
+    ///
+    /// - Parameter standIn: The stand-in's name, as `HeldStandIn` spells it.
+    ///
+    /// A `context.scheduler` or `context.operationQueue` notes itself here, so the audit can tell a
+    /// reach through it from a reach around the capture.
+    public func noteHeldStandIn(_ standIn: String) {
+        lock.lock(); defer { lock.unlock() }
+        held.insert(standIn)
+    }
+
+    /// The stand-ins the capture held work through, sorted.
+    public var heldStandIns: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return held.sorted()
     }
 
     public var snapshot: [TraceOrigin] {

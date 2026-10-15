@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import HaruspecAudit
 import HaruspecTrace
 
 /// A Combine scheduler whose work the capture holds, as a stamped scheduling double's is. It is
@@ -150,6 +151,7 @@ public struct HeldScheduler: Scheduler, Sendable {
     ///   - delay: Virtual seconds before the work is ready; `nil` for ready at once.
     ///   - work: The work.
     private func hold(after delay: TimeInterval?, _ work: @escaping () -> Void) {
+        TraceOrigins.collector?.noteHeldStandIn(HeldStandIn.scheduler.rawValue)
         backlog.enqueue(on: identity, label: label, discipline: discipline, after: delay, work)
     }
 

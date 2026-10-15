@@ -40,7 +40,7 @@ public struct SourceResolver: Sendable {
         guard !origins.isEmpty else { return [] }
         // Only symbols that actually need finding are searched for, so the content pass is skipped
         // entirely for a subject whose declarations all carry a `#fileID`.
-        let wanted = Set(origins.filter { $0.source == nil }.compactMap(\.symbol))
+        let wanted = Set(origins.filter { $0.source == nil }.compactMap(\.symbol).map(SourceIndex.declarationName))
         let index = SourceIndex(root: root, declarationsFor: wanted)
         return origins.map { SourceResolution(origin: $0, files: index.files(declaring: $0)) }
     }
@@ -84,7 +84,16 @@ private struct SourceIndex {
             return matches(forFileID: fileID)
         }
         guard let symbol = origin.symbol else { return [] }
-        return pathsBySymbol[symbol].map { $0.sorted() } ?? []
+        return pathsBySymbol[Self.declarationName(symbol)].map { $0.sorted() } ?? []
+    }
+
+    /// Returns the name a type is declared under, given the name it runs under: a generic type runs as
+    /// `Feed<HeldScheduler>` and is declared as `Feed<S: Scheduler>`, so the arguments are dropped.
+    ///
+    /// - Parameter symbol: The runtime type name an origin recorded.
+    /// - Returns: `symbol` up to its first `<`.
+    static func declarationName(_ symbol: String) -> String {
+        String(symbol.prefix { $0 != "<" })
     }
 
     /// A `#fileID` is `Module/File.swift`, and the module is not necessarily a directory — so match on

@@ -43,6 +43,11 @@ public struct Qualification: Codable, Sendable, Equatable {
     /// The observed-property line: which properties were snapshot at the end of every capture, whose
     /// end-state values gate. `nil` when the spec observes no properties.
     public let observedProperties: String?
+    /// The stand-ins the capture held work through (`scheduler`, `operationQueue`), for the audit.
+    ///
+    /// The audit reads it to tell a reach through one from a reach around the capture. `nil` on
+    /// verdicts serialized before the field existed; the audit treats that as none, so they still gate.
+    public let heldStandIns: [String]?
 
     public init(
         coveredClasses: [String],
@@ -52,7 +57,8 @@ public struct Qualification: Codable, Sendable, Equatable {
         blindSpots: [String]?,
         origins: [TraceOrigin] = [],
         derivedDefaults: [String]? = nil,
-        observedProperties: String? = nil
+        observedProperties: String? = nil,
+        heldStandIns: [String]? = nil
     ) {
         self.coveredClasses = coveredClasses
         self.operations = operations
@@ -62,12 +68,18 @@ public struct Qualification: Codable, Sendable, Equatable {
         self.origins = origins
         self.derivedDefaults = derivedDefaults
         self.observedProperties = observedProperties
+        self.heldStandIns = heldStandIns
     }
 
     /// The same qualification with the origins one verification collected. Assembled here rather than
     /// at `liveQualification` because the surface is resolved off the *golden* template, before a
     /// candidate has run — and a candidate's sources are the ones a PR audit most needs to name.
-    func noting(origins: [TraceOrigin]) -> Qualification {
+    ///
+    /// - Parameters:
+    ///   - origins: Where the covered labels are declared.
+    ///   - heldStandIns: The stand-ins the capture held work through.
+    /// - Returns: This qualification with both.
+    func noting(origins: [TraceOrigin], heldStandIns: [String]) -> Qualification {
         Qualification(
             coveredClasses: coveredClasses,
             operations: operations,
@@ -76,7 +88,8 @@ public struct Qualification: Codable, Sendable, Equatable {
             blindSpots: blindSpots,
             origins: origins,
             derivedDefaults: derivedDefaults,
-            observedProperties: observedProperties
+            observedProperties: observedProperties,
+            heldStandIns: heldStandIns
         )
     }
 
@@ -91,7 +104,8 @@ public struct Qualification: Codable, Sendable, Equatable {
             blindSpots: blindSpots,
             origins: origins,
             derivedDefaults: derivedDefaults,
-            observedProperties: observedProperties
+            observedProperties: observedProperties,
+            heldStandIns: heldStandIns
         )
     }
 }

@@ -44,6 +44,14 @@ final class SourceResolverTests: XCTestCase {
         XCTAssertTrue(resolution.isResolved)
     }
 
+    /// A generic type runs under its arguments (`Feed<HeldScheduler>`) and is declared under its
+    /// parameters, so it resolves by its bare name.
+    func testFindsAGenericSwiftTypeByItsDeclaredName() throws {
+        try write("final class Feed<S: Scheduler>: Feeding {\n}\n", to: "App/Feed.swift")
+
+        XCTAssertEqual(resolve(TraceOrigin(label: "F", symbol: "Feed<HeldScheduler>")).files, ["App/Feed.swift"])
+    }
+
     func testFindsAnObjectiveCPlusPlusImplementation() throws {
         try write("@implementation Renderer\n@end\n", to: "App/Renderer.mm")
 

@@ -25,7 +25,7 @@ extension Spec {
     ) async -> SpecVerdict {
         let origins = OriginCollector()
         let verdict = await TraceOrigins.$collector.withValue(origins) { await verification() }
-            .noting(origins: subjectOrigins(from: origins))
+            .noting(origins: subjectOrigins(from: origins), heldStandIns: origins.heldStandIns)
             // Declarations ride the verdict, so a later explicit `audited(against:)` resolves the
             // same acceptances the env-driven audit below would — the two paths cannot disagree.
             .declaring(accepted: mergingAcceptances(into: intent).acceptedBlindSpots)
@@ -59,9 +59,14 @@ extension Spec {
 extension SpecVerdict {
     /// Carries the origins one verification collected onto the verdict it produced. Applied last because
     /// the qualification is resolved off the golden template, before a candidate has run.
-    func noting(origins: [TraceOrigin]) -> SpecVerdict {
+    ///
+    /// - Parameters:
+    ///   - origins: Where the covered labels are declared.
+    ///   - heldStandIns: The stand-ins the capture held work through; none by default.
+    /// - Returns: The verdict carrying both.
+    func noting(origins: [TraceOrigin], heldStandIns: [String] = []) -> SpecVerdict {
         var verdict = self
-        verdict.qualification = qualification.noting(origins: origins)
+        verdict.qualification = qualification.noting(origins: origins, heldStandIns: heldStandIns)
         return verdict
     }
 
