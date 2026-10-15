@@ -42,8 +42,8 @@ sources:
   - example-xcode-migration/LegacyAppTests/Minted.swift (the sequential UUID source and the fixed instant)
   - example-xcode-migration/LegacyAppTests/FulfillmentMigrationSpec.swift (a clock read through the seam Clock.now, swept over eight instants)
 verified:
-  ".": "ed2c628332e9"
-  example-xcode-migration: "dcfeefbe2d17"
+  ".": "149aa314b7f3"
+  example-xcode-migration: "c177f1d3f947"
 ---
 
 <!--
