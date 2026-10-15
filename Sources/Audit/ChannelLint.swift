@@ -41,6 +41,9 @@ public enum ChannelUse: String, Sendable, Equatable {
     /// The channel supplied as a default at an injection point the harness can override. Reported so
     /// a reviewer can confirm the spec *does* inject there, but it does not gate on its own.
     case injectableDefault
+    /// The channel reached through a stand-in the capture held work through (``HeldStandIn``).
+    /// Reported, never gating: the work it hands over is held, recorded, and ordered.
+    case held
 }
 
 /// One deny-listed reach, at the line that reaches it.
@@ -111,6 +114,25 @@ public struct ChannelLint: Sendable {
                 "MainActor.run",
                 "addOperationWithBlock",
                 "addOperation {",
+                "addOperation(",
+                "addOperation:",
+                "Task(",
+                "Task<",
+                "Task{",
+                "NSThread",
+                "Thread.detachNewThread",
+                "performSelectorInBackground:",
+                "performSelectorOnMainThread:",
+                "dispatch_apply",
+                "concurrentPerform",
+                "DispatchSource.make",
+                "dispatch_source_create",
+                "DispatchWorkItem",
+                // A session's completion handlers run on its own delegate queue.
+                "URLSession.shared",
+                "dataTask(",
+                "downloadTask(",
+                "uploadTask(",
                 // Waits: a wait on work handed to a queue the capture holds never returns under test.
                 "DispatchSemaphore",
                 "dispatch_semaphore_wait",
@@ -118,6 +140,19 @@ public struct ChannelLint: Sendable {
                 ".wait()",
                 ".wait(timeout:"
             ]
+        ),
+        // A queue of the subject's own making: a real one beside, or instead of, a held one it was
+        // handed. Position decides, so a production default (`queue: OperationQueue = OperationQueue()`)
+        // is an injection point, while the same queue built in a body gates.
+        ChannelRule(
+            channel: "dispatch",
+            spellings: [
+                "OperationQueue()",
+                "OperationQueue.main",
+                "NSOperationQueue alloc",
+                "NSOperationQueue mainQueue"
+            ],
+            positionDecides: true
         ),
         // Position decides: a typed context *parameter* is the injection point doing its job (the
         // green path once persistence is handed in); the same names as a receiver, a local, or a
@@ -139,10 +174,19 @@ public struct ChannelLint: Sendable {
 
     private let root: URL
     private let rules: [ChannelRule]
+    private let heldStandIns: Set<HeldStandIn>
 
-    public init(root: URL, rules: [ChannelRule] = ChannelLint.denyList) {
+    /// Creates a lint over sources beneath `root`.
+    ///
+    /// - Parameters:
+    ///   - root: The directory sources are resolved beneath.
+    ///   - rules: The channels to look for; the built-in deny list by default.
+    ///   - heldStandIns: The stand-ins the capture held work through, whose reaches are reported
+    ///     without gating.
+    public init(root: URL, rules: [ChannelRule] = ChannelLint.denyList, heldStandIns: Set<HeldStandIn> = []) {
         self.root = root
         self.rules = rules
+        self.heldStandIns = heldStandIns
     }
 
     /// Every deny-listed reach in the resolved sources, file order preserved. Unresolved declarations
@@ -203,9 +247,14 @@ public struct ChannelLint: Sendable {
             guard !line.hasPrefix("//"), !line.hasPrefix("*"), !line.hasPrefix("/*") else { continue }
             for rule in rules {
                 guard let spelling = rule.spellings.first(where: line.contains) else { continue }
+                let use: ChannelUse = if HeldStandIn.covers(rule.channel, spelling, through: heldStandIns) {
+                    .held
+                } else {
+                    rule.positionDecides ? ChannelLint.use(of: spelling, in: line) : .bypass
+                }
                 findings.append(ChannelFinding(
                     channel: rule.channel,
-                    use: rule.positionDecides ? ChannelLint.use(of: spelling, in: line) : .bypass,
+                    use: use,
                     file: file,
                     line: offset + 1,
                     text: line

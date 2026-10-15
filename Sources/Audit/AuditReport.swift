@@ -25,17 +25,21 @@ public struct AuditReport: Sendable, Equatable {
     ///   - origins: The labels a capture reached, each with the symbol and file it was declared in.
     ///   - root: The directory sources are resolved beneath.
     ///   - rules: The channels to look for; the built-in deny list by default.
+    ///   - heldStandIns: The stand-ins the capture held work through, by name; reaches through them
+    ///     report without gating.
     /// - Returns: The report: `unresolved` holds the declarations no source was found for, `findings`
     ///   every rule hit in the rest.
     public static func audit(
         origins: some Sequence<TraceOrigin>,
         root: URL,
-        rules: [ChannelRule] = ChannelLint.denyList
+        rules: [ChannelRule] = ChannelLint.denyList,
+        heldStandIns: [String] = []
     ) -> AuditReport {
         let resolutions = SourceResolver(root: root).resolve(origins)
+        let held = Set(heldStandIns.compactMap(HeldStandIn.init(rawValue:)))
         return AuditReport(
             unresolved: resolutions.filter { !$0.isResolved },
-            findings: ChannelLint(root: root, rules: rules).findings(in: resolutions)
+            findings: ChannelLint(root: root, rules: rules, heldStandIns: held).findings(in: resolutions)
         )
     }
 
@@ -49,6 +53,11 @@ public struct AuditReport: Sendable, Equatable {
     /// about the *run*, not the source, so it is checked at run time, never gated here.
     public var injectableDefaults: [ChannelFinding] {
         findings.filter { $0.use == .injectableDefault }
+    }
+
+    /// Reaches through a stand-in the capture held work through. Reported, never gating.
+    public var held: [ChannelFinding] {
+        findings.filter { $0.use == .held }
     }
 
     /// Nothing left the captured surface, and nothing was unreadable. Only this may leave a green
@@ -81,6 +90,15 @@ public struct AuditReport: Sendable, Equatable {
         }
         if lines.isEmpty {
             lines.append("audited — no bypassed channels found")
+        }
+        let held = held
+        if !held.isEmpty {
+            lines.append("")
+            lines.append("· \(held.count) reach\(held.count == 1 ? "" : "es") through a held stand-in "
+                + "(not gating — the capture held this work):")
+            for finding in held {
+                lines.append("    \(finding.file):\(finding.line)  \(finding.text)")
+            }
         }
         let defaults = injectableDefaults
         if !defaults.isEmpty {

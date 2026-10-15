@@ -25,12 +25,21 @@ public struct AuditOutcome: Sendable, Equatable {
     public let accepted: [String]
     /// Declared channels the audit did not find anywhere.
     public let unmatched: [String]
+    /// Channels found only through stand-ins the capture held work through. Named, not gating.
+    public let held: [String]
 
-    public init(bypassed: [String], unreadable: [String], accepted: [String], unmatched: [String]) {
+    public init(
+        bypassed: [String],
+        unreadable: [String],
+        accepted: [String],
+        unmatched: [String],
+        held: [String] = []
+    ) {
         self.bypassed = bypassed
         self.unreadable = unreadable
         self.accepted = accepted
         self.unmatched = unmatched
+        self.held = held
     }
 
     /// Whether anything here must stop an otherwise-equivalent verdict.
@@ -45,6 +54,7 @@ public struct AuditOutcome: Sendable, Equatable {
             + unreadable.map { "\($0) (no source found)" }
             + accepted.map { "\($0) (declared)" }
             + unmatched.map { "\($0) (declared, not found)" }
+            + held.map { "\($0) (held)" }
     }
 }
 
@@ -62,7 +72,8 @@ public extension AuditReport {
             bypassed: found.filter { !declared.contains($0) },
             unreadable: unresolved.compactMap(\.unresolvedSymbol),
             accepted: declared.filter { found.contains($0) },
-            unmatched: declared.filter { !found.contains($0) }
+            unmatched: declared.filter { !found.contains($0) },
+            held: orderedUnique(held.map(\.channel)).filter { !found.contains($0) }
         )
     }
 }

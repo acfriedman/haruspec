@@ -303,8 +303,9 @@ Its time and option types are `DispatchQueue`'s, so a project's type-erased sche
 
 Its clock is the reason to take it over a hand-written adapter. An adapter over a queue protocol whose
 `now` reads the wall clock leaves `measureInterval`, `throttle` and `timeout` reading real time while
-their work runs on virtual time: a baseline checked against itself comes back `UNSTABLE`. The audit
-still names `import Combine` as the `Combine` channel.
+their work runs on virtual time: a baseline checked against itself comes back `UNSTABLE`. When the
+capture held work through it, the audit names the subject's Combine reach `Combine (held)` and doesn't
+gate on it (see below).
 
 A subject that takes an injected `OperationQueue` gets one from the capture the same way:
 `context.operationQueue(_:)` returns a `HeldOperationQueue`, an `OperationQueue` subclass whose
@@ -333,8 +334,10 @@ whichever held work releases them.
 | `addBarrierBlock`, `isSuspended` | as Foundation's |
 | `waitUntilAllOperationsAreFinished()`, `addOperations(_:waitUntilFinished: true)` | trap, naming the call: the work runs only once the capture drains |
 
-`Operation.waitUntilFinished()` belongs to the operation, so no queue can catch it: it hangs. The
-audit still names `addOperation` blocks as the `dispatch` channel.
+`Operation.waitUntilFinished()` belongs to the operation, so no queue can catch it: it hangs. When the
+capture held work through it, the audit names the subject's `addOperation` calls `dispatch (held)` and
+doesn't gate on them; an `OperationQueue()` or `OperationQueue.main` the subject builds itself still
+gates (see below).
 
 ### Settle points
 
@@ -363,9 +366,19 @@ Haruspec does not redefine Grand Central Dispatch, swap your queues, or patch `T
 hands work off directly reaches a thread the capture neither holds nor waits for. The
 capture-completeness audit reads the sources a verdict covered and flags these as the `dispatch`
 channel: the `dispatch_async` family, `DispatchQueue(`, `DispatchQueue.main`, `DispatchQueue.global`,
-`asyncAfter(`, `Task {`, `Task.detached`, `MainActor.run`, and operation-queue `addOperation` blocks.
-Its other channels are `NotificationCenter.default` as a receiver, `Timer / RunLoop`, `Combine`, `KVO`
-and `Core Data`.
+`asyncAfter(`, `dispatch_apply`, `concurrentPerform`, dispatch sources and work items, unstructured
+tasks (`Task {`, `Task(`, `Task.detached`), `MainActor.run`, threads (`Thread.detachNewThread`,
+`NSThread`, `performSelectorInBackground:`, `performSelectorOnMainThread:`), operation queues
+(`addOperation`, and an `OperationQueue()` or `OperationQueue.main` built in the subject's body),
+URLSession tasks, and semaphore and group waits. Its other channels are `NotificationCenter.default` as a
+receiver, `Timer / RunLoop`, `Combine`, `KVO` and `Core Data`.
+
+The audit reads source text, so it can't see which value a line calls. It reads which held stand-ins
+the capture actually ran work through instead: when `context.scheduler` held work, the subject's Combine
+reach reads `Combine (held)`; when `context.operationQueue` did, its `addOperation` calls read
+`dispatch (held)`. Held reaches are named on the verdict and never gate. Building a queue of its own
+still gates, beside a held one or not, unless it's a production default at an injection point
+(`queue: OperationQueue = OperationQueue()`).
 
 The audit runs when `HARUSPEC_SOURCE_ROOT` names the checkout, or when a test calls `.audited()` on the
 verdict. Otherwise every verdict says `blind spots: not audited`.

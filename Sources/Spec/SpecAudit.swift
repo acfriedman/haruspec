@@ -52,7 +52,11 @@ public extension SpecVerdict {
         // An audit over no declarations read nothing, and "nothing found in nothing" must not print
         // as a clean bill of health.
         guard !qualification.origins.isEmpty else { return self }
-        let report = AuditReport.audit(origins: qualification.origins, root: root)
+        let report = AuditReport.audit(
+            origins: qualification.origins,
+            root: root,
+            heldStandIns: qualification.heldStandIns ?? []
+        )
         // The verdict carries the spec's and check site's declarations, so an explicit audit resolves
         // exactly what the env-driven one inside the verify would have.
         return noting(report.outcome(accepting: intent.acceptedBlindSpots + (acceptedBlindSpots ?? [])))

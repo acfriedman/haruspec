@@ -1,4 +1,5 @@
 import Foundation
+import HaruspecAudit
 import HaruspecTrace
 
 /// An `OperationQueue` whose operations the capture holds, as a stamped scheduling double's work is:
@@ -299,6 +300,7 @@ public final class HeldOperationQueue: OperationQueue, QueueNaming, @unchecked S
         causedBy cause: WorkBacklog.Cause,
         _ work: @escaping () -> Void
     ) {
+        TraceOrigins.collector?.noteHeldStandIn(HeldStandIn.operationQueue.rawValue)
         backlog.enqueue(on: self, label: label, discipline: discipline, causedBy: cause, work)
     }
 
