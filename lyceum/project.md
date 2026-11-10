@@ -62,7 +62,8 @@ contributor series in `haruspec-proj-mgmt/explainers/`. Read them for the reason
 - **Delivery:** send the finished MP4 to him directly. Renders stay out of git (`videos/*/dist/`).
 - **Commits:** on a branch in this repository, fast-forwarded into `main`, with no pull request, and only
   when he asks. Push only when he asks.
-- **Voice key:** `OPENAI_KEY` lives in `~/Repositories/haruspec-org/.env`, above this project.
+- **Voice key:** `OPENAI_KEY` lives in this project's own `.env` (gitignored). Lyceum reads no `.env`
+  above the project.
 - **Revisions:** re-render only the changed scene (`npm run render -- <video> --scene <id>`, `--draft` for
   a quick 720p look), and the whole video once he approves.
 - **Staleness:** a weekly routine runs `npx lyceum stale` here. After Andrew approves a video, run
