@@ -11,7 +11,7 @@ let package = Package(
     name: "BuildTools",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(url: "https://github.com/acfriedman/SwiftLucid", exact: "0.2.0"),
+        .package(url: "https://github.com/acfriedman/SwiftLucid", exact: "0.2.1"),
         .package(url: "https://github.com/acfriedman/SwiftStepdown", exact: "0.1.1")
     ],
     targets: [.target(name: "BuildTools", path: "", exclude: ["Package.swift"])]

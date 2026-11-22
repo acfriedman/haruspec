@@ -1,5 +1,5 @@
 {
-  "originHash" : "cb13485bfc54cf9fa36402c2a569d5ed834dff6ff41c5f7c4d08893a0dee375b",
+  "originHash" : "4954d26a317955bf21661cafb922bd43e11c6ba706be63fa48fc036becb391b5",
   "pins" : [
     {
       "identity" : "swift-syntax",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/acfriedman/SwiftLucid",
       "state" : {
-        "revision" : "fa53cb6577af7691fb092e63ea9fa6260d376f41",
-        "version" : "0.2.0"
+        "revision" : "8b0d231910b9657f0a65fdb13a3457b1101e7026",
+        "version" : "0.2.1"
       }
     },
     {
