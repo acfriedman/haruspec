@@ -240,7 +240,7 @@ public struct SpecCatalog {
     }
 
     /// Runs the continuous side of `spec` the environment selects, prints the verdict, and throws
-    /// unless it held. The continuous twin of ``check(migrationCase:)``.
+    /// unless it held. The continuous twin of ``check(migrationCase:reportsIn:)``.
     ///
     /// - Parameters:
     ///   - spec: The spec's name.

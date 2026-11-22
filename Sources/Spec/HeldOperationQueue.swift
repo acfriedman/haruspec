@@ -12,12 +12,12 @@ import HaruspecTrace
 ///
 /// - An operation starts once it is ready (its dependencies have finished, or it was cancelled) and
 ///   the queue has room under `maxConcurrentOperationCount`: the highest `queuePriority` first, then
-///   in the order added. A cancelled operation starts too, skips ``Operation/main()``, and still completes.
+///   in the order added. A cancelled operation starts too, skips ``Foundation/Operation/main()``, and still completes.
 /// - An asynchronous operation keeps its place until it reports `isFinished`, which it does from later
 ///   held work. A serial queue starts nothing else meanwhile.
 /// - A finished operation leaves ``operations`` first, then its completion runs, then the next one
 ///   starts. Foundation races the three; this is one legal order, the same on every run.
-/// - Work records on the queue's domain. A ``Queue/main`` queue records on `main` and runs on the main
+/// - Work records on the queue's domain. A ``HeldScheduler/Queue/main`` queue records on `main` and runs on the main
 ///   thread. Otherwise the domain is `queue(serial):<label>` while `maxConcurrentOperationCount` is 1
 ///   and `queue(concurrent):<label>` while it is not, read as each operation starts: a subject that
 ///   sets the count gets the queue it asked for.
@@ -26,7 +26,7 @@ import HaruspecTrace
 ///   capture runs the work.
 /// - A wait traps, naming the call. ``waitUntilAllOperationsAreFinished()`` and
 ///   ``addOperations(_:waitUntilFinished:)`` with `true` would wait on work that runs only once the
-///   capture drains, after the subject returns. ``Operation/waitUntilFinished()`` belongs to the
+///   capture drains, after the subject returns. ``Foundation/Operation/waitUntilFinished()`` belongs to the
 ///   operation, so no queue can catch it: it hangs.
 public final class HeldOperationQueue: OperationQueue, QueueNaming, @unchecked Sendable {
     /// The queue a held operation queue stands in for, which names its domain.

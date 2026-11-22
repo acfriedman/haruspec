@@ -314,10 +314,6 @@ extension Spec {
     /// Delta-debugs the failing call sequence: drops ops that aren't needed to reproduce → the minimal
     /// order that still diverges (the "localize" the north star asks for, applied to sequencing).
     ///
-    /// Settle steps shrink the same way: dropping one turns its gap back to held, so the red keeps
-    /// only the settle points it needs. A dropped op can strand a step at either end or leave two
-    /// side by side, which `normalizedSettles` folds back into one per gap.
-    ///
     /// - Parameters:
     ///   - baseline: Builds a fresh baseline per capture.
     ///   - candidate: Builds a fresh candidate per capture.
@@ -325,6 +321,10 @@ extension Spec {
     ///   - cassette: The seam readings the failure was found under.
     ///   - intent: The deltas the candidate is meant to produce.
     /// - Returns: The shortest subsequence of `failing` found that still diverges.
+    ///
+    /// Settle steps shrink the same way: dropping one turns its gap back to held, so the red keeps
+    /// only the settle points it needs. A dropped op can strand a step at either end or leave two
+    /// side by side, which `normalizedSettles` folds back into one per gap.
     private func shrink(
         baseline: @escaping (SeamContext) -> S,
         candidate: @escaping (SeamContext) -> S,

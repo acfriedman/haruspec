@@ -8,7 +8,7 @@ import HaruspecTrace
 // `Spec.generates(_:)` and the synthesized doubles' `SeamContext.value(_:key:)`.
 
 /// How instances of a model *mutate* — the reusable, standalone form of a custom-type generator.
-/// Declared once, next to the model; any spec adopts it with one line, `.generates(Membership.self)`:
+/// Declared once, next to the model; any spec adopts it with one line, `.generates(Membership.self)`.
 ///
 ///     extension Membership: SeamGenerated {
 ///         static func generated(from fields: FieldSeams) -> Membership {

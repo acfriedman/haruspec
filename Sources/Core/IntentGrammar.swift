@@ -108,6 +108,7 @@ public enum IntentGrammar {
 
     /// Parses declaration lines, one declaration per line, into an `Intent`. It is the text half of
     /// the DSL, so a PR body round-trips to the same intent the Swift spelling builds.
+    ///
     /// - Parameters:
     ///   - text: The block body; blank lines and `//` comments are skipped, every other line is one
     ///     declaration.

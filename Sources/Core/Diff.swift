@@ -103,9 +103,10 @@ public struct TraceDiff: Codable, Sendable, Equatable {
     ///
     /// `.cannotVerify` is what a `VerificationResult` reaches when isolation was incomplete: it
     /// downgrades an untrustworthy EQUIVALENT rather than emit a false pass. `.unstable` is one layer
-    /// further out: identical replays that disagree (``Spec/verify(replaying:)`` runs the plan more than
-    /// once) prove an unmodeled nondeterministic axis, and neither disagreeing verdict can be stood
-    /// behind — a flapping red presented as red would be a coin flip wearing a verdict.
+    /// further out: identical replays that disagree
+    /// (``Spec/verify(replaying:into:declaring:replays:)`` runs the plan more than once) prove an
+    /// unmodeled nondeterministic axis, and neither disagreeing verdict can be stood behind — a
+    /// flapping red presented as red would be a coin flip wearing a verdict.
     public enum Verdict: String, Codable, Sendable { case equivalent, diverged, cannotVerify, unstable }
 
     public var verdict: Verdict

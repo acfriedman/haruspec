@@ -234,6 +234,7 @@ public struct Intent: Sendable, Equatable {
 
     /// Returns whether this spec declares `divergence` as an intended change. A declared divergence
     /// is reclassified as intended, so it discloses on the report instead of gating the verdict.
+    ///
     /// - Parameters:
     ///   - divergence: One divergence of the comparison being classified.
     ///   - evidence: What the probe left behind (seam inputs, both aligned event streams, the
@@ -246,6 +247,7 @@ public struct Intent: Sendable, Equatable {
 
     /// Returns whether this spec declares `divergence` as an intended change, judging by the probe's
     /// seam inputs alone. Callers that never see the aligned event streams need not build a `ProbeEvidence`.
+    ///
     /// - Parameters:
     ///   - divergence: One divergence of the comparison being classified.
     ///   - inputs: The seam inputs the probe ran with; `nil` means none were recorded, so

@@ -78,7 +78,7 @@ enum StampedForwarderRegistry {
 
     /// The stamped forwarder for `S`, which also names the stamp's derived catalog.
     ///
-    /// - Parameter _: The spec's system type, `(any Cart).self`.
+    /// - Parameter for: The spec's system type, `(any Cart).self`.
     /// - Returns: The generated `Traced<Protocol>`, or `nil` when `S` is not a stamped protocol's
     ///   existential.
     static func forwarder<S>(for _: S.Type) -> (any StampedForwarder.Type)? {

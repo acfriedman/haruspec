@@ -39,6 +39,7 @@ public final class TraceRecorder: @unchecked Sendable {
     /// Creates a recorder for one capture, stamping every event with `clock`. The audit's origin
     /// collector is read from the ambient binding here, once, because a traced method may later
     /// run on a thread with no task to read it from.
+    ///
     /// - Parameters:
     ///   - name: The capture's name, carried into the trace and every report about it.
     ///   - clock: The time source for event ordering; defaults to wall time, and tests inject a

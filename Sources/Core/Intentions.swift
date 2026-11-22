@@ -11,7 +11,7 @@ import Foundation
 //     }
 
 /// How an author names an isolation domain in a declaration — deliberately *coarser* than the
-/// engine's `ConcurrencyDomain`, because a declaration should not require engine bookkeeping:
+/// engine's `ConcurrencyDomain`, because a declaration should not require engine bookkeeping.
 ///
 ///  - `.queue(label)` matches the queue whichever ordering discipline it has. Declaring a move is
 ///    about *where the work went*; a discipline change is a separate fact with its own gate
@@ -139,7 +139,10 @@ public enum IntentionsBuilder {
 }
 
 public extension Intent {
-    /// Builds an intent from declarations that read as sentences about the port:
+    /// Builds an intent from declarations that read as sentences about the port.
+    ///
+    /// - Parameter intentions: The declarations, one per line of the builder, in the order written;
+    ///   an empty builder declares nothing, as ``Intent/none`` does.
     ///
     ///     Intent {
     ///         Moves("Inventory.reserve", from: .queue("com.emporium.cart"), to: .actor(SwiftCartActor.self))

@@ -229,7 +229,7 @@ public enum HTML {
     }
 
     /// Returns the badge for a divergence's classification, mirroring the `(intended)` /
-    /// `(collateral)` / `(advisory)` tags ``bodyLines()`` prints.
+    /// `(collateral)` / `(advisory)` tags ``TraceDiff/bodyLines()`` prints.
     ///
     /// - Parameters:
     ///   - divergence: The divergence being rendered.

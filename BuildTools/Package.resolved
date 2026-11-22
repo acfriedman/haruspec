@@ -1,0 +1,33 @@
+{
+  "originHash" : "cb13485bfc54cf9fa36402c2a569d5ed834dff6ff41c5f7c4d08893a0dee375b",
+  "pins" : [
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "9de99a78f099e59caf2b2beec65a4c45d54b2081",
+        "version" : "603.0.1"
+      }
+    },
+    {
+      "identity" : "swiftlucid",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/acfriedman/SwiftLucid",
+      "state" : {
+        "revision" : "fa53cb6577af7691fb092e63ea9fa6260d376f41",
+        "version" : "0.2.0"
+      }
+    },
+    {
+      "identity" : "swiftstepdown",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/acfriedman/SwiftStepdown",
+      "state" : {
+        "revision" : "42a9e428546aa6886a9294a0f75883a29c3789ec",
+        "version" : "0.1.1"
+      }
+    }
+  ],
+  "version" : 3
+}

@@ -322,7 +322,7 @@ struct SuppliedDomain {
 }
 
 /// An amendment to one derived op: fill a pending domain, tighten a default, or add structure —
-/// without re-authoring the binding the derivation already wrote. One modifier grammar throughout:
+/// without re-authoring the binding the derivation already wrote. One modifier grammar throughout.
 ///
 ///     Amend("applyPromo").varying("code", over: .oneOf("SAVE10", "save10", "NOPE"))
 ///     Amend("checkout").last()
