@@ -4,20 +4,6 @@ import HaruspecCore
 import HaruspecTrace
 import XCTest
 
-// `.after` is a *soft* precondition and `.requires` a hard gate. The defect these pin: ordering clamps
-// used to filter the sample, so a spec that declared `remove.after("add")` could never interrogate
-// remove-on-an-empty-cart — the exact defensive branch a migration most wants diffed. A differential
-// oracle has no expected value an out-of-order call could contradict, so the only thing filtering
-// bought was a smaller surface reported at full confidence.
-
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
-    RefactorCart(center: ctx.notifications)
-}
-
 final class OrderingPreconditionTests: XCTestCase {
     /// A space far past any cap, with nothing declared about ordering — the "unchanged behavior" control.
     private func unconstrainedSpec(orderingMax: Int) -> BaselinedSpec<PromoCart> {
@@ -33,18 +19,6 @@ final class OrderingPreconditionTests: XCTestCase {
     }
 
     // MARK: - Hard gates vs soft preconditions
-
-    /// Five repeatable ops so the space is far past any cap and sampling — not enumeration — is in play.
-    private func gatedOps(hard: Bool) -> [Op<PromoCart>] {
-        let remove = Op<PromoCart>("remove") { _ in }
-        return [
-            Op<PromoCart>("add") { _ in },
-            hard ? remove.requires("add") : remove.after("add"),
-            Op<PromoCart>("promo") { _ in },
-            Op<PromoCart>("audit") { _ in },
-            Op<PromoCart>("checkout") { _ in }.last()
-        ]
-    }
 
     func testSamplingNeverViolatesAHardGate() {
         for ordering in linearExtensions(gatedOps(hard: true), max: 40, repeating: 2) {
@@ -80,6 +54,18 @@ final class OrderingPreconditionTests: XCTestCase {
             sample.allSatisfy { $0.map(\.label).last == "checkout" },
             "a soft precondition must not loosen `.last()`"
         )
+    }
+
+    /// Five repeatable ops so the space is far past any cap and sampling — not enumeration — is in play.
+    private func gatedOps(hard: Bool) -> [Op<PromoCart>] {
+        let remove = Op<PromoCart>("remove") { _ in }
+        return [
+            Op<PromoCart>("add") { _ in },
+            hard ? remove.requires("add") : remove.after("add"),
+            Op<PromoCart>("promo") { _ in },
+            Op<PromoCart>("audit") { _ in },
+            Op<PromoCart>("checkout") { _ in }.last()
+        ]
     }
 
     func testASpecWithNoPreconditionsSamplesExactlyAsItDidBefore() {
@@ -228,4 +214,18 @@ final class OrderingPreconditionTests: XCTestCase {
             try SpecVerdict(jsonData: JSONSerialization.data(withJSONObject: json))
         )
     }
+}
+
+// `.after` is a *soft* precondition and `.requires` a hard gate. The defect these pin: ordering clamps
+// used to filter the sample, so a spec that declared `remove.after("add")` could never interrogate
+// remove-on-an-empty-cart — the exact defensive branch a migration most wants diffed. A differential
+// oracle has no expected value an out-of-order call could contradict, so the only thing filtering
+// bought was a smaller surface reported at full confidence.
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
+    RefactorCart(center: ctx.notifications)
 }

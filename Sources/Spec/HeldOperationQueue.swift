@@ -274,21 +274,6 @@ public final class HeldOperationQueue: OperationQueue, QueueNaming, @unchecked S
         hold(discipline, causedBy: entry.cause) { [self] in complete(entry) }
     }
 
-    /// Removes `entry`, runs its operation's completion block, then starts what its room lets start.
-    ///
-    /// - Parameter entry: The entry whose operation finished.
-    private func complete(_ entry: Entry) {
-        lock.withLock {
-            entries.removeAll { $0 === entry }
-        }
-        entry.readiness = nil
-        entry.finishing = nil
-        let completion = entry.completion
-        entry.completion = nil
-        completion?()
-        startReady()
-    }
-
     /// Hands `work` to the capture's backlog as this queue.
     ///
     /// - Parameters:
@@ -302,6 +287,21 @@ public final class HeldOperationQueue: OperationQueue, QueueNaming, @unchecked S
     ) {
         TraceOrigins.collector?.noteHeldStandIn(HeldStandIn.operationQueue.rawValue)
         backlog.enqueue(on: self, label: label, discipline: discipline, causedBy: cause, work)
+    }
+
+    /// Removes `entry`, runs its operation's completion block, then starts what its room lets start.
+    ///
+    /// - Parameter entry: The entry whose operation finished.
+    private func complete(_ entry: Entry) {
+        lock.withLock {
+            entries.removeAll { $0 === entry }
+        }
+        entry.readiness = nil
+        entry.finishing = nil
+        let completion = entry.completion
+        entry.completion = nil
+        completion?()
+        startReady()
     }
 
     /// Where an entry is between its add and its completion.

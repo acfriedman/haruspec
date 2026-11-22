@@ -7,32 +7,7 @@ import XCTest
 // DIVERGED verdict so it renders a real offer.
 
 final class LocalCheckOutcomeTests: XCTestCase {
-    private func divergedVerdict() throws -> SpecVerdict {
-        let fixture = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("SpecTests/Fixtures/diverged.result.json")
-        return try SpecVerdict(contentsOf: fixture)
-    }
-
     private let artifact = URL(fileURLWithPath: "/r.json")
-
-    private func outcome(_ entries: [LocalCheckOutcome.Entry]) -> LocalCheckOutcome {
-        LocalCheckOutcome(
-            base: "main",
-            baseSHA: String(repeating: "a", count: 40),
-            headSHA: String(repeating: "b", count: 40),
-            branch: "feature/points",
-            uncommitted: true,
-            entries: entries,
-            undeclaredIntent: ["serach"],
-            wholeTargetSpecs: ["search"],
-            uncoveredChanges: ["LegacyApp/App/AppDelegate.m"],
-            changedFiles: [],
-            repositoryRoot: URL(fileURLWithPath: "/repo"),
-            intentDocument: nil,
-            runDirectory: URL(fileURLWithPath: "/repo/.haruspec/cache/runs/1")
-        )
-    }
 
     func testARedSpecEndsWithTheCommandThatDeclaresIt() throws {
         let verdict = try divergedVerdict()
@@ -98,5 +73,30 @@ final class LocalCheckOutcomeTests: XCTestCase {
         XCTAssertTrue(document.text.contains(stamp))
         XCTAssertEqual(document.sectionSpecs, ["cart"], "a spec without a section gains none")
         XCTAssertEqual(try document.intents().keys.sorted(), ["cart"], "evidence never adds a declaration block")
+    }
+
+    private func divergedVerdict() throws -> SpecVerdict {
+        let fixture = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("SpecTests/Fixtures/diverged.result.json")
+        return try SpecVerdict(contentsOf: fixture)
+    }
+
+    private func outcome(_ entries: [LocalCheckOutcome.Entry]) -> LocalCheckOutcome {
+        LocalCheckOutcome(
+            base: "main",
+            baseSHA: String(repeating: "a", count: 40),
+            headSHA: String(repeating: "b", count: 40),
+            branch: "feature/points",
+            uncommitted: true,
+            entries: entries,
+            undeclaredIntent: ["serach"],
+            wholeTargetSpecs: ["search"],
+            uncoveredChanges: ["LegacyApp/App/AppDelegate.m"],
+            changedFiles: [],
+            repositoryRoot: URL(fileURLWithPath: "/repo"),
+            intentDocument: nil,
+            runDirectory: URL(fileURLWithPath: "/repo/.haruspec/cache/runs/1")
+        )
     }
 }

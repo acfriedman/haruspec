@@ -32,6 +32,18 @@ public extension QueueNaming {
 struct DomainOwners {
     private var owners: [ConcurrencyDomain: AnyObject] = [:]
 
+    /// Records that `queue` owns `domain`, trapping with ``claim(_:for:)``'s message when it can't.
+    ///
+    /// - Parameters:
+    ///   - domain: The domain the queue's work records on.
+    ///   - queue: The queue handing work over.
+    /// - Precondition: No other queue in this capture records on `domain`.
+    mutating func claimOrTrap(_ domain: ConcurrencyDomain, for queue: AnyObject) {
+        if let conflict = claim(domain, for: queue) {
+            preconditionFailure(conflict)
+        }
+    }
+
     /// Records that `queue` owns `domain`.
     ///
     /// - Parameters:
@@ -46,18 +58,6 @@ struct DomainOwners {
             return nil
         }
         return owner === queue ? nil : Self.conflict(on: domain, between: owner, and: queue)
-    }
-
-    /// Records that `queue` owns `domain`, trapping with ``claim(_:for:)``'s message when it can't.
-    ///
-    /// - Parameters:
-    ///   - domain: The domain the queue's work records on.
-    ///   - queue: The queue handing work over.
-    /// - Precondition: No other queue in this capture records on `domain`.
-    mutating func claimOrTrap(_ domain: ConcurrencyDomain, for queue: AnyObject) {
-        if let conflict = claim(domain, for: queue) {
-            preconditionFailure(conflict)
-        }
     }
 
     /// Returns the message for two queues on `domain`.
@@ -80,11 +80,11 @@ struct DomainOwners {
         """
     }
 
-    private static func kind(of queue: AnyObject) -> String {
-        (queue as? QueueNaming)?.queueKind ?? String(describing: type(of: queue))
-    }
-
     private static func naming(_ queue: AnyObject, _ label: String) -> String {
         (queue as? QueueNaming)?.naming(label) ?? "a \(kind(of: queue)) labelled \"\(label)\""
+    }
+
+    private static func kind(of queue: AnyObject) -> String {
+        (queue as? QueueNaming)?.queueKind ?? String(describing: type(of: queue))
     }
 }

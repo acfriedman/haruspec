@@ -130,6 +130,32 @@ extension SpecVerdict {
         return entries
     }
 
+    private var orderingsEntry: String {
+        guard !exploration.isExhaustive else {
+            return "all \(exploration.orderingsAvailable) explored (exhaustive)"
+        }
+        let bound = exploration.orderingsAreExact ? "" : "≥"
+        var text = "\(exploration.orderingsExplored) sampled of \(bound)\(exploration.orderingsAvailable) available"
+        if let fraction = exploration.orderingFraction {
+            text += " (\(Exploration.percent(fraction)))"
+        }
+        return text
+    }
+
+    private var stabilityEntry: String {
+        if let selfCheck = stability.baselineSelfCheck {
+            return selfCheck.isEmpty
+                ? "single run — the baseline reproduced itself on the failing input"
+                : "the baseline disagreed with itself on the failing input"
+        }
+        guard stability.replays > 1 else {
+            return "single replay — reproduction not measured"
+        }
+        return stability.isStable
+            ? "\(stability.replays)/\(stability.replays) identical replays"
+            : "\(stability.outcomes.count) distinct outcomes across \(stability.replays) replays"
+    }
+
     /// The additions to the terminal `report()` — only the lines it doesn't already print
     /// (exploration and stability render there via their own lines).
     var qualificationReportLines: [String] {
@@ -165,18 +191,6 @@ extension SpecVerdict {
             "\(label) ← \(byLabel[label, default: []].map(\.declarationEntry).joined(separator: ", "))"
         }
         .joined(separator: " · ")
-    }
-
-    private var orderingsEntry: String {
-        guard !exploration.isExhaustive else {
-            return "all \(exploration.orderingsAvailable) explored (exhaustive)"
-        }
-        let bound = exploration.orderingsAreExact ? "" : "≥"
-        var text = "\(exploration.orderingsExplored) sampled of \(bound)\(exploration.orderingsAvailable) available"
-        if let fraction = exploration.orderingFraction {
-            text += " (\(Exploration.percent(fraction)))"
-        }
-        return text
     }
 
     private var seamsEntry: String {
@@ -216,20 +230,6 @@ extension SpecVerdict {
             ? "audited — no blind spots declared"
             : blindSpots.joined(separator: ", ")
     }
-
-    private var stabilityEntry: String {
-        if let selfCheck = stability.baselineSelfCheck {
-            return selfCheck.isEmpty
-                ? "single run — the baseline reproduced itself on the failing input"
-                : "the baseline disagreed with itself on the failing input"
-        }
-        guard stability.replays > 1 else {
-            return "single replay — reproduction not measured"
-        }
-        return stability.isStable
-            ? "\(stability.replays)/\(stability.replays) identical replays"
-            : "\(stability.outcomes.count) distinct outcomes across \(stability.replays) replays"
-    }
 }
 
 // MARK: - Assembly (the two verify paths)
@@ -250,15 +250,6 @@ extension Spec {
         )
     }
 
-    /// The properties line: the observed labels, whose end-state snapshots gate; `nil` when the spec
-    /// observes none.
-    var observedPropertiesEntry: String? {
-        guard !observedProperties.isEmpty else {
-            return nil
-        }
-        return "\(observedProperties.map(\.label).sorted().joined(separator: ", ")) — snapshots gate"
-    }
-
     /// The replay qualification: the plan already pins the surface — classes, varied seams, and the
     /// golden template all come from it, so the block describes what was recorded, not a re-derivation.
     /// Derived-ness comes from the spec value itself — specs are code, present at replay, so nothing
@@ -277,6 +268,15 @@ extension Spec {
             derivedDefaults: derivedDefaultSeams.union(resourceSweeps(reaching: goldenTracks.keys).keys).sorted(),
             observedProperties: observedPropertiesEntry
         )
+    }
+
+    /// The properties line: the observed labels, whose end-state snapshots gate; `nil` when the spec
+    /// observes none.
+    var observedPropertiesEntry: String? {
+        guard !observedProperties.isEmpty else {
+            return nil
+        }
+        return "\(observedProperties.map(\.label).sorted().joined(separator: ", ")) — snapshots gate"
     }
 }
 

@@ -138,6 +138,31 @@ public extension SpecVerdict {
         return sections
     }
 
+    private var divergenceSummary: String {
+        let count = diff.divergences.count
+        let plural = count == 1 ? "" : "s"
+        var summary = "Replaying the recorded plan against this build surfaced **\(count) "
+            + "divergence\(plural)** from the golden traces."
+        if diff.intendedCount > 0 {
+            summary += " \(diff.collateralCount) collateral (gating), \(diff.intendedCount) intended."
+        }
+        return summary
+    }
+
+    /// How many failing cases the red rests on, and what the others found beyond the reported one.
+    private var failingCasesSection: [String] {
+        guard let failingCases, failingCases.probes.count > 1 else {
+            return []
+        }
+        let count = failingCases.probes.count
+        let others = failingCases.unreported(beside: diff.divergences)
+            .map { "- `\($0.label)`: \(tableCell($0.detail))" }
+        return ["**\(count) failing cases** among the \(failingCases.walkedAfterFirst + 1) checked from the "
+            + "first failure on. The tables above show the most informative one; the offer below is "
+            + "derived from all \(count)."]
+            + (others.isEmpty ? [] : [(["**Also in other failing cases:**", ""] + others).joined(separator: "\n")])
+    }
+
     /// The author's own tripwires that fired: each declaration that named a gating divergence's
     /// kind and label but rejected it, with how many divergences it rejected and the first one.
     ///
@@ -171,47 +196,6 @@ public extension SpecVerdict {
 
         \(lines.joined(separator: "\n"))
         """]
-    }
-
-    /// How many failing cases the red rests on, and what the others found beyond the reported one.
-    private var failingCasesSection: [String] {
-        guard let failingCases, failingCases.probes.count > 1 else {
-            return []
-        }
-        let count = failingCases.probes.count
-        let others = failingCases.unreported(beside: diff.divergences)
-            .map { "- `\($0.label)`: \(tableCell($0.detail))" }
-        return ["**\(count) failing cases** among the \(failingCases.walkedAfterFirst + 1) checked from the "
-            + "first failure on. The tables above show the most informative one; the offer below is "
-            + "derived from all \(count)."]
-            + (others.isEmpty ? [] : [(["**Also in other failing cases:**", ""] + others).joined(separator: "\n")])
-    }
-
-    /// Per declaration, the divergence it was first seen to absorb and the case that produced it —
-    /// so a green-by-declaration verdict shows *what* each declaration excused. The first absorbing
-    /// probe alone is not enough: it is often the golden, whose values say nothing.
-    var observationsSection: [String] {
-        guard !intentObservations.isEmpty else {
-            return []
-        }
-        var lines = [
-            "**Declared changes, as first observed:**",
-            "",
-            "| Declaration | Where | Detail | In the case |",
-            "|---|---|---|---|"
-        ]
-        for observation in intentObservations.prefix(divergenceRowCap) {
-            let inputs = observation.inputs.tracks.keys.sorted().map { key in
-                "\(key)=\((observation.inputs.tracks[key] ?? []).map(\.canonicalString).joined(separator: ","))"
-            }
-            lines.append(
-                "| `\(tableCell(observation.declaration))` "
-                    + "| `\(tableCell(observation.divergence.label))`\(opCell(observation.divergence)) "
-                    + "| \(tableCell(observation.divergence.detail)) "
-                    + "| \(tableCell(inputs.joined(separator: " · "))) |"
-            )
-        }
-        return [lines.joined(separator: "\n")]
     }
 
     /// The teaching half of the red gate: the exact declarations that would mark the collateral
@@ -252,15 +236,31 @@ public extension SpecVerdict {
         """]
     }
 
-    private var divergenceSummary: String {
-        let count = diff.divergences.count
-        let plural = count == 1 ? "" : "s"
-        var summary = "Replaying the recorded plan against this build surfaced **\(count) "
-            + "divergence\(plural)** from the golden traces."
-        if diff.intendedCount > 0 {
-            summary += " \(diff.collateralCount) collateral (gating), \(diff.intendedCount) intended."
+    /// Per declaration, the divergence it was first seen to absorb and the case that produced it —
+    /// so a green-by-declaration verdict shows *what* each declaration excused. The first absorbing
+    /// probe alone is not enough: it is often the golden, whose values say nothing.
+    var observationsSection: [String] {
+        guard !intentObservations.isEmpty else {
+            return []
         }
-        return summary
+        var lines = [
+            "**Declared changes, as first observed:**",
+            "",
+            "| Declaration | Where | Detail | In the case |",
+            "|---|---|---|---|"
+        ]
+        for observation in intentObservations.prefix(divergenceRowCap) {
+            let inputs = observation.inputs.tracks.keys.sorted().map { key in
+                "\(key)=\((observation.inputs.tracks[key] ?? []).map(\.canonicalString).joined(separator: ","))"
+            }
+            lines.append(
+                "| `\(tableCell(observation.declaration))` "
+                    + "| `\(tableCell(observation.divergence.label))`\(opCell(observation.divergence)) "
+                    + "| \(tableCell(observation.divergence.detail)) "
+                    + "| \(tableCell(inputs.joined(separator: " · "))) |"
+            )
+        }
+        return [lines.joined(separator: "\n")]
     }
 
     private var abstentionBody: [String] {
@@ -322,11 +322,6 @@ public extension SpecVerdict {
 
     // MARK: - Rendering helpers
 
-    /// ` in checkout (op 7)` after a Where cell's label, or nothing for an event under no op.
-    private func opCell(_ divergence: Divergence) -> String {
-        divergence.op.map { " in \(tableCell($0.description))" } ?? ""
-    }
-
     func divergenceTable(_ divergences: [Divergence]) -> String {
         var lines = ["| Kind | Where | Detail |", "|---|---|---|"]
         for divergence in divergences.prefix(divergenceRowCap) {
@@ -343,6 +338,11 @@ public extension SpecVerdict {
             lines.append("…and \(hidden) more — the full list is in the HTML report artifact.")
         }
         return lines.joined(separator: "\n")
+    }
+
+    /// ` in checkout (op 7)` after a Where cell's label, or nothing for an event under no op.
+    private func opCell(_ divergence: Divergence) -> String {
+        divergence.op.map { " in \(tableCell($0.description))" } ?? ""
     }
 
     /// Keeps engine-produced text from breaking the table grammar: pipes escape, newlines flatten.

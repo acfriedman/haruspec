@@ -165,12 +165,6 @@ public enum OpScope: Sendable, Equatable, Codable {
     case only(in: String)
     case once(per: String)
 
-    var op: String {
-        switch self {
-        case let .only(op), let .once(op): op
-        }
-    }
-
     func holds(for divergence: Divergence, among siblings: [Divergence]) -> Bool {
         guard let op = divergence.op, op.label == self.op else {
             return false
@@ -184,6 +178,12 @@ public enum OpScope: Sendable, Equatable, Codable {
                     .op == op
             }
             return alike.count == 1
+        }
+    }
+
+    var op: String {
+        switch self {
+        case let .only(op), let .once(op): op
         }
     }
 
@@ -217,12 +217,6 @@ public enum Position: Sendable, Equatable, Codable {
     case after(String)
     case before(String)
 
-    var anchor: String {
-        switch self {
-        case let .after(anchor), let .before(anchor): anchor
-        }
-    }
-
     /// The same anchor, the other way round — what the baseline must show for a directed reorder.
     var inverted: Position {
         switch self {
@@ -240,6 +234,12 @@ public enum Position: Sendable, Equatable, Codable {
             other.label == anchor
                 && (event.op == nil || other.op == event.op)
                 && (isAfter ? other.seq < seq : other.seq > seq)
+        }
+    }
+
+    var anchor: String {
+        switch self {
+        case let .after(anchor), let .before(anchor): anchor
         }
     }
 
@@ -268,21 +268,7 @@ public enum Position: Sendable, Equatable, Codable {
     }
 }
 
-/// A string as every declaration spells one: double-quoted, verbatim.
-func quoted(_ text: String) -> String {
-    "\"\(text)\""
-}
-
 extension CanonicalValue {
-    /// `.int` and `.double` as one number, so a declared `11363` matches a recorded `11363.0`.
-    var numericValue: Double? {
-        switch self {
-        case let .int(int): Double(int)
-        case let .double(double): double
-        default: nil
-        }
-    }
-
     /// A leaf value — the only shape a modifier's literal can spell.
     var isScalar: Bool {
         switch self {
@@ -297,6 +283,15 @@ extension CanonicalValue {
             return mine == theirs
         }
         return self == other
+    }
+
+    /// `.int` and `.double` as one number, so a declared `11363` matches a recorded `11363.0`.
+    var numericValue: Double? {
+        switch self {
+        case let .int(int): Double(int)
+        case let .double(double): double
+        default: nil
+        }
     }
 
     /// The literal spelling inside a modifier — `11363`, `1.5`, `"SAVE10"`, `true`, `null` — which
@@ -319,4 +314,9 @@ extension CanonicalValue {
     static func dslNumber(_ number: Double) -> String {
         number == number.rounded() && abs(number) < 1e15 ? String(Int64(number)) : String(number)
     }
+}
+
+/// A string as every declaration spells one: double-quoted, verbatim.
+func quoted(_ text: String) -> String {
+    "\"\(text)\""
 }

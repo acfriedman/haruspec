@@ -56,17 +56,6 @@ private final class NoteStore {
 }
 
 final class SeamedManagedObjectContextTests: XCTestCase {
-    private func spec(recording: @escaping (Bool) -> Void) -> Spec<NoteStore> {
-        Spec<NoteStore>("notestore.coredata")
-            .operations {
-                Op("cache") { sut in recording(sut.cache("hello")) }
-            }
-    }
-
-    private func store(_ seams: SeamContext) -> NoteStore {
-        NoteStore(context: SeamedManagedObjectContext.inMemory(model: model, seams: seams))
-    }
-
     func testTheFailureSweepIsOnByDefault() async {
         var outcomes: Set<Bool> = []
         _ = await spec(recording: { outcomes.insert($0) }).baselined(on: store).record()
@@ -86,6 +75,17 @@ final class SeamedManagedObjectContextTests: XCTestCase {
             .record()
 
         XCTAssertEqual(outcomes, [true], "an authored Seam pins the reading, so saves never fail")
+    }
+
+    private func spec(recording: @escaping (Bool) -> Void) -> Spec<NoteStore> {
+        Spec<NoteStore>("notestore.coredata")
+            .operations {
+                Op("cache") { sut in recording(sut.cache("hello")) }
+            }
+    }
+
+    private func store(_ seams: SeamContext) -> NoteStore {
+        NoteStore(context: SeamedManagedObjectContext.inMemory(model: model, seams: seams))
     }
 
     func testEachCaptureGetsItsOwnStore() async {

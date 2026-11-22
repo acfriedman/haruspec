@@ -82,6 +82,20 @@ public extension TraceDiff {
         return lines + unobservedIntentLines()
     }
 
+    private func glyph(_ kind: Divergence.Kind) -> String {
+        switch kind {
+        case .missingEvent: "−"
+        case .unexpectedEvent: "+"
+        case .reordered: "↔"
+        case .domainMigration: "⇄"
+        case .orderingRelaxed: "⤳"
+        case .orderingLost: "⊘"
+        case .orderingAdded: "⊕"
+        case .valueMismatch: "≠"
+        case .timingRegression: "⏱"
+        }
+    }
+
     /// A prompt-injected relay guide for a consuming agent (printed behind `--agent`). When the CLI
     /// is the agent's interface, the output itself teaches the agent how to communicate this
     /// ground-truth verdict to a human. Not meant for human eyes.
@@ -115,19 +129,5 @@ public extension TraceDiff {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
         return try encoder.encode(self)
-    }
-
-    private func glyph(_ kind: Divergence.Kind) -> String {
-        switch kind {
-        case .missingEvent: "−"
-        case .unexpectedEvent: "+"
-        case .reordered: "↔"
-        case .domainMigration: "⇄"
-        case .orderingRelaxed: "⤳"
-        case .orderingLost: "⊘"
-        case .orderingAdded: "⊕"
-        case .valueMismatch: "≠"
-        case .timingRegression: "⏱"
-        }
     }
 }

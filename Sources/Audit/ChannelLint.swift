@@ -201,6 +201,34 @@ public struct ChannelLint: Sendable {
         return findings
     }
 
+    private func findings(inFile file: String) -> [ChannelFinding] {
+        guard let text = try? String(contentsOf: root.appendingPathComponent(file), encoding: .utf8) else {
+            return []
+        }
+        var findings: [ChannelFinding] = []
+        for (offset, rawLine) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            // A mention in a comment is documentation, not a reach.
+            guard !line.hasPrefix("//"), !line.hasPrefix("*"), !line.hasPrefix("/*") else { continue }
+            for rule in rules {
+                guard let spelling = rule.spellings.first(where: line.contains) else { continue }
+                let use: ChannelUse = if HeldStandIn.covers(rule.channel, spelling, through: heldStandIns) {
+                    .held
+                } else {
+                    rule.positionDecides ? ChannelLint.use(of: spelling, in: line) : .bypass
+                }
+                findings.append(ChannelFinding(
+                    channel: rule.channel,
+                    use: use,
+                    file: file,
+                    line: offset + 1,
+                    text: line
+                ))
+            }
+        }
+        return findings
+    }
+
     /// Where the channel sits in the line decides what it is.
     ///
     /// Receiver of a message (`[[… defaultCenter] post…]`, `NotificationCenter.default.post`) is an
@@ -234,33 +262,5 @@ public struct ChannelLint: Sendable {
         // the `=` only means assignment when it is not inside the parameter list.
         let open = prefix.filter { $0 == "(" }.count - prefix.filter { $0 == ")" }.count
         return before == "=" && open > 0 ? .injectableDefault : .bypass
-    }
-
-    private func findings(inFile file: String) -> [ChannelFinding] {
-        guard let text = try? String(contentsOf: root.appendingPathComponent(file), encoding: .utf8) else {
-            return []
-        }
-        var findings: [ChannelFinding] = []
-        for (offset, rawLine) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            // A mention in a comment is documentation, not a reach.
-            guard !line.hasPrefix("//"), !line.hasPrefix("*"), !line.hasPrefix("/*") else { continue }
-            for rule in rules {
-                guard let spelling = rule.spellings.first(where: line.contains) else { continue }
-                let use: ChannelUse = if HeldStandIn.covers(rule.channel, spelling, through: heldStandIns) {
-                    .held
-                } else {
-                    rule.positionDecides ? ChannelLint.use(of: spelling, in: line) : .bypass
-                }
-                findings.append(ChannelFinding(
-                    channel: rule.channel,
-                    use: use,
-                    file: file,
-                    line: offset + 1,
-                    text: line
-                ))
-            }
-        }
-        return findings
     }
 }

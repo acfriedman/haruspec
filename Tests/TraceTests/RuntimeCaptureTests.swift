@@ -171,6 +171,22 @@ final class RuntimeValueTests: XCTestCase {
     }
 }
 
+/// Returns how an imported `NSError **` out-parameter canonicalizes.
+///
+/// - Returns: What ``RuntimeValue/canonical(_:)`` records for a pointer to a local `NSError?`.
+private func autoreleasing() -> CanonicalValue {
+    var error: NSError?
+    return canonical(of: &error)
+}
+
+/// Returns `pointer` canonicalized; a function, so `&` can pass an autoreleasing pointer.
+///
+/// - Parameter pointer: An out-parameter slot, as Swift imports an Obj-C `NSError **`.
+/// - Returns: What ``RuntimeValue/canonical(_:)`` records for it.
+private func canonical(of pointer: AutoreleasingUnsafeMutablePointer<NSError?>) -> CanonicalValue {
+    RuntimeValue.canonical(pointer)
+}
+
 /// A plain Obj-C-style object with no `Encodable`/`Codable` conformance, standing in for the
 /// bridged `Receipt` a migration would return.
 private final class Receipt: NSObject {
@@ -308,20 +324,4 @@ final class IntervalTests: XCTestCase {
     func testIntervalRunsBodyWithoutActiveCapture() {
         XCTAssertEqual(Haruspec.interval("x") { 7 }, 7) // no recorder bound → just runs the body
     }
-}
-
-/// Returns how an imported `NSError **` out-parameter canonicalizes.
-///
-/// - Returns: What ``RuntimeValue/canonical(_:)`` records for a pointer to a local `NSError?`.
-private func autoreleasing() -> CanonicalValue {
-    var error: NSError?
-    return canonical(of: &error)
-}
-
-/// Returns `pointer` canonicalized; a function, so `&` can pass an autoreleasing pointer.
-///
-/// - Parameter pointer: An out-parameter slot, as Swift imports an Obj-C `NSError **`.
-/// - Returns: What ``RuntimeValue/canonical(_:)`` records for it.
-private func canonical(of pointer: AutoreleasingUnsafeMutablePointer<NSError?>) -> CanonicalValue {
-    RuntimeValue.canonical(pointer)
 }

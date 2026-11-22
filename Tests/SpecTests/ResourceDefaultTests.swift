@@ -33,22 +33,6 @@ private final class PadUser {
 }
 
 final class ResourceDefaultTests: XCTestCase {
-    private func spec() -> Spec<PadUser> {
-        Spec<PadUser>("pad.default")
-            .operations {
-                Op("touch") { _ in }
-            }
-    }
-
-    /// Builds the baseline, handing `resolved` each pad the capture resolves.
-    private func padUser(collecting resolved: @escaping (ScratchPad) -> Void) -> (SeamContext) -> PadUser {
-        { seams in
-            let user = PadUser(pad: seams.resolve(ScratchPad.self))
-            resolved(user.pad)
-            return user
-        }
-    }
-
     func testAPackagedDefaultServesAnUnprovidedResource() async {
         var resolved: [ScratchPad] = []
         _ = await spec().baselined(on: padUser(collecting: { resolved.append($0) })).record()
@@ -110,5 +94,21 @@ final class ResourceDefaultTests: XCTestCase {
             resolved.count,
             "a capture resource is per-capture; a shared instance would leak state between probes"
         )
+    }
+
+    private func spec() -> Spec<PadUser> {
+        Spec<PadUser>("pad.default")
+            .operations {
+                Op("touch") { _ in }
+            }
+    }
+
+    /// Builds the baseline, handing `resolved` each pad the capture resolves.
+    private func padUser(collecting resolved: @escaping (ScratchPad) -> Void) -> (SeamContext) -> PadUser {
+        { seams in
+            let user = PadUser(pad: seams.resolve(ScratchPad.self))
+            resolved(user.pad)
+            return user
+        }
     }
 }

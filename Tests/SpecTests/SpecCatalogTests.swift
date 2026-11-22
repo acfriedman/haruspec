@@ -4,23 +4,6 @@ import HaruspecSeams
 import HaruspecSpec
 import XCTest
 
-// The catalog is what lets a test target stop naming specs: it flattens several differently-typed
-// specs into plain `spec/candidate` strings and runs one by name. These cover the flattening,
-// the lookup failures a rename produces, and the continuous selection rule (one declared spec
-// needs no selection; several must be named).
-
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
-    RefactorCart(center: ctx.notifications)
-}
-
-private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
-    RoundBugCart(center: ctx.notifications)
-}
-
 /// The conformance shape an adopting app writes.
 private struct PromoCartSpec: SpecProviding {
     var name = "promo-cart"
@@ -51,6 +34,10 @@ final class SpecCatalogTests: XCTestCase {
             .appendingPathComponent("catalog-\(UUID().uuidString)", isDirectory: true)
     }
 
+    private func catalog() -> SpecCatalog {
+        SpecCatalog(cart("promo-cart").entry(), cart("promo-cart.second").entry())
+    }
+
     private func cart(_ name: String) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>(name)
             .operations {
@@ -63,10 +50,6 @@ final class SpecCatalogTests: XCTestCase {
                 Candidate("RefactorCart", makeRefactor)
                 Candidate("RoundBugCart", expecting: .diverged, makeRoundBug)
             }
-    }
-
-    private func catalog() -> SpecCatalog {
-        SpecCatalog(cart("promo-cart").entry(), cart("promo-cart.second").entry())
     }
 
     // MARK: Migration cases
@@ -220,4 +203,21 @@ final class SpecCatalogTests: XCTestCase {
         let missing = await catalog().runContinuous(spec: "renamed", environment: ["HARUSPEC_MODE": "record"])
         XCTAssertNil(missing)
     }
+}
+
+// The catalog is what lets a test target stop naming specs: it flattens several differently-typed
+// specs into plain `spec/candidate` strings and runs one by name. These cover the flattening,
+// the lookup failures a rename produces, and the continuous selection rule (one declared spec
+// needs no selection; several must be named).
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
+    RefactorCart(center: ctx.notifications)
+}
+
+private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
+    RoundBugCart(center: ctx.notifications)
 }

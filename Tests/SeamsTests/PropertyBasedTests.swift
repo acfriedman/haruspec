@@ -11,44 +11,6 @@ import XCTest
 final class PropertyBasedTests: XCTestCase {
     private static let checkoutCompleted = Notification.Name("CheckoutCompleted")
 
-    /// "Production" checkout. Reads a `discount` value seam (the same `cassette.int` primitive `SeamClock`
-    /// / `SeamRNG` wrap) and a `noise` seam it does *not* act on, then posts the total computed by `total`.
-    private func runCheckout(
-        cassette: Cassette,
-        subtotal: Int64,
-        total: (_ subtotal: Int64, _ discount: Int64) -> Int64
-    ) -> Trace {
-        let recorder = TraceRecorder(name: "checkout", clock: ManualClock())
-        let center = RecordingNotificationCenter()
-
-        TraceContext.$current.withValue(recorder) {
-            let discount = cassette.int(seam: "discount", live: { 100 }) // seam → output
-            _ = cassette.int(seam: "noise", live: { 7 }) // seam read but irrelevant to behavior
-            let result = total(subtotal, discount)
-            center.post(name: Self.checkoutCompleted, object: nil, userInfo: ["totalCents": Int(result)])
-            Haruspec.marker("checkout.completed")
-        }
-        return recorder.trace()
-    }
-
-    /// Pricing branches: baseline, a behavior-preserving refactor, and a path-dependent regression.
-    private func baseline(_ subtotal: Int64, _ discount: Int64) -> Int64 {
-        subtotal - discount
-    }
-
-    private func refactored(_ subtotal: Int64, _ discount: Int64) -> Int64 {
-        subtotal + -discount
-    } // ≡ baseline
-    private func clamped(_ subtotal: Int64, _ discount: Int64) -> Int64 {
-        max(0, subtotal - discount)
-    } // bites when discount > subtotal
-
-    private func record(_ subtotal: Int64) -> CassetteData {
-        let recording = Cassette()
-        _ = runCheckout(cassette: recording, subtotal: subtotal, total: baseline)
-        return recording.snapshot()
-    }
-
     /// The gap being closed: on the one recorded path, the regression is invisible.
     func testSingleCassetteMissesThePathDependentRegression() {
         let tape = record(1000) // golden discount = 100 → total 900
@@ -102,6 +64,20 @@ final class PropertyBasedTests: XCTestCase {
         XCTAssertEqual(property.verify(count: 64, varying: ["discount": .int(0 ... 2000)], seed: 42).verdict, .diverged)
     }
 
+    private func clamped(_ subtotal: Int64, _ discount: Int64) -> Int64 {
+        max(0, subtotal - discount)
+    } // bites when discount > subtotal
+
+    private func intTrack(_ data: CassetteData, _ seam: String) -> [Int64]? {
+        data.tracks[seam]?.compactMap {
+            if case let .int(value) = $0 {
+                value
+            } else {
+                nil
+            }
+        }
+    }
+
     /// The loop closes: a behavior-preserving refactor holds over the domain, so the property run
     /// *credits domain coverage* — raising the reported surface past the single recorded point.
     func testHeldPropertyRunCreditsDomainCoverage() {
@@ -131,13 +107,38 @@ final class PropertyBasedTests: XCTestCase {
         XCTAssertTrue(pointCoverage.domainExercised.isEmpty)
     }
 
-    private func intTrack(_ data: CassetteData, _ seam: String) -> [Int64]? {
-        data.tracks[seam]?.compactMap {
-            if case let .int(value) = $0 {
-                value
-            } else {
-                nil
-            }
-        }
+    private func record(_ subtotal: Int64) -> CassetteData {
+        let recording = Cassette()
+        _ = runCheckout(cassette: recording, subtotal: subtotal, total: baseline)
+        return recording.snapshot()
     }
+
+    /// "Production" checkout. Reads a `discount` value seam (the same `cassette.int` primitive `SeamClock`
+    /// / `SeamRNG` wrap) and a `noise` seam it does *not* act on, then posts the total computed by `total`.
+    private func runCheckout(
+        cassette: Cassette,
+        subtotal: Int64,
+        total: (_ subtotal: Int64, _ discount: Int64) -> Int64
+    ) -> Trace {
+        let recorder = TraceRecorder(name: "checkout", clock: ManualClock())
+        let center = RecordingNotificationCenter()
+
+        TraceContext.$current.withValue(recorder) {
+            let discount = cassette.int(seam: "discount", live: { 100 }) // seam → output
+            _ = cassette.int(seam: "noise", live: { 7 }) // seam read but irrelevant to behavior
+            let result = total(subtotal, discount)
+            center.post(name: Self.checkoutCompleted, object: nil, userInfo: ["totalCents": Int(result)])
+            Haruspec.marker("checkout.completed")
+        }
+        return recorder.trace()
+    }
+
+    /// Pricing branches: baseline, a behavior-preserving refactor, and a path-dependent regression.
+    private func baseline(_ subtotal: Int64, _ discount: Int64) -> Int64 {
+        subtotal - discount
+    }
+
+    private func refactored(_ subtotal: Int64, _ discount: Int64) -> Int64 {
+        subtotal + -discount
+    } // ≡ baseline
 }

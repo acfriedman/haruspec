@@ -92,6 +92,10 @@ final class StabilityTests: XCTestCase {
         Drift.shared.reset()
     }
 
+    private func steadyPlan() async -> SpecPlan {
+        await spec { SteadySubject(center: $0.notifications) }.record()
+    }
+
     /// One probe, no exploration: each replay pass is exactly one capture, so the drift counter maps
     /// 1:1 onto passes and the expected outcome grouping is exact.
     private func spec(system: @escaping (SeamContext) -> Totaling) -> BaselinedSpec<Totaling> {
@@ -100,10 +104,6 @@ final class StabilityTests: XCTestCase {
                 Op("total") { subject, _ in subject.total() }
             }
             .baselined(on: system)
-    }
-
-    private func steadyPlan() async -> SpecPlan {
-        await spec { SteadySubject(center: $0.notifications) }.record()
     }
 
     // MARK: - The two flapping classes read UNSTABLE

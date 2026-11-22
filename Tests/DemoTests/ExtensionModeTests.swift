@@ -6,14 +6,6 @@ import XCTest
 /// that also carries a **collateral** regression. The oracle must absorb the declared additions while
 /// still catching the undeclared one. Migration parity is the special case where nothing is declared.
 final class ExtensionModeTests: XCTestCase {
-    private func featureDiff() -> TraceDiff {
-        BehavioralDiff.compare(
-            baseline: CheckoutSpec.baseline(),
-            candidate: CheckoutSpec.feature(),
-            comparison: CheckoutSpec.comparison
-        )
-    }
-
     /// Without an intent spec (parity mode), the feature's intended additions look just like the
     /// collateral regression: every divergence is `.collateral` and gates.
     func testParityModeFlagsEveryChange() {
@@ -64,5 +56,13 @@ final class ExtensionModeTests: XCTestCase {
         let diff = featureDiff().classified(against: intent)
         XCTAssertTrue(diff.isEquivalent, "every change is now declared — no collateral remains\n\(diff.report())")
         XCTAssertEqual(diff.collateralCount, 0)
+    }
+
+    private func featureDiff() -> TraceDiff {
+        BehavioralDiff.compare(
+            baseline: CheckoutSpec.baseline(),
+            candidate: CheckoutSpec.feature(),
+            comparison: CheckoutSpec.comparison
+        )
     }
 }

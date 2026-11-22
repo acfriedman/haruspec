@@ -276,6 +276,13 @@ extension BehavioralDiff {
         }
     }
 
+    /// Whether two events' payloads are indistinguishable under the comparison — the multiset
+    /// matching predicate, with numbers within its epsilon counting as equal.
+    static func payloadsMatch(_ baseline: TraceEvent, _ candidate: TraceEvent, comparison: Comparison) -> Bool {
+        valueDivergences(baseline.payload ?? .null, candidate.payload ?? .null, path: "", comparison: comparison)
+            .isEmpty
+    }
+
     /// One migrated pair: the move disclosed once, the values still compared — and when the move left
     /// an ordered domain for an unordered one, tallied toward that pair's `orderingRelaxed`.
     private static func recordMigration(
@@ -318,12 +325,5 @@ extension BehavioralDiff {
                 firstCandidateSeq: counterpart.seq
             ))
         }
-    }
-
-    /// Whether two events' payloads are indistinguishable under the comparison — the multiset
-    /// matching predicate, with numbers within its epsilon counting as equal.
-    static func payloadsMatch(_ baseline: TraceEvent, _ candidate: TraceEvent, comparison: Comparison) -> Bool {
-        valueDivergences(baseline.payload ?? .null, candidate.payload ?? .null, path: "", comparison: comparison)
-            .isEmpty
     }
 }

@@ -51,70 +51,6 @@ struct XcodeTestRun {
         self.derivedData = derivedData
     }
 
-    /// The `xcodebuild` arguments, `xcodebuild` itself first.
-    var arguments: [String] {
-        var arguments = ["xcodebuild"]
-        switch action {
-        case .buildForTesting:
-            arguments.append("build-for-testing")
-        case .test:
-            arguments.append("test-without-building")
-        }
-        if let project = config.project {
-            arguments += ["-project", checkout.appendingPathComponent(project).path]
-        } else if let workspace = config.workspace {
-            arguments += ["-workspace", checkout.appendingPathComponent(workspace).path]
-        }
-        arguments += [
-            "-scheme",
-            config.scheme,
-            "-configuration",
-            config.resolvedConfiguration,
-            "-destination",
-            config.destination,
-            "-derivedDataPath",
-            derivedData.path
-        ]
-        if case .test = action {
-            // A suite, or the whole target — never one parameterized function, which selects nothing.
-            let selection = only.isEmpty ? [config.testTarget] : only
-            arguments += selection.map { "-only-testing:\($0)" }
-            if let resultBundle {
-                arguments += ["-resultBundlePath", resultBundle.path]
-            }
-        }
-        if coverage {
-            arguments += ["-enableCodeCoverage", "YES"]
-        }
-        arguments.append("CODE_SIGNING_ALLOWED=NO")
-        return arguments
-    }
-
-    /// Returns the child environment: `base` with every inherited `TEST_RUNNER_HARUSPEC_*` value
-    /// replaced by this run's.
-    ///
-    /// - Parameter base: The environment to start from, normally this process's.
-    /// - Returns: The environment the test runner receives, prefixes intact.
-    func environment(from base: [String: String]) -> [String: String] {
-        let prefix = "TEST_RUNNER_"
-        var environment = base.filter { !$0.key.hasPrefix(prefix + "HARUSPEC_") }
-        guard case let .test(mode) = action else {
-            return environment
-        }
-        environment[prefix + ContinuousMode.environmentKey] = mode.rawValue
-        environment[prefix + AuditRoot.environmentKey] = checkout.path
-        if let plan {
-            environment[prefix + ContinuousRun.planPathKey] = plan.path
-        }
-        if let results {
-            environment[prefix + ContinuousRun.resultsDirectoryKey] = results.path
-        }
-        if let intent {
-            environment[prefix + ContinuousRun.intentPathKey] = intent.path
-        }
-        return environment
-    }
-
     /// The `xcodebuild` output that means the simulator's test host died before any test ran — an
     /// infrastructure failure that says nothing about behavior.
     static let bootstrapFailureSignatures = [
@@ -155,6 +91,70 @@ struct XcodeTestRun {
         try FileManager.default.createParentDirectory(of: log)
         let environment = environment(from: ProcessInfo.processInfo.environment)
         return try Shell.run(arguments, in: checkout, environment: environment, log: log).status
+    }
+
+    /// Returns the child environment: `base` with every inherited `TEST_RUNNER_HARUSPEC_*` value
+    /// replaced by this run's.
+    ///
+    /// - Parameter base: The environment to start from, normally this process's.
+    /// - Returns: The environment the test runner receives, prefixes intact.
+    func environment(from base: [String: String]) -> [String: String] {
+        let prefix = "TEST_RUNNER_"
+        var environment = base.filter { !$0.key.hasPrefix(prefix + "HARUSPEC_") }
+        guard case let .test(mode) = action else {
+            return environment
+        }
+        environment[prefix + ContinuousMode.environmentKey] = mode.rawValue
+        environment[prefix + AuditRoot.environmentKey] = checkout.path
+        if let plan {
+            environment[prefix + ContinuousRun.planPathKey] = plan.path
+        }
+        if let results {
+            environment[prefix + ContinuousRun.resultsDirectoryKey] = results.path
+        }
+        if let intent {
+            environment[prefix + ContinuousRun.intentPathKey] = intent.path
+        }
+        return environment
+    }
+
+    /// The `xcodebuild` arguments, `xcodebuild` itself first.
+    var arguments: [String] {
+        var arguments = ["xcodebuild"]
+        switch action {
+        case .buildForTesting:
+            arguments.append("build-for-testing")
+        case .test:
+            arguments.append("test-without-building")
+        }
+        if let project = config.project {
+            arguments += ["-project", checkout.appendingPathComponent(project).path]
+        } else if let workspace = config.workspace {
+            arguments += ["-workspace", checkout.appendingPathComponent(workspace).path]
+        }
+        arguments += [
+            "-scheme",
+            config.scheme,
+            "-configuration",
+            config.resolvedConfiguration,
+            "-destination",
+            config.destination,
+            "-derivedDataPath",
+            derivedData.path
+        ]
+        if case .test = action {
+            // A suite, or the whole target — never one parameterized function, which selects nothing.
+            let selection = only.isEmpty ? [config.testTarget] : only
+            arguments += selection.map { "-only-testing:\($0)" }
+            if let resultBundle {
+                arguments += ["-resultBundlePath", resultBundle.path]
+            }
+        }
+        if coverage {
+            arguments += ["-enableCodeCoverage", "YES"]
+        }
+        arguments.append("CODE_SIGNING_ALLOWED=NO")
+        return arguments
     }
 }
 

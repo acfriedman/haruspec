@@ -8,14 +8,6 @@ import XCTest
 // failure, which cost this project months of a declaration nothing could satisfy.
 
 final class AuditOutcomeTests: XCTestCase {
-    private func finding(_ channel: String, use: ChannelUse = .bypass) -> ChannelFinding {
-        ChannelFinding(channel: channel, use: use, file: "Sources/Cart.swift", line: 1, text: "…")
-    }
-
-    private func unresolved(_ symbol: String) -> SourceResolution {
-        SourceResolution(origin: TraceOrigin(label: "Cart", symbol: symbol), files: [])
-    }
-
     func testAnUndeclaredBypassGates() {
         let outcome = AuditReport(unresolved: [], findings: [finding("Combine")])
             .outcome(accepting: [])
@@ -53,6 +45,10 @@ final class AuditOutcomeTests: XCTestCase {
         XCTAssertEqual(outcome.entries.first, "CartManager (no source found)")
     }
 
+    private func unresolved(_ symbol: String) -> SourceResolution {
+        SourceResolution(origin: TraceOrigin(label: "Cart", symbol: symbol), files: [])
+    }
+
     func testInjectableDefaultsAreNeverGatingFindings() {
         let outcome = AuditReport(
             unresolved: [],
@@ -70,5 +66,9 @@ final class AuditOutcomeTests: XCTestCase {
         ).outcome(accepting: [])
 
         XCTAssertEqual(outcome.bypassed, ["Combine", "KVO"])
+    }
+
+    private func finding(_ channel: String, use: ChannelUse = .bypass) -> ChannelFinding {
+        ChannelFinding(channel: channel, use: use, file: "Sources/Cart.swift", line: 1, text: "…")
     }
 }

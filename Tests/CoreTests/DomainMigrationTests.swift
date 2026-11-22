@@ -10,19 +10,6 @@ import XCTest
 /// none of them a value change. The pairs said nothing about whether behavior survived the move, and
 /// buried the values that would have.
 final class DomainMigrationTests: XCTestCase {
-    private func note(
-        _ seq: Int,
-        _ label: String,
-        on domain: ConcurrencyDomain,
-        _ payload: CanonicalValue? = nil
-    ) -> TraceEvent {
-        TraceEvent(seq: seq, kind: .notification, label: label, domain: domain, subject: 1, payload: payload)
-    }
-
-    private func trace(_ name: String, _ events: [TraceEvent]) -> Trace {
-        Trace(name: name, events: events)
-    }
-
     /// One named divergence, not a pair — and the domains it moved between are in the message, since
     /// "which domain now?" is the question a reader has.
     func testAMovedEventIsOneDivergenceNamingBothDomains() {
@@ -140,5 +127,18 @@ final class DomainMigrationTests: XCTestCase {
 
         XCTAssertEqual(byKind[.domainMigration]?.map(\.label), ["CartDidChange"])
         XCTAssertEqual(byKind[.missingEvent]?.map(\.label), ["Inventory.reserve"])
+    }
+
+    private func trace(_ name: String, _ events: [TraceEvent]) -> Trace {
+        Trace(name: name, events: events)
+    }
+
+    private func note(
+        _ seq: Int,
+        _ label: String,
+        on domain: ConcurrencyDomain,
+        _ payload: CanonicalValue? = nil
+    ) -> TraceEvent {
+        TraceEvent(seq: seq, kind: .notification, label: label, domain: domain, subject: 1, payload: payload)
     }
 }

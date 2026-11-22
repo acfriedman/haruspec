@@ -33,9 +33,6 @@ public enum LocalSetup {
         return lines
     }
 
-    /// The launcher's path under `.haruspec/`.
-    static let launcherPath = "bin/haruspec"
-
     private static func writeLauncher(in directory: HaruspecDirectory) throws -> String {
         let url = directory.root.appendingPathComponent(launcherPath)
         let text = LauncherScript.text + "\n"
@@ -126,4 +123,7 @@ public enum LocalSetup {
 
         """
     }
+
+    /// The launcher's path under `.haruspec/`.
+    static let launcherPath = "bin/haruspec"
 }

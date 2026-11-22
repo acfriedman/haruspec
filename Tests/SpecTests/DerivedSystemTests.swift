@@ -139,13 +139,6 @@ final class SwiftRegister: Register {
 }
 
 final class DerivedSystemTests: XCTestCase {
-    /// The collapsed spec: one entry point, no construction closure, no `.vary` — the authored residue alone.
-    private var spec: Spec<Kiosk> {
-        Spec<Kiosk>("kiosk.derived") {
-            Amend("total").last()
-        }
-    }
-
     func testTheCatalogCarriesTheDerivedSystemFactory() {
         XCTAssertNotNil(DerivedKiosk.derivedSystem, "a pasted init derives the wiring")
     }
@@ -214,6 +207,13 @@ final class DerivedSystemTests: XCTestCase {
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
         XCTAssertTrue(verdict.stability.isStable, "the derived system must replay deterministically")
+    }
+
+    /// The collapsed spec: one entry point, no construction closure, no `.vary` — the authored residue alone.
+    private var spec: Spec<Kiosk> {
+        Spec<Kiosk>("kiosk.derived") {
+            Amend("total").last()
+        }
     }
 
     func testACaptureResourceResolvesAConstructorParameterNoDoubleServes() async {

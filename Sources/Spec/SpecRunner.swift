@@ -107,14 +107,6 @@ extension Spec {
         )
     }
 
-    /// A failing comparison of the live sweep, with everything the diverged exit needs to pin it.
-    private struct DivergedRun {
-        let diff: TraceDiff
-        let candidateReplay: Cassette
-        let order: [Op<S>]
-        let cassette: CassetteData
-    }
-
     /// Returns the red exit of the live sweep, unstable when the baseline disagrees with itself
     /// over the failing input.
     ///
@@ -168,92 +160,20 @@ extension Spec {
         )
     }
 
+    /// A failing comparison of the live sweep, with everything the diverged exit needs to pin it.
+    private struct DivergedRun {
+        let diff: TraceDiff
+        let candidateReplay: Cassette
+        let order: [Op<S>]
+        let cassette: CassetteData
+    }
+
     // MARK: - Hidden machinery
 
     /// One replay's coverage against the plan's varied surface — the plan's domains, not the
     /// declaration's, so packaged resource sweeps earn the same credit an authored `Seam` does.
     private func plannedCoverage(replay: Cassette, domainHeld: Bool, plan: ExplorationPlan<S>) -> Coverage {
         coverage(replays: [replay], domainHeld: domainHeld, sweptSeams: Array(plan.domains.keys))
-    }
-
-    /// Records the golden template — the declared order under live seams, the template every variation
-    /// is derived from — and resolves the explored surface plus the qualification measured off it.
-    ///
-    /// - Parameter baseline: Builds a fresh baseline per capture.
-    /// - Returns: The baseline, its golden cassette, the exploration plan, and the qualification.
-    private func goldenSurface(baseline: @escaping (SeamContext) -> S) async -> GoldenSurface<S> {
-        let recording = Cassette(recordingPreferring: goldenReadings)
-        let goldenCapture = await captured(make: baseline, order: explorationOrder(), cassette: recording)
-        let goldenTrace = goldenCapture.trace
-        let golden = recording.snapshot()
-        let plan = explorationPlan(golden: golden, heldWorkAtGaps: goldenCapture.heldWorkAtGaps)
-        let qualification = liveQualification(
-            goldenTrace: goldenTrace,
-            golden: golden,
-            exploration: plan.exploration
-        )
-        return GoldenSurface(baseline: baseline, golden: golden, plan: plan, qualification: qualification)
-    }
-
-    /// The longest call sequence exploration can produce: the declared ops, each repeated as far as
-    /// `Ordering(repeating:)` allows. The golden cassette is recorded over *this* rather than the
-    /// declared order, so every explored ordering has enough recorded seam readings — a shorter one
-    /// just consumes a prefix of each track. Recording over the declared order instead would leave a
-    /// repeated op's second read with nothing to replay, which surfaces as an `.unrecorded` gap and
-    /// downgrades an otherwise-equivalent verdict to CANNOT-VERIFY.
-    func explorationOrder() -> [Op<S>] {
-        guard exploreOrdering else {
-            return operations
-        }
-        return operations.flatMap { operation in
-            Array(repeating: operation, count: operation.occurrences(default: orderingRepeats).upperBound)
-        }
-    }
-
-    /// One differential run. The diff is already intent-classified: with a declared intent the loop
-    /// must not stop on an intended-only divergence set, so classification lives here, not at exits.
-    func compare(
-        make: (SeamContext) -> S,
-        candidate: (SeamContext) -> S,
-        order: [Op<S>],
-        cassette: CassetteData,
-        declaring intent: Intent
-    ) async -> ProbeComparison {
-        let baselineReplay = Cassette(replaying: cassette)
-        let baseline = await capture(make: make, order: order, cassette: baselineReplay)
-        // The candidate is answered as the baseline was, call by call, whatever order it asks in.
-        let replay = Cassette(replaying: baselineReplay.snapshot())
-        let candidateTrace = await capture(make: candidate, order: order, cassette: replay)
-        let evidence = ProbeEvidence(
-            inputs: cassette.tracks,
-            baseline: baseline,
-            candidate: candidateTrace,
-            comparison: comparison
-        )
-        let diff = BehavioralDiff.compare(
-            baseline: baseline,
-            candidate: candidateTrace,
-            comparison: comparison
-        )
-        .classified(against: intent, evidence: evidence)
-        return ProbeComparison(diff: diff, candidateReplay: replay, evidence: evidence)
-    }
-
-    private func diverges(
-        baseline: (SeamContext) -> S,
-        candidate: (SeamContext) -> S,
-        order: [Op<S>],
-        cassette: CassetteData,
-        declaring intent: Intent
-    ) async -> TraceDiff? {
-        let diff = await compare(
-            make: baseline,
-            candidate: candidate,
-            order: order,
-            cassette: cassette,
-            declaring: intent
-        ).diff
-        return diff.isEquivalent ? nil : diff
     }
 
     /// Assembles the spec's coverage: the declared surface is the *interrogation* surface — every op
@@ -311,6 +231,40 @@ extension Spec {
         )
     }
 
+    /// Records the golden template — the declared order under live seams, the template every variation
+    /// is derived from — and resolves the explored surface plus the qualification measured off it.
+    ///
+    /// - Parameter baseline: Builds a fresh baseline per capture.
+    /// - Returns: The baseline, its golden cassette, the exploration plan, and the qualification.
+    private func goldenSurface(baseline: @escaping (SeamContext) -> S) async -> GoldenSurface<S> {
+        let recording = Cassette(recordingPreferring: goldenReadings)
+        let goldenCapture = await captured(make: baseline, order: explorationOrder(), cassette: recording)
+        let goldenTrace = goldenCapture.trace
+        let golden = recording.snapshot()
+        let plan = explorationPlan(golden: golden, heldWorkAtGaps: goldenCapture.heldWorkAtGaps)
+        let qualification = liveQualification(
+            goldenTrace: goldenTrace,
+            golden: golden,
+            exploration: plan.exploration
+        )
+        return GoldenSurface(baseline: baseline, golden: golden, plan: plan, qualification: qualification)
+    }
+
+    /// The longest call sequence exploration can produce: the declared ops, each repeated as far as
+    /// `Ordering(repeating:)` allows. The golden cassette is recorded over *this* rather than the
+    /// declared order, so every explored ordering has enough recorded seam readings — a shorter one
+    /// just consumes a prefix of each track. Recording over the declared order instead would leave a
+    /// repeated op's second read with nothing to replay, which surfaces as an `.unrecorded` gap and
+    /// downgrades an otherwise-equivalent verdict to CANNOT-VERIFY.
+    func explorationOrder() -> [Op<S>] {
+        guard exploreOrdering else {
+            return operations
+        }
+        return operations.flatMap { operation in
+            Array(repeating: operation, count: operation.occurrences(default: orderingRepeats).upperBound)
+        }
+    }
+
     /// Delta-debugs the failing call sequence: drops ops that aren't needed to reproduce → the minimal
     /// order that still diverges (the "localize" the north star asks for, applied to sequencing).
     ///
@@ -351,5 +305,51 @@ extension Spec {
             }
         }
         return minimal
+    }
+
+    private func diverges(
+        baseline: (SeamContext) -> S,
+        candidate: (SeamContext) -> S,
+        order: [Op<S>],
+        cassette: CassetteData,
+        declaring intent: Intent
+    ) async -> TraceDiff? {
+        let diff = await compare(
+            make: baseline,
+            candidate: candidate,
+            order: order,
+            cassette: cassette,
+            declaring: intent
+        ).diff
+        return diff.isEquivalent ? nil : diff
+    }
+
+    /// One differential run. The diff is already intent-classified: with a declared intent the loop
+    /// must not stop on an intended-only divergence set, so classification lives here, not at exits.
+    func compare(
+        make: (SeamContext) -> S,
+        candidate: (SeamContext) -> S,
+        order: [Op<S>],
+        cassette: CassetteData,
+        declaring intent: Intent
+    ) async -> ProbeComparison {
+        let baselineReplay = Cassette(replaying: cassette)
+        let baseline = await capture(make: make, order: order, cassette: baselineReplay)
+        // The candidate is answered as the baseline was, call by call, whatever order it asks in.
+        let replay = Cassette(replaying: baselineReplay.snapshot())
+        let candidateTrace = await capture(make: candidate, order: order, cassette: replay)
+        let evidence = ProbeEvidence(
+            inputs: cassette.tracks,
+            baseline: baseline,
+            candidate: candidateTrace,
+            comparison: comparison
+        )
+        let diff = BehavioralDiff.compare(
+            baseline: baseline,
+            candidate: candidateTrace,
+            comparison: comparison
+        )
+        .classified(against: intent, evidence: evidence)
+        return ProbeComparison(diff: diff, candidateReplay: replay, evidence: evidence)
     }
 }

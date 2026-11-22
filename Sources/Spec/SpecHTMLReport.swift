@@ -40,6 +40,60 @@ public extension SpecVerdict {
         ])
     }
 
+    /// The run-to-run delta as the leading panel: each distinct outcome with the passes that produced
+    /// it. Run 1 may have had no divergences at all (a flapping green) — the finding is the delta.
+    private var unstablePanel: String {
+        let seams = (stability.uncontrolledSeams ?? []).map(\.summary).joined(separator: " — ")
+        let named = seams.isEmpty ? "" : " Uncontrolled seams: \(seams)."
+        if let selfCheck = stability.baselineSelfCheck, !selfCheck.isEmpty {
+            return HTML.abstentionSection(
+                reason: "The baseline, rerun against itself over the failing input, disagreed with "
+                    + "itself (\(selfCheck.joined(separator: " ⸱ "))).\(named) A verdict that cannot "
+                    + "be reproduced cannot gate."
+            )
+        }
+        let delta = stability.outcomes.map { outcome in
+            let runs = outcome.runs.map(String.init).joined(separator: ", ")
+            let inventory = outcome.inventory.isEmpty
+                ? "no divergences"
+                : outcome.inventory.joined(separator: " ⸱ ")
+            return "runs \(runs) → \(outcome.verdict.rawValue): \(inventory)"
+        }
+        .joined(separator: " — ")
+        return HTML.abstentionSection(
+            reason: "\(stability.replays) replays of identical inputs disagreed (\(delta)).\(named) "
+                + "An unmodeled nondeterministic axis; a verdict that cannot be reproduced cannot gate."
+        )
+    }
+
+    private var cleanPanel: String {
+        let plural = orderingsExplored == 1 ? "" : "s"
+        if verdict == .cannotVerify {
+            return HTML.abstentionSection(reason: "The oracle could not faithfully isolate this change.")
+        }
+        let scope = exploration.isExhaustive ? "All \(orderingsExplored)" : "\(orderingsExplored) sampled"
+        return HTML.cleanSection(
+            summary: "Behavior matched across everything explored",
+            detail: "\(scope) call ordering\(plural) — and every generated seam value — produced "
+                + "a byte-for-byte identical behavior trace (within the declared comparison). No divergences."
+        )
+    }
+
+    /// What other failing cases found that the reported one does not show.
+    private var unreportedFindingSection: String {
+        guard let failingCases else {
+            return ""
+        }
+        let others = failingCases.unreported(beside: diff.divergences)
+        guard !others.isEmpty else {
+            return ""
+        }
+        return HTML.divergenceSection(
+            others,
+            heading: "Also in other failing cases (\(failingCases.probes.count) failed in all)"
+        )
+    }
+
     /// The stat row: verdict, exploration, divergence count, then the qualifiers that only apply when
     /// measured (coverage, stability, counterexample).
     private var statTiles: [String] {
@@ -97,59 +151,5 @@ public extension SpecVerdict {
             )
         }
         return tiles
-    }
-
-    /// The run-to-run delta as the leading panel: each distinct outcome with the passes that produced
-    /// it. Run 1 may have had no divergences at all (a flapping green) — the finding is the delta.
-    private var unstablePanel: String {
-        let seams = (stability.uncontrolledSeams ?? []).map(\.summary).joined(separator: " — ")
-        let named = seams.isEmpty ? "" : " Uncontrolled seams: \(seams)."
-        if let selfCheck = stability.baselineSelfCheck, !selfCheck.isEmpty {
-            return HTML.abstentionSection(
-                reason: "The baseline, rerun against itself over the failing input, disagreed with "
-                    + "itself (\(selfCheck.joined(separator: " ⸱ "))).\(named) A verdict that cannot "
-                    + "be reproduced cannot gate."
-            )
-        }
-        let delta = stability.outcomes.map { outcome in
-            let runs = outcome.runs.map(String.init).joined(separator: ", ")
-            let inventory = outcome.inventory.isEmpty
-                ? "no divergences"
-                : outcome.inventory.joined(separator: " ⸱ ")
-            return "runs \(runs) → \(outcome.verdict.rawValue): \(inventory)"
-        }
-        .joined(separator: " — ")
-        return HTML.abstentionSection(
-            reason: "\(stability.replays) replays of identical inputs disagreed (\(delta)).\(named) "
-                + "An unmodeled nondeterministic axis; a verdict that cannot be reproduced cannot gate."
-        )
-    }
-
-    /// What other failing cases found that the reported one does not show.
-    private var unreportedFindingSection: String {
-        guard let failingCases else {
-            return ""
-        }
-        let others = failingCases.unreported(beside: diff.divergences)
-        guard !others.isEmpty else {
-            return ""
-        }
-        return HTML.divergenceSection(
-            others,
-            heading: "Also in other failing cases (\(failingCases.probes.count) failed in all)"
-        )
-    }
-
-    private var cleanPanel: String {
-        let plural = orderingsExplored == 1 ? "" : "s"
-        if verdict == .cannotVerify {
-            return HTML.abstentionSection(reason: "The oracle could not faithfully isolate this change.")
-        }
-        let scope = exploration.isExhaustive ? "All \(orderingsExplored)" : "\(orderingsExplored) sampled"
-        return HTML.cleanSection(
-            summary: "Behavior matched across everything explored",
-            detail: "\(scope) call ordering\(plural) — and every generated seam value — produced "
-                + "a byte-for-byte identical behavior trace (within the declared comparison). No divergences."
-        )
     }
 }

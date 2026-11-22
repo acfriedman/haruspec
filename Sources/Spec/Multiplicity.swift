@@ -71,11 +71,6 @@ func orderingShapes(
     return (drawn, false)
 }
 
-/// The multiset one shape describes: `shape[i]` copies of `ops[i]`.
-func multiset<S>(_ ops: [Op<S>], shape: OrderingShape) -> [Op<S>] {
-    zip(ops, shape).flatMap { operation, count in Array(repeating: operation, count: count) }
-}
-
 /// Spread the budget *across* shapes rather than over the union of their orderings.
 ///
 /// Uniform-over-orderings would hand the largest shape nearly the whole sample — on the cart spec's
@@ -139,4 +134,9 @@ private struct ShapeSampler<S> {
             !violatedPreconditions(in: $0.map(\.label), declaredBy: declared).isEmpty
         }.first
     }
+}
+
+/// The multiset one shape describes: `shape[i]` copies of `ops[i]`.
+func multiset<S>(_ ops: [Op<S>], shape: OrderingShape) -> [Op<S>] {
+    zip(ops, shape).flatMap { operation, count in Array(repeating: operation, count: count) }
 }

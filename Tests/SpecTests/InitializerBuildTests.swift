@@ -37,19 +37,6 @@ final class SwiftKioskOnTally: Kiosk {
 }
 
 final class InitializerBuildTests: XCTestCase {
-    /// No derivation: each test binds the baseline by its initializer, as a hand-wired suite would.
-    private var spec: Spec<Kiosk> {
-        Spec<Kiosk>("kiosk.initializers")
-            .operations {
-                Op("ring", varying: .int(0 ... 50).named("amount")) { kiosk, amount in kiosk.ring(amount: Int(amount)) }
-                Op("total") { kiosk in _ = kiosk.total() }.last()
-            }
-            .vary {
-                Ordering(max: 4)
-                Budget(runs: 40)
-            }
-    }
-
     func testAPortWithItsOwnDependenciesChecksFromItsInitializer() async throws {
         let verdict = try await spec
             .provides(TallyBook.init)
@@ -91,5 +78,18 @@ final class InitializerBuildTests: XCTestCase {
             }
 
         XCTAssertEqual(candidate.verdict.verdict, .equivalent)
+    }
+
+    /// No derivation: each test binds the baseline by its initializer, as a hand-wired suite would.
+    private var spec: Spec<Kiosk> {
+        Spec<Kiosk>("kiosk.initializers")
+            .operations {
+                Op("ring", varying: .int(0 ... 50).named("amount")) { kiosk, amount in kiosk.ring(amount: Int(amount)) }
+                Op("total") { kiosk in _ = kiosk.total() }.last()
+            }
+            .vary {
+                Ordering(max: 4)
+                Budget(runs: 40)
+            }
     }
 }

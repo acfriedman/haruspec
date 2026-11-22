@@ -53,19 +53,6 @@ final class LegacyQuoter: Quoting {
     }
 }
 
-/// The quote every port answers with: the price for the one valid code, a failure for any other.
-///
-/// - Parameters:
-///   - code: A non-empty promo code.
-///   - completion: The caller's block, called once.
-private func answer(_ code: String, _ completion: (Int, (any Error)?) -> Void) {
-    if code == "SAVE10" {
-        completion(900, nil)
-    } else {
-        completion(0, QuoteFailure.unknownCode)
-    }
-}
-
 /// A faithful port: a rewrite with the same channels — the throw, and the block on its own queue.
 final class SwiftQuoter: Quoting {
     private let queue: any QuoterQueue
@@ -138,6 +125,19 @@ final class EchoingQuoter: Quoting {
             answer(code, completion)
             answer(code, completion)
         }
+    }
+}
+
+/// The quote every port answers with: the price for the one valid code, a failure for any other.
+///
+/// - Parameters:
+///   - code: A non-empty promo code.
+///   - completion: The caller's block, called once.
+private func answer(_ code: String, _ completion: (Int, (any Error)?) -> Void) {
+    if code == "SAVE10" {
+        completion(900, nil)
+    } else {
+        completion(0, QuoteFailure.unknownCode)
     }
 }
 

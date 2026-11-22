@@ -4,21 +4,6 @@ import HaruspecSeams
 import HaruspecSpec
 import XCTest
 
-// Checking a build the spec never declared: that the port is an argument of the test rather than a line
-// in the declaration, that the expectation travels with the call (so a deliberate counterexample passes
-// by diverging and a faithful port under `.diverged` fails saying which way it was supposed to go), and
-// that the report is written under the name the check gave it.
-
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-/// The wiring an adopting app writes once, so each check is a one-liner: an unapplied initializer
-/// reference with the shared collaborators bound here rather than repeated per port.
-private func port(_ make: @escaping (NotificationCenter) -> some PromoCart) -> (SeamContext) -> PromoCart {
-    { context in make(context.notifications) }
-}
-
 private struct PromoCartSpec: SpecProviding {
     var spec: Spec<PromoCart> {
         Spec<PromoCart>("promo-cart.check")
@@ -38,11 +23,6 @@ private struct PromoCartSpec: SpecProviding {
 
 final class CheckTests: XCTestCase {
     private let subject = PromoCartSpec().baselined(on: makeGood)
-
-    private func scratch() -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("check-\(UUID().uuidString)", isDirectory: true)
-    }
 
     func testASpecThatDeclaresNoCandidatesStillChecksAPort() async throws {
         try await subject.check("RefactorCart", reportsIn: scratch(), port(RefactorCart.init))
@@ -102,4 +82,24 @@ final class CheckTests: XCTestCase {
             directory.appendingPathComponent("RefactorCart.html").path
         )
     }
+
+    private func scratch() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("check-\(UUID().uuidString)", isDirectory: true)
+    }
+}
+
+// Checking a build the spec never declared: that the port is an argument of the test rather than a line
+// in the declaration, that the expectation travels with the call (so a deliberate counterexample passes
+// by diverging and a faithful port under `.diverged` fails saying which way it was supposed to go), and
+// that the report is written under the name the check gave it.
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
+}
+
+/// The wiring an adopting app writes once, so each check is a one-liner: an unapplied initializer
+/// reference with the shared collaborators bound here rather than repeated per port.
+private func port(_ make: @escaping (NotificationCenter) -> some PromoCart) -> (SeamContext) -> PromoCart {
+    { context in make(context.notifications) }
 }

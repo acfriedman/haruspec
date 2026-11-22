@@ -93,19 +93,6 @@ enum ForwarderEmitter {
         return DeclSyntax("\(raw: source)")
     }
 
-    /// The origin an instrumented forward registers: the *wrapped* type, read at runtime, and no
-    /// source. The generated forwarder lives in the protocol's file, but the behavior lives in
-    /// whatever it wraps — an Obj-C class the audit finds by `@implementation`, a Swift port it finds
-    /// by declaration — and naming the pasted-interface file would let an audit read a file with
-    /// nothing in it and call the label covered.
-    private static func wrappedOrigin(label: String) -> String {
-        originArguments(
-            label: label,
-            symbolExpression: "String(describing: type(of: __wrapped))",
-            sourceExpression: nil
-        )
-    }
-
     /// One traced forwarding method: same signature and attributes as the requirement, body forwards
     /// to `__wrapped`.
     ///
@@ -198,40 +185,6 @@ enum ForwarderEmitter {
             + "\(indent(delivery))\n} }"
     }
 
-    /// The forwarder's witness of a pasted `init` requirement. Conformance demands one, but a
-    /// forwarder has nothing to construct — so it traps, naming the two routes that do.
-    private static func refusingInit(_ initializer: InitializerDeclSyntax, generatedName: String) -> String {
-        let message = "\(generatedName) is a forwarder, not a conformer — wrap one: "
-            + "\(generatedName)(<conformer>), or construct it from its type: "
-            + "\(generatedName)(resolving: context, <Conformer>.self)"
-        return "    convenience init\(initializer.signature.parameterClause.trimmedDescription) {\n"
-            + "        preconditionFailure(\(quotedLiteral(message)))\n"
-            + "    }"
-    }
-
-    /// The derived construction: each parameter of the designated pasted init resolves by type —
-    /// the capture's notification center for a `NotificationCenter`, the conformance-matched
-    /// synthesized double for a collaborator boundary — and the conformer is built through the
-    /// requirement itself, then wrapped. What this cannot resolve, `resolve` reports at spec
-    /// construction with the authored `.baselined { }` spelled out.
-    private static func resolvingInit(_ initializer: InitializerDeclSyntax, wrapped: String) -> String {
-        let arguments = initializer.signature.parameterClause.parameters.map { param -> String in
-            let external = param.firstName.text
-            // A block parameter (`clock: @escaping () -> Date`) resolves like any other, by its type
-            // — which `@escaping` is not part of. A metatype expression parenthesizes anything but a
-            // plain name: `any Rating.self` would read as a member of `Rating`.
-            let spelled = spelledWithoutEscaping(param.type)
-            let bare = spelled.hasSuffix("!") || spelled.hasSuffix("?") ? String(spelled.dropLast()) : spelled
-            let value = bare == "NotificationCenter" || bare == "NSNotificationCenter"
-                ? "__context.notifications"
-                : "__context.resolve(\(isPlainName(bare) ? bare : "(\(bare))").self)"
-            return external == "_" ? value : "\(external): \(value)"
-        }.joined(separator: ", ")
-        return "    convenience init(resolving __context: SeamContext, _ __conformer: \(wrapped).Type) {\n"
-            + "        self.init(__conformer.init(\(arguments)))\n"
-            + "    }"
-    }
-
     /// One forwarding property. A read-only `var x: T { get }` forwards as a plain computed property
     /// — reads are not effects, so nothing records; a `{ get async }` requirement (how an actor
     /// witnesses state) forwards with `await`. A `{ get set }` requirement forwards both accessors,
@@ -267,6 +220,53 @@ enum ForwarderEmitter {
     private static func hasSetterRequirement(_ binding: PatternBindingSyntax) -> Bool {
         guard case let .accessors(accessors) = binding.accessorBlock?.accessors else { return false }
         return accessors.contains { $0.accessorSpecifier.tokenKind == .keyword(.set) }
+    }
+
+    /// The origin an instrumented forward registers: the *wrapped* type, read at runtime, and no
+    /// source. The generated forwarder lives in the protocol's file, but the behavior lives in
+    /// whatever it wraps — an Obj-C class the audit finds by `@implementation`, a Swift port it finds
+    /// by declaration — and naming the pasted-interface file would let an audit read a file with
+    /// nothing in it and call the label covered.
+    private static func wrappedOrigin(label: String) -> String {
+        originArguments(
+            label: label,
+            symbolExpression: "String(describing: type(of: __wrapped))",
+            sourceExpression: nil
+        )
+    }
+
+    /// The forwarder's witness of a pasted `init` requirement. Conformance demands one, but a
+    /// forwarder has nothing to construct — so it traps, naming the two routes that do.
+    private static func refusingInit(_ initializer: InitializerDeclSyntax, generatedName: String) -> String {
+        let message = "\(generatedName) is a forwarder, not a conformer — wrap one: "
+            + "\(generatedName)(<conformer>), or construct it from its type: "
+            + "\(generatedName)(resolving: context, <Conformer>.self)"
+        return "    convenience init\(initializer.signature.parameterClause.trimmedDescription) {\n"
+            + "        preconditionFailure(\(quotedLiteral(message)))\n"
+            + "    }"
+    }
+
+    /// The derived construction: each parameter of the designated pasted init resolves by type —
+    /// the capture's notification center for a `NotificationCenter`, the conformance-matched
+    /// synthesized double for a collaborator boundary — and the conformer is built through the
+    /// requirement itself, then wrapped. What this cannot resolve, `resolve` reports at spec
+    /// construction with the authored `.baselined { }` spelled out.
+    private static func resolvingInit(_ initializer: InitializerDeclSyntax, wrapped: String) -> String {
+        let arguments = initializer.signature.parameterClause.parameters.map { param -> String in
+            let external = param.firstName.text
+            // A block parameter (`clock: @escaping () -> Date`) resolves like any other, by its type
+            // — which `@escaping` is not part of. A metatype expression parenthesizes anything but a
+            // plain name: `any Rating.self` would read as a member of `Rating`.
+            let spelled = spelledWithoutEscaping(param.type)
+            let bare = spelled.hasSuffix("!") || spelled.hasSuffix("?") ? String(spelled.dropLast()) : spelled
+            let value = bare == "NotificationCenter" || bare == "NSNotificationCenter"
+                ? "__context.notifications"
+                : "__context.resolve(\(isPlainName(bare) ? bare : "(\(bare))").self)"
+            return external == "_" ? value : "\(external): \(value)"
+        }.joined(separator: ", ")
+        return "    convenience init(resolving __context: SeamContext, _ __conformer: \(wrapped).Type) {\n"
+            + "        self.init(__conformer.init(\(arguments)))\n"
+            + "    }"
     }
 }
 

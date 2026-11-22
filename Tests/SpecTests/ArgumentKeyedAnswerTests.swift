@@ -58,6 +58,14 @@ final class ReorderedRestock: Restock {
 }
 
 final class ArgumentKeyedAnswerTests: XCTestCase {
+    func testAPortAskingInAnotherOrderGetsTheSameAnswers() async {
+        let verdict = await spec.verify { $0.build(ReorderedRestock.init(shelf:center:)) }
+
+        // The calls moved, and that is all that differs: no value, here or downstream.
+        let kinds = Set(verdict.result.diff.divergences.map(\.kind))
+        XCTAssertEqual(kinds, [.reordered], verdict.report())
+    }
+
     private var spec: BaselinedSpec<Restock> {
         Spec<Restock>("restock.argument-keyed")
             .operations { Op("report") { $0.report() } }
@@ -66,14 +74,6 @@ final class ArgumentKeyedAnswerTests: XCTestCase {
                 Budget(runs: 30)
             }
             .baselined(on: LegacyRestock.init(shelf:center:))
-    }
-
-    func testAPortAskingInAnotherOrderGetsTheSameAnswers() async {
-        let verdict = await spec.verify { $0.build(ReorderedRestock.init(shelf:center:)) }
-
-        // The calls moved, and that is all that differs: no value, here or downstream.
-        let kinds = Set(verdict.result.diff.divergences.map(\.kind))
-        XCTAssertEqual(kinds, [.reordered], verdict.report())
     }
 
     func testAReplayedSnapshotAnswersByArguments() {

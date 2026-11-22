@@ -44,19 +44,6 @@ struct BaseSide {
         self.progress = progress
     }
 
-    /// The cache directory for this base's plans and census.
-    var plans: URL {
-        directory.plans(baseSHA: baseSHA, schema: SpecPlan.supportedSchemaVersion)
-    }
-
-    /// Returns the plan path for `spec` at this base, whether or not it exists.
-    ///
-    /// - Parameter spec: A spec name.
-    /// - Returns: `<plans>/<spec>.plan.json.gz`.
-    func plan(for spec: String) -> URL {
-        plans.appendingPathComponent("\(spec).plan.json.gz")
-    }
-
     /// Returns the specs the base declares and the suite hosting each, running a census of the base
     /// the first time and reading the cache after.
     ///
@@ -117,6 +104,17 @@ struct BaseSide {
             }
         }
         return nil
+    }
+
+    private static func coverage(inPlan url: URL) -> Set<String>? {
+        guard let files = (try? SpecPlan(contentsOf: url))?.provenance?.coverageFiles, !files.isEmpty else {
+            return nil
+        }
+        return Set(files)
+    }
+
+    private static func modified(_ url: URL) -> Date {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date) ?? .distantPast
     }
 
     /// Records `spec` at the base into the cache, stamped with the files the recording worked in
@@ -221,14 +219,16 @@ struct BaseSide {
         return prepared
     }
 
-    private static func coverage(inPlan url: URL) -> Set<String>? {
-        guard let files = (try? SpecPlan(contentsOf: url))?.provenance?.coverageFiles, !files.isEmpty else {
-            return nil
-        }
-        return Set(files)
+    /// Returns the plan path for `spec` at this base, whether or not it exists.
+    ///
+    /// - Parameter spec: A spec name.
+    /// - Returns: `<plans>/<spec>.plan.json.gz`.
+    func plan(for spec: String) -> URL {
+        plans.appendingPathComponent("\(spec).plan.json.gz")
     }
 
-    private static func modified(_ url: URL) -> Date {
-        ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date) ?? .distantPast
+    /// The cache directory for this base's plans and census.
+    var plans: URL {
+        directory.plans(baseSHA: baseSHA, schema: SpecPlan.supportedSchemaVersion)
     }
 }

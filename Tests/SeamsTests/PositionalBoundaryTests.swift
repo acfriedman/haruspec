@@ -146,22 +146,6 @@ final class PositionalBoundaryTests: XCTestCase {
 
     // MARK: - Localization
 
-    /// Reads `qty` twice; the branches differ only when the *second* reading is extreme. The first
-    /// reading is therefore irrelevant, and a counterexample that still carries it is a lead, not a
-    /// reproduction.
-    private func runTwoAdds(cassette: Cassette, clamp: Bool) -> Trace {
-        let recorder = TraceRecorder(name: "cart", clock: ManualClock())
-        let center = RecordingNotificationCenter()
-
-        TraceContext.$current.withValue(recorder) {
-            let first = cassette.int(seam: "qty", live: { 1 })
-            let second = cassette.int(seam: "qty", live: { 1 })
-            let total = first + (clamp ? min(second, 100) : second)
-            center.post(name: Notification.Name("CartTotal"), object: nil, userInfo: ["total": Int(total)])
-        }
-        return recorder.trace()
-    }
-
     func testShrinkingLocalizesToTheOneReadingThatMatters() throws {
         let recording = Cassette()
         _ = runTwoAdds(cassette: recording, clamp: false)
@@ -181,5 +165,21 @@ final class PositionalBoundaryTests: XCTestCase {
 
         XCTAssertEqual(track.first, 1, "the first reading never mattered — it belongs back on golden")
         XCTAssertGreaterThan(track.last ?? 0, 100, "the second reading is what separates the branches")
+    }
+
+    /// Reads `qty` twice; the branches differ only when the *second* reading is extreme. The first
+    /// reading is therefore irrelevant, and a counterexample that still carries it is a lead, not a
+    /// reproduction.
+    private func runTwoAdds(cassette: Cassette, clamp: Bool) -> Trace {
+        let recorder = TraceRecorder(name: "cart", clock: ManualClock())
+        let center = RecordingNotificationCenter()
+
+        TraceContext.$current.withValue(recorder) {
+            let first = cassette.int(seam: "qty", live: { 1 })
+            let second = cassette.int(seam: "qty", live: { 1 })
+            let total = first + (clamp ? min(second, 100) : second)
+            center.post(name: Notification.Name("CartTotal"), object: nil, userInfo: ["total": Int(total)])
+        }
+        return recorder.trace()
     }
 }

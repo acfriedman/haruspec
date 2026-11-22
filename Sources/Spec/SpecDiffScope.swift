@@ -118,26 +118,26 @@ public struct ContinuousReport {
         return verdict.markdownReport() + "\n\n" + Self.unscopableNote
     }
 
-    private func fullText(_ entry: Entry) -> String {
-        guard let verdict = entry.verdict else { return missingArtifactText(entry) }
-        guard changed != nil, entry.subjectFiles == nil else { return verdict.report() }
-        return verdict.report() + "\n" + Self.unscopableNote
-    }
-
-    private static let unscopableNote =
-        "_Subject sources could not be resolved against the checkout, so this verdict is "
-            + "reported regardless of the diff._"
-
     private func missingArtifactBlock(_ entry: Entry) -> String {
         "### ⚠️ no verdict produced — `\(entry.source)`\n\n"
             + "The replay ended before writing this artifact — a build break or simulator failure, "
             + "not a behavioral verdict. **This check does not pass.**"
     }
 
+    private func fullText(_ entry: Entry) -> String {
+        guard let verdict = entry.verdict else { return missingArtifactText(entry) }
+        guard changed != nil, entry.subjectFiles == nil else { return verdict.report() }
+        return verdict.report() + "\n" + Self.unscopableNote
+    }
+
     private func missingArtifactText(_ entry: Entry) -> String {
         "⚠️ NO VERDICT — \(entry.source): the replay ended before writing this artifact "
             + "(build break or simulator failure). This check does not pass."
     }
+
+    private static let unscopableNote =
+        "_Subject sources could not be resolved against the checkout, so this verdict is "
+            + "reported regardless of the diff._"
 }
 
 private extension ContinuousReport.Entry {

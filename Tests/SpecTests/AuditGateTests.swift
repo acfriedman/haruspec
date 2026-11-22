@@ -30,10 +30,6 @@ final class BypassingLedger: AuditedLedger {
     }
 }
 
-private func makeBypassingLedger(_: SeamContext) -> AuditedLedger {
-    BypassingLedger()
-}
-
 /// What the ledger announces through — a collaborator boundary. It is stamped *in this file*, which
 /// carries a deliberate `NotificationCenter.default` reach, so its double's declaring file is this
 /// one. That placement is the point of the scoping tests: an audit that reads collaborator sources
@@ -187,22 +183,6 @@ final class AuditGateTests: XCTestCase {
 
     // MARK: - Subject vs collaborator (the audit's denominator)
 
-    private func announcingLedger(
-        make: @escaping (SeamContext) -> AuditedLedger
-    ) -> BaselinedSpec<AuditedLedger> {
-        Spec<AuditedLedger>("audit.announcing-ledger")
-            .operations {
-                Op("add") { ledger, seams in
-                    ledger.add(cents: Int(seams.int("cents", default: 500)))
-                }
-                Op("total") { _ = $0.total() }.last()
-            }
-            .vary {
-                Seam("cents", .int(1 ... 100))
-            }
-            .baselined(on: make)
-    }
-
     func testAnInjectedCollaboratorsSourcesAreTheFixturesNotTheSubjects() async {
         // The collaborator's declaring file carries a real bypass — but both sides call through the
         // same double, and the interaction is recorded at its boundary. Building it through
@@ -235,6 +215,22 @@ final class AuditGateTests: XCTestCase {
 
         XCTAssertEqual(verdict.verdict, .cannotVerify)
         XCTAssertEqual(verdict.qualification.blindSpots, ["NotificationCenter.default"])
+    }
+
+    private func announcingLedger(
+        make: @escaping (SeamContext) -> AuditedLedger
+    ) -> BaselinedSpec<AuditedLedger> {
+        Spec<AuditedLedger>("audit.announcing-ledger")
+            .operations {
+                Op("add") { ledger, seams in
+                    ledger.add(cents: Int(seams.int("cents", default: 500)))
+                }
+                Op("total") { _ = $0.total() }.last()
+            }
+            .vary {
+                Seam("cents", .int(1 ... 100))
+            }
+            .baselined(on: make)
     }
 
     // MARK: - The clean case, and what "clean" is allowed to mean
@@ -291,4 +287,8 @@ final class AuditGateTests: XCTestCase {
         )
         XCTAssertEqual(verdict.verdict, .equivalent)
     }
+}
+
+private func makeBypassingLedger(_: SeamContext) -> AuditedLedger {
+    BypassingLedger()
 }

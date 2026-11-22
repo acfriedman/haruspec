@@ -178,19 +178,6 @@ public struct IntentDocument: Equatable, Sendable {
         """
     }
 
-    /// Returns the range from `spec`'s begin marker through its end marker.
-    ///
-    /// - Parameter spec: A spec name.
-    /// - Returns: The section's range, or `nil` when the document has no complete section for `spec`.
-    private func section(for spec: String) -> Range<String.Index>? {
-        guard let begin = text.range(of: "\(Self.beginPrefix)\(spec) -->"),
-              let end = text.range(of: "<!-- haruspec:end \(spec) -->", range: begin.upperBound ..< text.endIndex)
-        else {
-            return nil
-        }
-        return begin.lowerBound ..< end.upperBound
-    }
-
     private func refuseUnmanagedBlock(for spec: String) throws {
         var outside = text
         if let range = section(for: spec) {
@@ -202,6 +189,19 @@ public struct IntentDocument: Equatable, Sendable {
                     + "or delete it and save again"
             )
         }
+    }
+
+    /// Returns the range from `spec`'s begin marker through its end marker.
+    ///
+    /// - Parameter spec: A spec name.
+    /// - Returns: The section's range, or `nil` when the document has no complete section for `spec`.
+    private func section(for spec: String) -> Range<String.Index>? {
+        guard let begin = text.range(of: "\(Self.beginPrefix)\(spec) -->"),
+              let end = text.range(of: "<!-- haruspec:end \(spec) -->", range: begin.upperBound ..< text.endIndex)
+        else {
+            return nil
+        }
+        return begin.lowerBound ..< end.upperBound
     }
 
     private static func validate(_ lines: [String], for spec: String) throws {

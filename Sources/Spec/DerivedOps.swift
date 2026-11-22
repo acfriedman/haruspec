@@ -117,6 +117,15 @@ public struct DerivedArgument {
         magnitudeInt(name, over: SpecDefaults.derivedUnsignedTinySpan)
     }
 
+    private static func magnitudeInt(_ name: String, over span: ClosedRange<Int64>) -> DerivedArgument {
+        // All widths read back as `Int` (the emitted conversion narrows), so one typeName — an
+        // amendment's `.int(…)`/`.oneOf(Int)` domain replaces any width's default.
+        let domain = ArgumentDomain<Int>(domain: .intMagnitudes(span), name: name) { seams, seam in
+            Int(seams.int(seam, default: 0))
+        }
+        return DerivedArgument(name: name, typeName: "Int", resolution: domain.erased(), isDerivedDefault: true)
+    }
+
     /// A `Double`-family parameter, defaulted to the fractional-through-thousands ladder.
     public static func double(_ name: String) -> DerivedArgument {
         // Canonical golden value 0, not a span bound: the recorded path should read naturally.
@@ -127,15 +136,6 @@ public struct DerivedArgument {
             seams.double(seam, default: 0)
         }
         return DerivedArgument(name: name, typeName: "Double", resolution: domain.erased(), isDerivedDefault: true)
-    }
-
-    private static func magnitudeInt(_ name: String, over span: ClosedRange<Int64>) -> DerivedArgument {
-        // All widths read back as `Int` (the emitted conversion narrows), so one typeName — an
-        // amendment's `.int(…)`/`.oneOf(Int)` domain replaces any width's default.
-        let domain = ArgumentDomain<Int>(domain: .intMagnitudes(span), name: name) { seams, seam in
-            Int(seams.int(seam, default: 0))
-        }
-        return DerivedArgument(name: name, typeName: "Int", resolution: domain.erased(), isDerivedDefault: true)
     }
 
     /// A `Bool` parameter. Both values are boundary values, so the default is the whole domain.
@@ -540,12 +540,12 @@ extension Spec {
     }
 }
 
-private enum Slot<S> {
-    case derived(DerivedOp<S>)
-    case replaced(Op<S>)
-}
-
 private func unknownLabel(_ label: String, in labels: [String]) -> String {
     "'\(label)' matches no derived op — the derivation declares \(labels.joined(separator: ", ")). "
         + "An op the protocol doesn't declare means authoring every op in .operations"
+}
+
+private enum Slot<S> {
+    case derived(DerivedOp<S>)
+    case replaced(Op<S>)
 }

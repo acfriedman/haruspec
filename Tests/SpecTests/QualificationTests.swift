@@ -4,19 +4,6 @@ import HaruspecSeams
 import HaruspecSpec
 import XCTest
 
-// The disclaimer, rendered per verdict. These pin the three feeds that used to die before reaching
-// the artifact (probe count, per-seam positions, boundary-schedule truncation), the placeholder that
-// keeps the block honest until the audit card lands ("not audited", never an empty clean list), and
-// the stamp that turns a pre-block artifact into "re-run" instead of a keyNotFound.
-
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
-    RefactorCart(center: ctx.notifications)
-}
-
 final class QualificationTests: XCTestCase {
     /// The serialization tests' cart, with the promo op renameable so a replay can be driven into
     /// the abstain tier (a plan op this build no longer declares).
@@ -211,4 +198,17 @@ final class QualificationTests: XCTestCase {
             )
         }
     }
+}
+
+// The disclaimer, rendered per verdict. These pin the three feeds that used to die before reaching
+// the artifact (probe count, per-seam positions, boundary-schedule truncation), the placeholder that
+// keeps the block honest until the audit card lands ("not audited", never an empty clean list), and
+// the stamp that turns a pre-block artifact into "re-run" instead of a keyNotFound.
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
+    RefactorCart(center: ctx.notifications)
 }

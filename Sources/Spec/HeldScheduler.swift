@@ -137,14 +137,6 @@ public struct HeldScheduler: Scheduler, Sendable {
         return repetition
     }
 
-    /// Returns the virtual seconds from `now` until `date`.
-    ///
-    /// - Parameter date: A scheduled time.
-    /// - Returns: The wait, never negative: a time already past is due at once.
-    private func delay(until date: SchedulerTimeType) -> TimeInterval {
-        Self.seconds(now.distance(to: date))
-    }
-
     /// Hands `work` to the capture's backlog as this scheduler's queue.
     ///
     /// - Parameters:
@@ -153,6 +145,14 @@ public struct HeldScheduler: Scheduler, Sendable {
     private func hold(after delay: TimeInterval?, _ work: @escaping () -> Void) {
         TraceOrigins.collector?.noteHeldStandIn(HeldStandIn.scheduler.rawValue)
         backlog.enqueue(on: identity, label: label, discipline: discipline, after: delay, work)
+    }
+
+    /// Returns the virtual seconds from `now` until `date`.
+    ///
+    /// - Parameter date: A scheduled time.
+    /// - Returns: The wait, never negative: a time already past is due at once.
+    private func delay(until date: SchedulerTimeType) -> TimeInterval {
+        Self.seconds(now.distance(to: date))
     }
 
     /// Returns `stride` in seconds.

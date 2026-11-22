@@ -11,15 +11,6 @@ import XCTest
 // over `CartManager` and `SwiftCart`.
 
 final class TraceOriginTests: XCTestCase {
-    /// Build the recorder *inside* the binding: it picks the collector up at init, so a capture that
-    /// starts outside a verification contributes nothing rather than leaking into the last one.
-    private func collect(_ body: (TraceRecorder) -> Void) -> [TraceOrigin] {
-        let collector = OriginCollector()
-        let recorder = TraceOrigins.$collector.withValue(collector) { TraceRecorder(name: "origins") }
-        TraceContext.$current.withValue(recorder) { body(recorder) }
-        return collector.snapshot
-    }
-
     func testOneLabelRegistersEveryDeclarationThatAnsweredToIt() {
         let origins = collect { _ in
             TracedCart(SwiftCart()).add(Product(sku: "A"), quantity: 1)
@@ -80,6 +71,15 @@ final class TraceOriginTests: XCTestCase {
 
         XCTAssertEqual(first.map(\.symbol), ["SwiftCart"])
         XCTAssertEqual(second.map(\.symbol), ["CartManager"])
+    }
+
+    /// Build the recorder *inside* the binding: it picks the collector up at init, so a capture that
+    /// starts outside a verification contributes nothing rather than leaking into the last one.
+    private func collect(_ body: (TraceRecorder) -> Void) -> [TraceOrigin] {
+        let collector = OriginCollector()
+        let recorder = TraceOrigins.$collector.withValue(collector) { TraceRecorder(name: "origins") }
+        TraceContext.$current.withValue(recorder) { body(recorder) }
+        return collector.snapshot
     }
 
     /// Instrumentation outside any collection is inert — the same shape as recording with no capture.

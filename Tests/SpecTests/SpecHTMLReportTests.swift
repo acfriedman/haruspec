@@ -68,33 +68,7 @@ final class RoundBugTill: Till {
     }
 }
 
-private func makeGood(_ ctx: SeamContext) -> Till {
-    GoodTill(center: ctx.notifications)
-}
-
-private func makeRoundBug(_ ctx: SeamContext) -> Till {
-    RoundBugTill(center: ctx.notifications)
-}
-
 final class SpecHTMLReportTests: XCTestCase {
-    private func till() -> Spec<Till> {
-        Spec<Till>("promo-till")
-            .operations {
-                Op("addCoffee") { cart, seams in
-                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
-                }
-                Op("promo") { $0.applyPromo() }
-                Op("checkout") { _ = $0.checkout() }.last()
-            }
-    }
-
-    private func assertSelfContained(_ html: String, file: StaticString = #filePath, line: UInt = #line) {
-        for needle in ["http://", "https://", "src=", "//cdn", "url("] {
-            XCTAssertFalse(html.contains(needle), "found \(needle)", file: file, line: line)
-        }
-        XCTAssertTrue(html.contains("<!doctype html>"), file: file, line: line)
-    }
-
     func testDivergedSpecLeadsWithCounterexample() async {
         let swept = till().vary { Seam("coffeeQty", .int(1 ... 20)) }.baselined(on: makeGood)
         let verdict = await swept.verify(candidate: makeRoundBug)
@@ -118,4 +92,30 @@ final class SpecHTMLReportTests: XCTestCase {
         XCTAssertTrue(html.contains("✅ EQUIVALENT"))
         XCTAssertTrue(html.contains("matched across everything explored"))
     }
+
+    private func till() -> Spec<Till> {
+        Spec<Till>("promo-till")
+            .operations {
+                Op("addCoffee") { cart, seams in
+                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
+                }
+                Op("promo") { $0.applyPromo() }
+                Op("checkout") { _ = $0.checkout() }.last()
+            }
+    }
+
+    private func assertSelfContained(_ html: String, file: StaticString = #filePath, line: UInt = #line) {
+        for needle in ["http://", "https://", "src=", "//cdn", "url("] {
+            XCTAssertFalse(html.contains(needle), "found \(needle)", file: file, line: line)
+        }
+        XCTAssertTrue(html.contains("<!doctype html>"), file: file, line: line)
+    }
+}
+
+private func makeGood(_ ctx: SeamContext) -> Till {
+    GoodTill(center: ctx.notifications)
+}
+
+private func makeRoundBug(_ ctx: SeamContext) -> Till {
+    RoundBugTill(center: ctx.notifications)
 }

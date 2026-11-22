@@ -8,10 +8,6 @@ import XCTest
 final class ReentrantSyncTests: XCTestCase {
     private final class Queue {}
 
-    private func refusal(onto queue: Queue, _ discipline: ScheduleDiscipline = .serial) -> String? {
-        WorkBacklog.syncRefusal(onto: queue, label: "DepotQueue", discipline: discipline)
-    }
-
     func testASerialQueuesOwnWorkSyncingOntoItIsRefused() async throws {
         let backlog = WorkBacklog()
         let queue = Queue()
@@ -61,5 +57,9 @@ final class ReentrantSyncTests: XCTestCase {
 
     func testASyncFromOutsideHeldWorkRuns() {
         XCTAssertNil(refusal(onto: Queue()))
+    }
+
+    private func refusal(onto queue: Queue, _ discipline: ScheduleDiscipline = .serial) -> String? {
+        WorkBacklog.syncRefusal(onto: queue, label: "DepotQueue", discipline: discipline)
     }
 }

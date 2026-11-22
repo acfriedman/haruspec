@@ -18,48 +18,6 @@ final class SeamHarnessEndToEndTests: XCTestCase {
     private static let checkoutCompleted = Notification.Name("CheckoutCompleted")
     private static let names: Set<String> = ["SessionStarted", "CheckoutCompleted"]
 
-    /// Stand-in for production code. `pricing` is the only thing that differs between branches.
-    private func runSession(
-        cassette: Cassette,
-        pricing: (_ subtotal: Int, _ bucket: Int) -> Int
-    ) -> Trace {
-        let recorder = TraceRecorder(name: "session", clock: ManualClock())
-        let center = RecordingNotificationCenter()
-
-        let clock = SeamClock(cassette: cassette)
-        var rng = SeamRNG(cassette: cassette)
-        let defaults = SeamDefaults(cassette: cassette)
-
-        TraceContext.$current.withValue(recorder) {
-            let startedAtMicros = Int(clock.now() * 1_000_000) // seam: time → output
-            let region = defaults.string(forKey: "region", live: { "US" }) ?? "?" // seam: config
-            let bucket = Int.random(in: 0 ..< 100, using: &rng) // seam: randomness (A/B)
-
-            center.post(
-                name: Self.sessionStarted,
-                object: nil,
-                userInfo: ["region": region, "startedAt": startedAtMicros]
-            )
-            Haruspec.marker("session.started")
-
-            let total = pricing(1000, bucket)
-            center.post(name: Self.checkoutCompleted, object: nil, userInfo: ["totalCents": total])
-            Haruspec.marker("checkout.completed")
-        }
-        return recorder.trace()
-    }
-
-    /// Baseline pricing: a bucket-gated A/B discount (so the RNG seam genuinely affects the output).
-    private func baselinePricing(_ subtotal: Int, _ bucket: Int) -> Int {
-        subtotal - (bucket < 50 ? 100 : 0)
-    }
-
-    /// Changed pricing: an unconditional +25 fee — a regression attributable to the code, independent
-    /// of which bucket was recorded, so the assertion is deterministic.
-    private func changedPricing(_ subtotal: Int, _ bucket: Int) -> Int {
-        baselinePricing(subtotal, bucket) + 25
-    }
-
     func testSeamReplayMakesTraceDeterministicAndCatchesCodeChange() {
         // 1. RECORD the golden run against real live seams.
         let recording = Cassette()
@@ -95,5 +53,47 @@ final class SeamHarnessEndToEndTests: XCTestCase {
             diff.divergences.contains { $0.detail.contains("totalCents") },
             "and it points at the wrong total:\n\(diff.report())"
         )
+    }
+
+    /// Stand-in for production code. `pricing` is the only thing that differs between branches.
+    private func runSession(
+        cassette: Cassette,
+        pricing: (_ subtotal: Int, _ bucket: Int) -> Int
+    ) -> Trace {
+        let recorder = TraceRecorder(name: "session", clock: ManualClock())
+        let center = RecordingNotificationCenter()
+
+        let clock = SeamClock(cassette: cassette)
+        var rng = SeamRNG(cassette: cassette)
+        let defaults = SeamDefaults(cassette: cassette)
+
+        TraceContext.$current.withValue(recorder) {
+            let startedAtMicros = Int(clock.now() * 1_000_000) // seam: time → output
+            let region = defaults.string(forKey: "region", live: { "US" }) ?? "?" // seam: config
+            let bucket = Int.random(in: 0 ..< 100, using: &rng) // seam: randomness (A/B)
+
+            center.post(
+                name: Self.sessionStarted,
+                object: nil,
+                userInfo: ["region": region, "startedAt": startedAtMicros]
+            )
+            Haruspec.marker("session.started")
+
+            let total = pricing(1000, bucket)
+            center.post(name: Self.checkoutCompleted, object: nil, userInfo: ["totalCents": total])
+            Haruspec.marker("checkout.completed")
+        }
+        return recorder.trace()
+    }
+
+    /// Changed pricing: an unconditional +25 fee — a regression attributable to the code, independent
+    /// of which bucket was recorded, so the assertion is deterministic.
+    private func changedPricing(_ subtotal: Int, _ bucket: Int) -> Int {
+        baselinePricing(subtotal, bucket) + 25
+    }
+
+    /// Baseline pricing: a bucket-gated A/B discount (so the RNG seam genuinely affects the output).
+    private func baselinePricing(_ subtotal: Int, _ bucket: Int) -> Int {
+        subtotal - (bucket < 50 ? 100 : 0)
     }
 }

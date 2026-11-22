@@ -348,32 +348,6 @@ public final class TraceRecorder: @unchecked Sendable {
         ))
     }
 
-    private func appendLocked(_ event: TraceEvent) {
-        events.append(event)
-        seqCounter += 1
-    }
-
-    private func symbolicIDLocked(_ subject: AnyObject?) -> Int? {
-        subject.map { symbolicIDLocked($0) }
-    }
-
-    private func symbolicIDLocked(_ subject: AnyObject) -> Int {
-        let key = ObjectIdentifier(subject)
-        if let existing = identityMap[key] {
-            return existing
-        }
-        let assigned = nextIdentity
-        nextIdentity += 1
-        identityMap[key] = assigned
-        return assigned
-    }
-
-    /// Resolves the domain for an event, reusing `symbolicIDLocked` so an actor that is also a traced
-    /// subject carries one identity in both places.
-    private func domainLocked(_ isolation: (any Actor)?) -> ConcurrencyDomain {
-        DomainResolver.resolve(isolation: isolation, instanceID: symbolicIDLocked)
-    }
-
     /// The domain an event is *attributed* to, which is not always the one it executed in.
     ///
     /// A notification travels through Foundation and a collaborator call through a decorator; both
@@ -397,5 +371,31 @@ public final class TraceRecorder: @unchecked Sendable {
             break
         }
         return domain
+    }
+
+    /// Resolves the domain for an event, reusing `symbolicIDLocked` so an actor that is also a traced
+    /// subject carries one identity in both places.
+    private func domainLocked(_ isolation: (any Actor)?) -> ConcurrencyDomain {
+        DomainResolver.resolve(isolation: isolation, instanceID: symbolicIDLocked)
+    }
+
+    private func symbolicIDLocked(_ subject: AnyObject?) -> Int? {
+        subject.map { symbolicIDLocked($0) }
+    }
+
+    private func symbolicIDLocked(_ subject: AnyObject) -> Int {
+        let key = ObjectIdentifier(subject)
+        if let existing = identityMap[key] {
+            return existing
+        }
+        let assigned = nextIdentity
+        nextIdentity += 1
+        identityMap[key] = assigned
+        return assigned
+    }
+
+    private func appendLocked(_ event: TraceEvent) {
+        events.append(event)
+        seqCounter += 1
     }
 }

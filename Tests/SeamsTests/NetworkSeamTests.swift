@@ -8,11 +8,6 @@ import XCTest
 final class NetworkSeamTests: XCTestCase {
     private let url = URL(string: "https://api.example.com/checkout")!
 
-    private func fetch(_ session: URLSession) async throws -> (status: Int, body: Data) {
-        let (data, response) = try await session.data(from: url)
-        return ((response as? HTTPURLResponse)?.statusCode ?? -1, data)
-    }
-
     func testRecordThenReplayOffline() async throws {
         let goldenBody = Data(#"{"total":2525}"#.utf8)
 
@@ -46,5 +41,10 @@ final class NetworkSeamTests: XCTestCase {
             ["url:GET \(url.absoluteString)"],
             "an unrecorded request is surfaced, not fabricated"
         )
+    }
+
+    private func fetch(_ session: URLSession) async throws -> (status: Int, body: Data) {
+        let (data, response) = try await session.data(from: url)
+        return ((response as? HTTPURLResponse)?.statusCode ?? -1, data)
     }
 }

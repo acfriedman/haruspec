@@ -44,41 +44,6 @@ final class DiffScopeTests: XCTestCase {
     /// This file's own repo-relative path — the one the fixtures' origins resolve to.
     private let fixtureFile = "Tests/SpecTests/DiffScopeTests.swift"
 
-    /// The package checkout, resolved from `#filePath` (`<root>/Tests/SpecTests/…`).
-    private var root: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-    }
-
-    private func abacus(system: @escaping (SeamContext) -> Abacus) -> BaselinedSpec<Abacus> {
-        Spec<Abacus>("abacus.diffscope")
-            .operations {
-                Op("ring", varying: .oneOf(1, 2, 3)) { $0.ring(amount: $1) }
-                Op("total") { _ = $0.total() }.last()
-            }
-            .baselined(on: system)
-    }
-
-    private func equivalentVerdict() async -> SpecVerdict {
-        let plan = await abacus { _ in LegacyAbacus() }.record()
-        return await abacus { _ in LegacyAbacus() }.verify(replaying: plan)
-    }
-
-    private func divergedVerdict() async -> SpecVerdict {
-        let plan = await abacus { _ in LegacyAbacus() }.record()
-        return await abacus { _ in OverchargingAbacus() }.verify(replaying: plan)
-    }
-
-    private func entry(_ verdict: SpecVerdict) -> ContinuousReport.Entry {
-        ContinuousReport.Entry(
-            verdict: verdict,
-            source: "result.json",
-            subjectFiles: verdict.subjectFiles(root: root)
-        )
-    }
-
     func testSubjectFilesResolveAgainstTheCheckout() async {
         let verdict = await equivalentVerdict()
         XCTAssertEqual(verdict.verdict, .equivalent)
@@ -156,5 +121,40 @@ final class DiffScopeTests: XCTestCase {
         XCTAssertTrue(markdown.contains("### ❌ DIVERGED — `abacus.diffscope`"))
         XCTAssertFalse(markdown.contains("outside this diff"))
         XCTAssertFalse(markdown.contains("Untouched by this diff"))
+    }
+
+    private func entry(_ verdict: SpecVerdict) -> ContinuousReport.Entry {
+        ContinuousReport.Entry(
+            verdict: verdict,
+            source: "result.json",
+            subjectFiles: verdict.subjectFiles(root: root)
+        )
+    }
+
+    /// The package checkout, resolved from `#filePath` (`<root>/Tests/SpecTests/…`).
+    private var root: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private func equivalentVerdict() async -> SpecVerdict {
+        let plan = await abacus { _ in LegacyAbacus() }.record()
+        return await abacus { _ in LegacyAbacus() }.verify(replaying: plan)
+    }
+
+    private func divergedVerdict() async -> SpecVerdict {
+        let plan = await abacus { _ in LegacyAbacus() }.record()
+        return await abacus { _ in OverchargingAbacus() }.verify(replaying: plan)
+    }
+
+    private func abacus(system: @escaping (SeamContext) -> Abacus) -> BaselinedSpec<Abacus> {
+        Spec<Abacus>("abacus.diffscope")
+            .operations {
+                Op("ring", varying: .oneOf(1, 2, 3)) { $0.ring(amount: $1) }
+                Op("total") { _ = $0.total() }.last()
+            }
+            .baselined(on: system)
     }
 }

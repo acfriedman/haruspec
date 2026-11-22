@@ -79,70 +79,6 @@ enum DoubleEmitter {
         return DeclSyntax("\(raw: source)")
     }
 
-    /// The double's witness of a pasted `init` requirement, which traps naming the route that builds a
-    /// double. Conformance demands a witness, but a double is built by the capture, never by the
-    /// subject's construction contract.
-    ///
-    /// - Parameters:
-    ///   - initializer: The pasted `init` requirement to witness.
-    ///   - generatedName: The double's class name, which the trap message names.
-    /// - Returns: The witness's source.
-    private static func refusingInit(_ initializer: InitializerDeclSyntax, generatedName: String) -> String {
-        let message = "\(generatedName) is a stand-in, built by the capture: context.double(\(generatedName).self)"
-        return "    convenience init\(initializer.signature.parameterClause.trimmedDescription) {\n"
-            + "        preconditionFailure(\(quotedLiteral(message)))\n"
-            + "    }"
-    }
-
-    /// One synthesized property, whose read is a generated value and whose write is recorded and kept
-    /// nowhere. It is the property form of a method's seam read and a `Void` method's no-op.
-    ///
-    /// - Parameters:
-    ///   - variable: The protocol's `var` requirement.
-    ///   - label: The boundary's trace label; the seam key and the write's event are
-    ///     `"<label>.<name>"`.
-    ///   - symbol: The double's class name, recorded as the write's origin.
-    ///   - file: The stamped protocol's `#fileID`, recorded as the write's origin; `nil` when the
-    ///     expansion context cannot locate it.
-    /// - Returns: The property's source, or `nil` when the requirement is not a simple typed `var`.
-    ///
-    /// A read is not recorded, as a forwarder's read is not; it returns the seam `"<label>.<name>"`,
-    /// defaulted to the type's zero. A `{ get set }` requirement's setter records the write as a
-    /// `stateChange`.
-    private static func doubleProperty(
-        _ variable: VariableDeclSyntax,
-        label: String,
-        symbol: String,
-        file: String?
-    ) -> String? {
-        guard variable.bindingSpecifier.tokenKind == .keyword(.var),
-              let binding = variable.bindings.first,
-              let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
-              let type = binding.typeAnnotation?.type.trimmedDescription
-        else { return nil }
-        let key = "\(label).\(name)"
-        let read = defaultedReturn(type: type, key: key)
-        guard case let .accessors(accessors) = binding.accessorBlock?.accessors,
-              accessors.contains(where: { $0.accessorSpecifier.tokenKind == .keyword(.set) })
-        else {
-            return hasAsyncGetter(binding)
-                ? "    var \(name): \(type) { get async { \(read) } }"
-                : "    var \(name): \(type) { \(read) }"
-        }
-        let origin = originArguments(label: label, symbol: symbol, sourceExpression: file)
-        return """
-            var \(name): \(type) {
-                get { \(read) }
-                set {
-                    let __oracle = TraceContext.active
-                    __oracle?.noteOrigin(\(origin))
-                    __oracle?.stateChange(\(quotedLiteral(key)), subject: self, \
-        value: RuntimeValue.canonical(newValue as Any))
-                }
-            }
-        """
-    }
-
     /// One synthesized method: records `call`/`ret` exactly as a forwarder would, around a body that
     /// is a no-op — or, for a value-returning requirement, a generated seam read.
     private static func doubleMethod(
@@ -214,6 +150,55 @@ enum DoubleEmitter {
     /// - Returns: The expression `defaultedReturn` would return.
     private static func generatedValue(type: String, key: String) -> String {
         String(defaultedReturn(type: type, key: key).dropFirst("return ".count))
+    }
+
+    /// One synthesized property, whose read is a generated value and whose write is recorded and kept
+    /// nowhere. It is the property form of a method's seam read and a `Void` method's no-op.
+    ///
+    /// - Parameters:
+    ///   - variable: The protocol's `var` requirement.
+    ///   - label: The boundary's trace label; the seam key and the write's event are
+    ///     `"<label>.<name>"`.
+    ///   - symbol: The double's class name, recorded as the write's origin.
+    ///   - file: The stamped protocol's `#fileID`, recorded as the write's origin; `nil` when the
+    ///     expansion context cannot locate it.
+    /// - Returns: The property's source, or `nil` when the requirement is not a simple typed `var`.
+    ///
+    /// A read is not recorded, as a forwarder's read is not; it returns the seam `"<label>.<name>"`,
+    /// defaulted to the type's zero. A `{ get set }` requirement's setter records the write as a
+    /// `stateChange`.
+    private static func doubleProperty(
+        _ variable: VariableDeclSyntax,
+        label: String,
+        symbol: String,
+        file: String?
+    ) -> String? {
+        guard variable.bindingSpecifier.tokenKind == .keyword(.var),
+              let binding = variable.bindings.first,
+              let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text,
+              let type = binding.typeAnnotation?.type.trimmedDescription
+        else { return nil }
+        let key = "\(label).\(name)"
+        let read = defaultedReturn(type: type, key: key)
+        guard case let .accessors(accessors) = binding.accessorBlock?.accessors,
+              accessors.contains(where: { $0.accessorSpecifier.tokenKind == .keyword(.set) })
+        else {
+            return hasAsyncGetter(binding)
+                ? "    var \(name): \(type) { get async { \(read) } }"
+                : "    var \(name): \(type) { \(read) }"
+        }
+        let origin = originArguments(label: label, symbol: symbol, sourceExpression: file)
+        return """
+            var \(name): \(type) {
+                get { \(read) }
+                set {
+                    let __oracle = TraceContext.active
+                    __oracle?.noteOrigin(\(origin))
+                    __oracle?.stateChange(\(quotedLiteral(key)), subject: self, \
+        value: RuntimeValue.canonical(newValue as Any))
+                }
+            }
+        """
     }
 
     /// The synthesized body: nothing for `Void`, a seam read with the type's zero as its default for
@@ -294,5 +279,20 @@ enum DoubleEmitter {
             }
         }
         return false
+    }
+
+    /// The double's witness of a pasted `init` requirement, which traps naming the route that builds a
+    /// double. Conformance demands a witness, but a double is built by the capture, never by the
+    /// subject's construction contract.
+    ///
+    /// - Parameters:
+    ///   - initializer: The pasted `init` requirement to witness.
+    ///   - generatedName: The double's class name, which the trap message names.
+    /// - Returns: The witness's source.
+    private static func refusingInit(_ initializer: InitializerDeclSyntax, generatedName: String) -> String {
+        let message = "\(generatedName) is a stand-in, built by the capture: context.double(\(generatedName).self)"
+        return "    convenience init\(initializer.signature.parameterClause.trimmedDescription) {\n"
+            + "        preconditionFailure(\(quotedLiteral(message)))\n"
+            + "    }"
     }
 }

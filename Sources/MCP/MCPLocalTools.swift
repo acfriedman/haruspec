@@ -153,11 +153,11 @@ extension MCPServer {
         }
     }
 
-    private func root(_ args: [String: Any]) -> URL {
-        URL(fileURLWithPath: (args["root"] as? String) ?? FileManager.default.currentDirectoryPath, isDirectory: true)
-    }
-
     private func localToolError(_ message: String) -> [String: Any] {
         ["content": [["type": "text", "text": message]], "isError": true]
+    }
+
+    private func root(_ args: [String: Any]) -> URL {
+        URL(fileURLWithPath: (args["root"] as? String) ?? FileManager.default.currentDirectoryPath, isDirectory: true)
     }
 }

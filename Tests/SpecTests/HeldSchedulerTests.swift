@@ -254,12 +254,6 @@ final class HeldSchedulerTests: XCTestCase {
 
     // MARK: A subject checked through it
 
-    private var uploading: BaselinedSpec<any Uploading> {
-        Spec<any Uploading>("uploading.scheduler")
-            .operations { Op("upload") { $0.upload("cat.jpg") } }
-            .baselined { context in Uploader(scheduler: context.scheduler(.main), center: context.notifications) }
-    }
-
     func testAHopToTheSchedulerIsEquivalentToItself() async {
         let verdict = await uploading
             .verify { context in Uploader(scheduler: context.scheduler(.main), center: context.notifications) }
@@ -283,17 +277,10 @@ final class HeldSchedulerTests: XCTestCase {
         XCTAssertTrue(verdict.report().contains("queue(serial):uploads"), verdict.report())
     }
 
-    private var searching: BaselinedSpec<any Searching> {
-        Spec<any Searching>("searching.debounce")
-            .operations {
-                Op("typeC") { $0.search("c") }
-                Op("typeCa") { $0.search("ca") }
-                Op("typeCat") { $0.search("cat") }
-            }
-            .vary { Ordering(max: 6) }
-            .baselined { context in
-                DebouncedSearch(scheduler: context.scheduler(.main), center: context.notifications)
-            }
+    private var uploading: BaselinedSpec<any Uploading> {
+        Spec<any Uploading>("uploading.scheduler")
+            .operations { Op("upload") { $0.upload("cat.jpg") } }
+            .baselined { context in Uploader(scheduler: context.scheduler(.main), center: context.notifications) }
     }
 
     func testADebounceIsEquivalentToItself() async {
@@ -315,6 +302,19 @@ final class HeldSchedulerTests: XCTestCase {
 
         XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
         XCTAssertTrue(verdict.report().contains("baseline=300 candidate=200"), verdict.report())
+    }
+
+    private var searching: BaselinedSpec<any Searching> {
+        Spec<any Searching>("searching.debounce")
+            .operations {
+                Op("typeC") { $0.search("c") }
+                Op("typeCa") { $0.search("ca") }
+                Op("typeCat") { $0.search("cat") }
+            }
+            .vary { Ordering(max: 6) }
+            .baselined { context in
+                DebouncedSearch(scheduler: context.scheduler(.main), center: context.notifications)
+            }
     }
 
     func testAMeasuredIntervalReadsVirtualTimeOnEveryRun() async {

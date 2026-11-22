@@ -3,17 +3,6 @@ import Foundation
 @testable import HaruspecTrace
 import XCTest
 
-/// A domain is supposed to describe *the code*: "this is MainActor-isolated", "this runs on the cart
-/// queue". For code that declares no isolation at all, there is no such fact — and a resolver that
-/// answers with wherever the caller happened to be makes the harness part of the measurement.
-///
-/// That is the same failure `worker-N` had, one level up: a field meant to remove scheduling
-/// nondeterminism, reintroducing it.
-/// A subject that declares nothing.
-private func recordUndeclaredWork(into recorder: TraceRecorder) {
-    TraceContext.$current.withValue(recorder) { Haruspec.marker("work") }
-}
-
 final class AmbientDomainTests: XCTestCase {
     /// Identical work, two calling contexts. Nothing about the subject differs, so nothing about its
     /// recorded domain should either.
@@ -50,6 +39,17 @@ final class AmbientDomainTests: XCTestCase {
 
         XCTAssertEqual(recorder.trace().events.map(\.domain), [.main, .ambient])
     }
+}
+
+/// A domain is supposed to describe *the code*: "this is MainActor-isolated", "this runs on the cart
+/// queue". For code that declares no isolation at all, there is no such fact — and a resolver that
+/// answers with wherever the caller happened to be makes the harness part of the measurement.
+///
+/// That is the same failure `worker-N` had, one level up: a field meant to remove scheduling
+/// nondeterminism, reintroducing it.
+/// A subject that declares nothing.
+private func recordUndeclaredWork(into recorder: TraceRecorder) {
+    TraceContext.$current.withValue(recorder) { Haruspec.marker("work") }
 }
 
 /// An effect belongs to the work that caused it, not to the machinery that carried it there.

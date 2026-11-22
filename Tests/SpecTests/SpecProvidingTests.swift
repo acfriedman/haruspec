@@ -4,23 +4,6 @@ import HaruspecSeams
 import HaruspecSpec
 import XCTest
 
-// The per-file shape: a spec declaration names no implementation, and the suite that binds it carries
-// its own test surface, so a project with fifty specs keeps no central list to forget an entry in.
-// These cover what a per-spec suite calls on the bound declaration — the candidate arguments, the
-// one-call check, and the continuous selection that keeps an ordinary run untouched.
-
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
-    RefactorCart(center: ctx.notifications)
-}
-
-private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
-    RoundBugCart(center: ctx.notifications)
-}
-
 private struct PromoCartSpec: SpecProviding {
     var spec: Spec<PromoCart> {
         Spec<PromoCart>("promo-cart.perfile")
@@ -39,11 +22,6 @@ final class SpecProvidingTests: XCTestCase {
             Candidate("RefactorCart", makeRefactor)
             Candidate("RoundBugCart", expecting: .diverged, makeRoundBug)
         }
-
-    private func scratch() -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("perfile-\(UUID().uuidString)", isDirectory: true)
-    }
 
     func testCandidateNamesAreTheMigrationArguments() {
         XCTAssertEqual(subject.candidateNames, ["RefactorCart", "RoundBugCart"])
@@ -117,6 +95,11 @@ final class SpecProvidingTests: XCTestCase {
         ])
     }
 
+    private func scratch() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("perfile-\(UUID().uuidString)", isDirectory: true)
+    }
+
     func testContinuousReportsAMissingDestinationRatherThanThrowingRaw() async {
         await XCTAssertThrowsErrorAsync {
             try await subject.checkContinuous(.record, environment: ["HARUSPEC_MODE": "record"])
@@ -127,4 +110,21 @@ final class SpecProvidingTests: XCTestCase {
             )
         }
     }
+}
+
+// The per-file shape: a spec declaration names no implementation, and the suite that binds it carries
+// its own test surface, so a project with fifty specs keeps no central list to forget an entry in.
+// These cover what a per-spec suite calls on the bound declaration — the candidate arguments, the
+// one-call check, and the continuous selection that keeps an ordinary run untouched.
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
+    RefactorCart(center: ctx.notifications)
+}
+
+private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
+    RoundBugCart(center: ctx.notifications)
 }

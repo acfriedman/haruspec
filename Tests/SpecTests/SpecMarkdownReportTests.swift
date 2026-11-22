@@ -70,43 +70,7 @@ private final class GreedyCart: PromoCart {
     }
 }
 
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
-    RefactorCart(center: ctx.notifications)
-}
-
-private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
-    RoundBugCart(center: ctx.notifications)
-}
-
-private func makeLoyaltyRoundBug(_ ctx: SeamContext) -> PromoCart {
-    LoyaltyRoundBugCart(center: ctx.notifications)
-}
-
-private func makeGreedy(_ ctx: SeamContext) -> PromoCart {
-    GreedyCart(center: ctx.notifications, context: ctx)
-}
-
 final class SpecMarkdownReportTests: XCTestCase {
-    private func cart(system: @escaping (SeamContext) -> PromoCart) -> BaselinedSpec<PromoCart> {
-        Spec<PromoCart>("promo-cart.markdown")
-            .operations {
-                Op("addCoffee") { cart, seams in
-                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
-                }
-                Op("promo") { $0.applyPromo() }
-                Op("checkout") { _ = $0.checkout() }.last()
-            }
-            .vary {
-                Seam("coffeeQty", .int(1 ... 20))
-                Ordering(max: 10)
-            }
-            .baselined(on: system)
-    }
-
     func testDivergedMarkdownRendersTablesAndCounterexample() async {
         let plan = await cart(system: makeGood).record()
         let verdict = await cart(system: makeRoundBug).verify(replaying: plan)
@@ -314,4 +278,40 @@ final class SpecMarkdownReportTests: XCTestCase {
         )
         XCTAssertTrue(markdown.contains("**this check does not pass.**"))
     }
+
+    private func cart(system: @escaping (SeamContext) -> PromoCart) -> BaselinedSpec<PromoCart> {
+        Spec<PromoCart>("promo-cart.markdown")
+            .operations {
+                Op("addCoffee") { cart, seams in
+                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
+                }
+                Op("promo") { $0.applyPromo() }
+                Op("checkout") { _ = $0.checkout() }.last()
+            }
+            .vary {
+                Seam("coffeeQty", .int(1 ... 20))
+                Ordering(max: 10)
+            }
+            .baselined(on: system)
+    }
+}
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
+    RoundBugCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
+    RefactorCart(center: ctx.notifications)
+}
+
+private func makeLoyaltyRoundBug(_ ctx: SeamContext) -> PromoCart {
+    LoyaltyRoundBugCart(center: ctx.notifications)
+}
+
+private func makeGreedy(_ ctx: SeamContext) -> PromoCart {
+    GreedyCart(center: ctx.notifications, context: ctx)
 }

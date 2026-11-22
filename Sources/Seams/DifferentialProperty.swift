@@ -83,50 +83,6 @@ public struct DifferentialProperty {
         return Result(checked: variants.count, counterexamples: counterexamples, coverage: coverage)
     }
 
-    /// Convenience: check with the built-in domain generator (dependency-free). `varying` names the
-    /// seams to generate; the rest replay their golden values.
-    public func check(
-        count: Int,
-        varying domains: [String: SeamDomain],
-        seed: UInt64 = 0x9E37_79B9_7F4A_7C15
-    ) -> Result {
-        check(count: count, using: DomainSeamGenerator(domains: domains, seed: seed))
-    }
-
-    /// The resolved verdict for a property run, in the engine's own `VerificationResult` vocabulary:
-    ///  - held over the surface → the golden's `EQUIVALENT` diff, with the swept seams credited as
-    ///    domain-exercised (breadth beyond the single point).
-    ///  - a counterexample → its `DIVERGED` diff, which stands (a caught path-dependent regression).
-    /// The domain credit is additive: it never flips a `CANNOT-VERIFY` to a pass (see `Coverage`).
-    public func verify(count: Int, using generator: some SeamValueGenerator) -> VerificationResult {
-        let result = check(count: count, using: generator)
-        let representative = result.firstFailure?.diff ?? diff(on: golden)
-        return VerificationResult(diff: representative, coverage: result.coverage)
-    }
-
-    /// Convenience: verify with the built-in domain generator (dependency-free).
-    public func verify(
-        count: Int,
-        varying domains: [String: SeamDomain],
-        seed: UInt64 = 0x9E37_79B9_7F4A_7C15
-    ) -> VerificationResult {
-        verify(count: count, using: DomainSeamGenerator(domains: domains, seed: seed))
-    }
-
-    /// Runs both branches against one variant and diffs them.
-    private func diff(on variant: CassetteData) -> TraceDiff {
-        let baselineReplay = Cassette(replaying: variant)
-        let baseline = run(baselineReplay, .baseline)
-        let candidate = run(Cassette(replaying: baselineReplay.snapshot()), .candidate)
-        return BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: comparison)
-    }
-
-    /// The diff iff the two branches diverge on this variant.
-    private func diverges(on variant: CassetteData) -> TraceDiff? {
-        let result = diff(on: variant)
-        return result.isEquivalent ? nil : result
-    }
-
     /// Delta-debugging-lite localization: reset each seam to its golden reading and keep the reset only
     /// if the divergence survives. What's left generated is the minimal set of *readings* needed to
     /// reproduce — the "localize the change" the engine's north star asks for. Iterating *all* golden
@@ -158,5 +114,49 @@ public struct DifferentialProperty {
             }
         }
         return minimal
+    }
+
+    /// The diff iff the two branches diverge on this variant.
+    private func diverges(on variant: CassetteData) -> TraceDiff? {
+        let result = diff(on: variant)
+        return result.isEquivalent ? nil : result
+    }
+
+    /// Convenience: check with the built-in domain generator (dependency-free). `varying` names the
+    /// seams to generate; the rest replay their golden values.
+    public func check(
+        count: Int,
+        varying domains: [String: SeamDomain],
+        seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+    ) -> Result {
+        check(count: count, using: DomainSeamGenerator(domains: domains, seed: seed))
+    }
+
+    /// The resolved verdict for a property run, in the engine's own `VerificationResult` vocabulary:
+    ///  - held over the surface → the golden's `EQUIVALENT` diff, with the swept seams credited as
+    ///    domain-exercised (breadth beyond the single point).
+    ///  - a counterexample → its `DIVERGED` diff, which stands (a caught path-dependent regression).
+    /// The domain credit is additive: it never flips a `CANNOT-VERIFY` to a pass (see `Coverage`).
+    public func verify(count: Int, using generator: some SeamValueGenerator) -> VerificationResult {
+        let result = check(count: count, using: generator)
+        let representative = result.firstFailure?.diff ?? diff(on: golden)
+        return VerificationResult(diff: representative, coverage: result.coverage)
+    }
+
+    /// Runs both branches against one variant and diffs them.
+    private func diff(on variant: CassetteData) -> TraceDiff {
+        let baselineReplay = Cassette(replaying: variant)
+        let baseline = run(baselineReplay, .baseline)
+        let candidate = run(Cassette(replaying: baselineReplay.snapshot()), .candidate)
+        return BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: comparison)
+    }
+
+    /// Convenience: verify with the built-in domain generator (dependency-free).
+    public func verify(
+        count: Int,
+        varying domains: [String: SeamDomain],
+        seed: UInt64 = 0x9E37_79B9_7F4A_7C15
+    ) -> VerificationResult {
+        verify(count: count, using: DomainSeamGenerator(domains: domains, seed: seed))
     }
 }

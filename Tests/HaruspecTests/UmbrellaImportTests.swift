@@ -57,10 +57,6 @@ final class RefactorCart: Cart {
         self.center = center
     }
 
-    private var subtotal: Int {
-        lines.reduce(0) { $0 + $1.price * $1.qty }
-    }
-
     func add(cents: Int, qty: Int) {
         lines.append((cents, qty))
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
@@ -71,14 +67,10 @@ final class RefactorCart: Cart {
         Haruspec.marker("checkout_completed")
         return subtotal
     }
-}
 
-private func makeGood(_ ctx: SeamContext) -> Cart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRefactor(_ ctx: SeamContext) -> Cart {
-    RefactorCart(center: ctx.notifications)
+    private var subtotal: Int {
+        lines.reduce(0) { $0 + $1.price * $1.qty }
+    }
 }
 
 final class UmbrellaImportTests: XCTestCase {
@@ -156,4 +148,12 @@ final class UmbrellaImportTests: XCTestCase {
         ).now()
         XCTAssertEqual(replayed, recorded, "replay yields the recorded value, not the live one")
     }
+}
+
+private func makeGood(_ ctx: SeamContext) -> Cart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> Cart {
+    RefactorCart(center: ctx.notifications)
 }

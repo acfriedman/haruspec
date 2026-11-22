@@ -134,42 +134,6 @@ final class HeapRestocker: Restocking {
 // MARK: - Tests
 
 final class PointerArgumentTests: XCTestCase {
-    /// Enumerates, setting the flag at the `stopAt`th item; `0` never sets it.
-    private var enumeration: BaselinedSpec<any Inventory> {
-        Spec<any Inventory>("inventory.stop")
-            .operations {
-                Op("enumerateItems") { sut, seams in
-                    let stopAt = Int(seams.int("stopAt", default: 0))
-                    var seen = 0
-                    sut.enumerateItems { _, stop in
-                        seen += 1
-                        if seen == stopAt {
-                            stop.pointee = true
-                        }
-                    }
-                }
-            }
-            .vary {
-                Seam("stopAt", .int(0 ... 5))
-                Budget(runs: 30)
-            }
-            .baselined { _ in LegacyInventory(items: items) }
-    }
-
-    private var restocking: BaselinedSpec<any Restocking> {
-        Spec<any Restocking>("restocking.found")
-            .operations {
-                Op("report") { $0.report(sku: "A") }
-            }
-            .vary {
-                Seam("Stockroom.stock", .int(0 ... 9))
-                Budget(runs: 20)
-            }
-            .baselined { context in
-                StackRestocker(stockroom: context.double(DoubleStockroom.self), center: context.notifications)
-            }
-    }
-
     func testTheDeliveryRecordsTheItemAndNoAddress() {
         let recorder = TraceRecorder(name: "enumerate")
         let inventory = TracedInventory(LegacyInventory(items: items))
@@ -228,11 +192,47 @@ final class PointerArgumentTests: XCTestCase {
         )
     }
 
+    /// Enumerates, setting the flag at the `stopAt`th item; `0` never sets it.
+    private var enumeration: BaselinedSpec<any Inventory> {
+        Spec<any Inventory>("inventory.stop")
+            .operations {
+                Op("enumerateItems") { sut, seams in
+                    let stopAt = Int(seams.int("stopAt", default: 0))
+                    var seen = 0
+                    sut.enumerateItems { _, stop in
+                        seen += 1
+                        if seen == stopAt {
+                            stop.pointee = true
+                        }
+                    }
+                }
+            }
+            .vary {
+                Seam("stopAt", .int(0 ... 5))
+                Budget(runs: 30)
+            }
+            .baselined { _ in LegacyInventory(items: items) }
+    }
+
     func testADoublesOutParameterIsComparedWithoutItsAddress() async {
         let verdict = await restocking.verify { context in
             HeapRestocker(stockroom: context.double(DoubleStockroom.self), center: context.notifications)
         }
 
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
+    }
+
+    private var restocking: BaselinedSpec<any Restocking> {
+        Spec<any Restocking>("restocking.found")
+            .operations {
+                Op("report") { $0.report(sku: "A") }
+            }
+            .vary {
+                Seam("Stockroom.stock", .int(0 ... 9))
+                Budget(runs: 20)
+            }
+            .baselined { context in
+                StackRestocker(stockroom: context.double(DoubleStockroom.self), center: context.notifications)
+            }
     }
 }

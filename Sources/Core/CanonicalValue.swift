@@ -147,6 +147,21 @@ public extension CanonicalValue {
         }
     }
 
+    private static func stringShape(_ text: String) -> String {
+        if text.isEmpty {
+            return "empty string"
+        }
+        if UUID(uuidString: text) != nil {
+            return text == text.uppercased() ? "UUID" : text == text.lowercased() ? "uuid" : "mixed-case uuid"
+        }
+        let timestamp = #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$"#
+        let match = text.range(of: timestamp, options: .regularExpression)
+        if match == text.startIndex ..< text.endIndex {
+            return text.contains(".") ? "ISO 8601 timestamp, fractional seconds" : "ISO 8601 timestamp"
+        }
+        return "string"
+    }
+
     /// Returns the hint a mismatch carries when both values look minted rather than computed: two
     /// identifiers, or two timestamps, of the same format.
     ///
@@ -171,21 +186,6 @@ public extension CanonicalValue {
         default:
             return nil
         }
-    }
-
-    private static func stringShape(_ text: String) -> String {
-        if text.isEmpty {
-            return "empty string"
-        }
-        if UUID(uuidString: text) != nil {
-            return text == text.uppercased() ? "UUID" : text == text.lowercased() ? "uuid" : "mixed-case uuid"
-        }
-        let timestamp = #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})$"#
-        let match = text.range(of: timestamp, options: .regularExpression)
-        if match == text.startIndex ..< text.endIndex {
-            return text.contains(".") ? "ISO 8601 timestamp, fractional seconds" : "ISO 8601 timestamp"
-        }
-        return "string"
     }
 }
 

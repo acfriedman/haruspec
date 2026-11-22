@@ -10,22 +10,6 @@ import XCTest
 /// runtime. Getting it wrong produced a green banner over a spec that swept nothing, and claimed the
 /// full seam-variant count while generating identical cassettes.
 final class UnmatchedDomainTests: XCTestCase {
-    private func spec(_ name: String, varying key: String) -> BaselinedSpec<PromoCart> {
-        Spec<PromoCart>(name)
-            .operations {
-                Op("add") { cart, seams in
-                    cart.addItem(priceCents: 999, qty: Int(seams.int("qty", default: 2)))
-                }
-                Op("checkout") { _ = $0.checkout() }.last()
-            }
-            .vary { Seam(key, .int(1 ... 20)) }
-            .baselined { GoodCart(center: $0.notifications) }
-    }
-
-    private func makeRefactor(_ context: SeamContext) -> PromoCart {
-        RefactorCart(center: context.notifications)
-    }
-
     func testADomainNothingReadsCannotBeVerifiedOver() async {
         let verdict = await spec("unmatched.typo", varying: "qtyy").verify(candidate: makeRefactor)
 
@@ -77,6 +61,18 @@ final class UnmatchedDomainTests: XCTestCase {
         XCTAssertLessThan(verdict.coverage.fraction ?? 1, 1)
     }
 
+    private func spec(_ name: String, varying key: String) -> BaselinedSpec<PromoCart> {
+        Spec<PromoCart>(name)
+            .operations {
+                Op("add") { cart, seams in
+                    cart.addItem(priceCents: 999, qty: Int(seams.int("qty", default: 2)))
+                }
+                Op("checkout") { _ = $0.checkout() }.last()
+            }
+            .vary { Seam(key, .int(1 ... 20)) }
+            .baselined { GoodCart(center: $0.notifications) }
+    }
+
     func testATypedArgumentCannotProduceThisGapAtAll() async {
         // There is no key to mistype: `.operations` harvests the domain against the key the read uses.
         let typed = Spec<PromoCart>("unmatched.typed")
@@ -93,5 +89,9 @@ final class UnmatchedDomainTests: XCTestCase {
         XCTAssertEqual(verdict.verdict, .equivalent, verdict.report())
         XCTAssertTrue(verdict.coverage.unmatchedDomains.isEmpty)
         XCTAssertEqual(verdict.coverage.domainExercised, ["add.0"])
+    }
+
+    private func makeRefactor(_ context: SeamContext) -> PromoCart {
+        RefactorCart(center: context.notifications)
     }
 }

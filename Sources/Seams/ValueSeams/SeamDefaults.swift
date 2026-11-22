@@ -30,6 +30,10 @@ public final class SeamDefaults: @unchecked Sendable {
         cassette.bool(seam: track(key), live: live)
     }
 
+    private func track(_ key: String) -> String {
+        "\(seam).\(key)"
+    }
+
     /// Writes are recorded as observable behavior and kept in-memory; they do not mutate real storage.
     public func set(_ value: CanonicalValue, forKey key: String) {
         lock.lock(); defer { lock.unlock() }
@@ -40,9 +44,5 @@ public final class SeamDefaults: @unchecked Sendable {
     public func recordedWrites() -> [String: CanonicalValue] {
         lock.lock(); defer { lock.unlock() }
         return writes
-    }
-
-    private func track(_ key: String) -> String {
-        "\(seam).\(key)"
     }
 }

@@ -30,6 +30,15 @@ public final class RecordingNotificationCenter: NotificationCenter, @unchecked S
         super.post(notification)
     }
 
+    private func record(_ notification: Notification) {
+        guard let recorder = TraceContext.active else { return }
+        recorder.notification(
+            notification.name.rawValue,
+            subject: notification.object.map { $0 as AnyObject },
+            payload: notification.userInfo.map { RuntimeValue.canonical($0) }
+        )
+    }
+
     override public func post(name: NSNotification.Name, object: Any?, userInfo: [AnyHashable: Any]? = nil) {
         // Routed explicitly rather than trusting the superclass to funnel: `post(name:object:userInfo:)`
         // is a distinct Objective-C selector, and legacy code reaches it directly.
@@ -38,14 +47,5 @@ public final class RecordingNotificationCenter: NotificationCenter, @unchecked S
 
     override public func post(name aName: NSNotification.Name, object anObject: Any?) {
         post(Notification(name: aName, object: anObject, userInfo: nil))
-    }
-
-    private func record(_ notification: Notification) {
-        guard let recorder = TraceContext.active else { return }
-        recorder.notification(
-            notification.name.rawValue,
-            subject: notification.object.map { $0 as AnyObject },
-            payload: notification.userInfo.map { RuntimeValue.canonical($0) }
-        )
     }
 }

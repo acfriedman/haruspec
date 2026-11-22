@@ -121,12 +121,6 @@ final class ClassTill: Till {
 }
 
 final class ForwarderIsolationTests: XCTestCase {
-    private func capture(_ body: () async -> Void) async -> [TraceEvent] {
-        let recorder = TraceRecorder(name: "t")
-        await TraceContext.$current.withValue(recorder) { await body() }
-        return recorder.trace().events
-    }
-
     /// A forwarded call into an actor is recorded as the actor — and the effect the actor emits
     /// from inside inherits that domain, with no attribute on the actor.
     func testAnActorConformerIsRecordedAsTheActor() async {
@@ -166,15 +160,15 @@ final class ForwarderIsolationTests: XCTestCase {
 
         XCTAssertEqual(events.map(\.domain), [.ambient, .ambient, .ambient])
     }
+
+    private func capture(_ body: () async -> Void) async -> [TraceEvent] {
+        let recorder = TraceRecorder(name: "t")
+        await TraceContext.$current.withValue(recorder) { await body() }
+        return recorder.trace().events
+    }
 }
 
 final class ForwarderTests: XCTestCase {
-    private func run(_ body: () -> Void) -> [TraceEvent] {
-        let recorder = TraceRecorder(name: "t")
-        TraceContext.$current.withValue(recorder, operation: body)
-        return recorder.trace().events
-    }
-
     /// The forwarder is typed by the protocol: the baseline and a port are wrapped by the same
     /// class, and the two traces are identical — the port's private helper never appears.
     func testWrapsBaselineAndPortThroughOneBoundary() {
@@ -283,6 +277,12 @@ final class ForwarderTests: XCTestCase {
         XCTAssertEqual(timed.map(\.kind), [.call, .signpost, .ret])
         XCTAssertEqual(timed[1].label, "Meter.tick")
         XCTAssertFalse(untimed.contains { $0.kind == .signpost })
+    }
+
+    private func run(_ body: () -> Void) -> [TraceEvent] {
+        let recorder = TraceRecorder(name: "t")
+        TraceContext.$current.withValue(recorder, operation: body)
+        return recorder.trace().events
     }
 }
 

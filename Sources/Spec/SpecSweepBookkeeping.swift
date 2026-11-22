@@ -35,13 +35,13 @@ struct RedCases<Run> {
         probes.append(DivergentProbe(ordering: ordering, inputs: inputs, divergences: diff.divergences))
     }
 
-    var cases: FailingCases {
-        FailingCases(probes: probes, walkedAfterFirst: walkedAfterFirst)
-    }
-
     /// The run behind the case the verdict reports — the richest — or `nil` when nothing failed.
     var reported: Run? {
         cases.richestIndex.map { runs[$0] }
+    }
+
+    var cases: FailingCases {
+        FailingCases(probes: probes, walkedAfterFirst: walkedAfterFirst)
     }
 }
 

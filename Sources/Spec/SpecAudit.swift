@@ -62,6 +62,15 @@ public extension SpecVerdict {
         return noting(report.outcome(accepting: intent.acceptedBlindSpots + (acceptedBlindSpots ?? [])))
     }
 
+    /// The same verdict with an audit's outcome applied. Split out so a caller holding its own
+    /// `AuditReport` (the CLI, a host tool auditing a recorded `result.json`) folds it in identically.
+    internal func noting(_ outcome: AuditOutcome) -> SpecVerdict {
+        var verdict = self
+        verdict.result = VerificationResult(diff: result.diff, coverage: coverage.noting(outcome))
+        verdict.qualification = qualification.noting(blindSpots: outcome.entries)
+        return verdict
+    }
+
     /// Audits against the checkout the calling file lives in: its nearest ancestor holding
     /// `.haruspec` or `.git`. See ``audited(against:declaring:)``.
     ///
@@ -95,15 +104,6 @@ public extension SpecVerdict {
             directory.deleteLastPathComponent()
         }
         return nil
-    }
-
-    /// The same verdict with an audit's outcome applied. Split out so a caller holding its own
-    /// `AuditReport` (the CLI, a host tool auditing a recorded `result.json`) folds it in identically.
-    internal func noting(_ outcome: AuditOutcome) -> SpecVerdict {
-        var verdict = self
-        verdict.result = VerificationResult(diff: result.diff, coverage: coverage.noting(outcome))
-        verdict.qualification = qualification.noting(blindSpots: outcome.entries)
-        return verdict
     }
 }
 

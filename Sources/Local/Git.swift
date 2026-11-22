@@ -77,9 +77,6 @@ struct Git {
         return Array(Set(paths)).sorted()
     }
 
-    /// The pathspec for everything in the repository except `.haruspec/`.
-    static let outsideHaruspec = [":/", ":(top,exclude).haruspec"]
-
     /// Runs `git <arguments>` and returns its trimmed standard output.
     ///
     /// - Parameters:
@@ -96,4 +93,7 @@ struct Git {
         }
         return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    /// The pathspec for everything in the repository except `.haruspec/`.
+    static let outsideHaruspec = [":/", ":(top,exclude).haruspec"]
 }

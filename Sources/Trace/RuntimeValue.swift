@@ -21,19 +21,6 @@ public enum RuntimeValue {
         canonical(any, depth: 0, visited: [])
     }
 
-    /// Returns a thrown error as a caller can branch on it. A Cocoa error is its domain, code, and
-    /// user info, so two equal errors match however their user info happens to print.
-    ///
-    /// - Parameter error: The error a stamped method threw.
-    /// - Returns: An `.object` keyed `domain`, `code`, and `userInfo` for an `NSError`; for a Swift
-    ///   error, its description, which keeps the associated values a bridged code drops.
-    public static func thrown(_ error: any Error) -> CanonicalValue {
-        guard type(of: error) is NSError.Type else {
-            return .string(String(describing: error))
-        }
-        return canonical(error: error as NSError, depth: 0, visited: [])
-    }
-
     private static func canonical(
         _ any: Any,
         depth: Int,
@@ -93,6 +80,19 @@ public enum RuntimeValue {
             }
             return .string(String(describing: any))
         }
+    }
+
+    /// Returns a thrown error as a caller can branch on it. A Cocoa error is its domain, code, and
+    /// user info, so two equal errors match however their user info happens to print.
+    ///
+    /// - Parameter error: The error a stamped method threw.
+    /// - Returns: An `.object` keyed `domain`, `code`, and `userInfo` for an `NSError`; for a Swift
+    ///   error, its description, which keeps the associated values a bridged code drops.
+    public static func thrown(_ error: any Error) -> CanonicalValue {
+        guard type(of: error) is NSError.Type else {
+            return .string(String(describing: error))
+        }
+        return canonical(error: error as NSError, depth: 0, visited: [])
     }
 
     // MARK: - Structural canonicalization

@@ -9,10 +9,6 @@ final class WorkBacklogCauseTests: XCTestCase {
     /// Stands in for a scheduling double: the identity `sync` drains by.
     private final class Queue {}
 
-    private func events(_ recorder: TraceRecorder) -> [TraceEvent] {
-        recorder.trace().events
-    }
-
     /// Work held from inside held work, with no traced call open, carries that work's cause forward:
     /// the call that caused the first item caused everything it handed on, however many hops away.
     func testWorkHandedOnFromHeldWorkNamesTheOriginalCall() async throws {
@@ -159,5 +155,9 @@ final class WorkBacklogCauseTests: XCTestCase {
 
         let ring = try XCTUnwrap(events(recorder).first { $0.label == "Till.ring" })
         XCTAssertEqual(events(recorder).first { $0.label == "posted" }?.spawnedBy, ring.seq, "not Till.readTotal")
+    }
+
+    private func events(_ recorder: TraceRecorder) -> [TraceEvent] {
+        recorder.trace().events
     }
 }

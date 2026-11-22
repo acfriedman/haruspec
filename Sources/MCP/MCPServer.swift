@@ -232,14 +232,14 @@ public struct MCPServer {
         return try Comparison(contentsOf: URL(fileURLWithPath: path))
     }
 
-    private func textContent(_ text: String) -> [String: Any] {
-        ["type": "text", "text": text]
-    }
-
     /// A tool *execution* failure rides in the result with `isError` (so the model can read and react
     /// to it), never as a protocol-level JSON-RPC error — per the MCP tools spec.
     private func toolError(_ message: String) -> [String: Any] {
         ["content": [textContent(message)], "isError": true]
+    }
+
+    private func textContent(_ text: String) -> [String: Any] {
+        ["type": "text", "text": text]
     }
 
     private func response(id: Any?, result: [String: Any]) -> [String: Any] {

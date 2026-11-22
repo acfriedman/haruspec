@@ -26,20 +26,6 @@ final class HTMLReportTests: XCTestCase {
 
     // MARK: - Self-containment (the load-bearing property: works over file://)
 
-    /// No page produced anywhere may reference a remote asset — that's what makes it openable offline.
-    private func assertSelfContained(_ html: String, file: StaticString = #filePath, line: UInt = #line) {
-        for needle in ["http://", "https://", "src=", "//cdn", "url("] {
-            XCTAssertFalse(
-                html.contains(needle),
-                "HTML report must be self-contained; found \(needle)",
-                file: file,
-                line: line
-            )
-        }
-        XCTAssertTrue(html.contains("<!doctype html>"), "expected a full document", file: file, line: line)
-        XCTAssertTrue(html.contains("<style>"), "CSS must be inlined", file: file, line: line)
-    }
-
     func testDivergedReportContainsBannerAndValues() {
         let html = diff(.diverged, [valueMismatch, missing]).htmlReport()
         assertSelfContained(html)
@@ -86,6 +72,20 @@ final class HTMLReportTests: XCTestCase {
         assertSelfContained(html)
         XCTAssertTrue(html.contains("Coverage"))
         XCTAssertTrue(html.contains("2/2"))
+    }
+
+    /// No page produced anywhere may reference a remote asset — that's what makes it openable offline.
+    private func assertSelfContained(_ html: String, file: StaticString = #filePath, line: UInt = #line) {
+        for needle in ["http://", "https://", "src=", "//cdn", "url("] {
+            XCTAssertFalse(
+                html.contains(needle),
+                "HTML report must be self-contained; found \(needle)",
+                file: file,
+                line: line
+            )
+        }
+        XCTAssertTrue(html.contains("<!doctype html>"), "expected a full document", file: file, line: line)
+        XCTAssertTrue(html.contains("<style>"), "CSS must be inlined", file: file, line: line)
     }
 
     /// HTML metacharacters in labels/values must not break out of the markup.

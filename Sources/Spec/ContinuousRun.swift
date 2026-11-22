@@ -278,14 +278,32 @@ public extension BaselinedSpec {
         }
     }
 
-    private func settleContinuous(for seconds: Double) async -> ContinuousOutcome {
-        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
-        return ContinuousOutcome(
-            succeeded: true,
-            summary: "settle: waited \(seconds)s",
-            artifactPath: nil,
-            htmlReportPath: nil
-        )
+    private func replayContinuous(
+        plan planURL: URL,
+        into resultsDirectory: URL,
+        intent intentURL: URL?
+    ) async -> ContinuousOutcome {
+        do {
+            try FileManager.default.createDirectory(at: resultsDirectory, withIntermediateDirectories: true)
+            // An intent that was pointed at but cannot load must fail the run, never quietly become
+            // parity: a red from missing declarations and a green from ignored ones are both wrong.
+            let intent = try intentURL.map(Intent.init(contentsOf:)) ?? .none
+            let verdict = try await verify(replayingContentsOf: planURL, declaring: intent)
+            let resultURL = resultsDirectory.appendingPathComponent("result.json")
+            try verdict.write(to: resultURL)
+            // HTML is best-effort visual evidence; result.json is the load-bearing artifact.
+            let htmlPath = verdict.writeHTMLReport(named: name, in: resultsDirectory)?.path
+            return ContinuousOutcome(
+                // Unobserved intent fails the run even on EQUIVALENT behavior — the same gate the
+                // CLI report exits 6 on — so the local replay and the CI gate cannot disagree.
+                succeeded: verdict.verdict == .equivalent && verdict.diff.unobservedIntent.isEmpty,
+                summary: verdict.report(),
+                artifactPath: resultURL.path,
+                htmlReportPath: htmlPath
+            )
+        } catch {
+            return .failed("replay failed: \(error)")
+        }
     }
 
     private func censusContinuous(into resultsDirectory: URL, suite: ContinuousSuite?) -> ContinuousOutcome {
@@ -313,32 +331,14 @@ public extension BaselinedSpec {
         }
     }
 
-    private func replayContinuous(
-        plan planURL: URL,
-        into resultsDirectory: URL,
-        intent intentURL: URL?
-    ) async -> ContinuousOutcome {
-        do {
-            try FileManager.default.createDirectory(at: resultsDirectory, withIntermediateDirectories: true)
-            // An intent that was pointed at but cannot load must fail the run, never quietly become
-            // parity: a red from missing declarations and a green from ignored ones are both wrong.
-            let intent = try intentURL.map(Intent.init(contentsOf:)) ?? .none
-            let verdict = try await verify(replayingContentsOf: planURL, declaring: intent)
-            let resultURL = resultsDirectory.appendingPathComponent("result.json")
-            try verdict.write(to: resultURL)
-            // HTML is best-effort visual evidence; result.json is the load-bearing artifact.
-            let htmlPath = verdict.writeHTMLReport(named: name, in: resultsDirectory)?.path
-            return ContinuousOutcome(
-                // Unobserved intent fails the run even on EQUIVALENT behavior — the same gate the
-                // CLI report exits 6 on — so the local replay and the CI gate cannot disagree.
-                succeeded: verdict.verdict == .equivalent && verdict.diff.unobservedIntent.isEmpty,
-                summary: verdict.report(),
-                artifactPath: resultURL.path,
-                htmlReportPath: htmlPath
-            )
-        } catch {
-            return .failed("replay failed: \(error)")
-        }
+    private func settleContinuous(for seconds: Double) async -> ContinuousOutcome {
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        return ContinuousOutcome(
+            succeeded: true,
+            summary: "settle: waited \(seconds)s",
+            artifactPath: nil,
+            htmlReportPath: nil
+        )
     }
 }
 

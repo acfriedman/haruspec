@@ -16,16 +16,6 @@ final class HeldStandInLintTests: XCTestCase {
         try? FileManager.default.removeItem(at: root)
     }
 
-    private func write(_ contents: String, to path: String) throws {
-        let url = root.appendingPathComponent(path)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try contents.write(to: url, atomically: true, encoding: .utf8)
-    }
-
-    private func audit(_ origins: [TraceOrigin]) -> AuditReport {
-        AuditReport.audit(origins: origins, root: root)
-    }
-
     /// A reach through a stand-in the capture held work through is reported, not gated; the same
     /// source with nothing held gates.
     func testAReachThroughAHeldStandInIsReportedWithoutGating() throws {
@@ -116,5 +106,15 @@ final class HeldStandInLintTests: XCTestCase {
 
             XCTAssertEqual(report.blindSpots, ["dispatch"], handOff)
         }
+    }
+
+    private func write(_ contents: String, to path: String) throws {
+        let url = root.appendingPathComponent(path)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func audit(_ origins: [TraceOrigin]) -> AuditReport {
+        AuditReport.audit(origins: origins, root: root)
     }
 }

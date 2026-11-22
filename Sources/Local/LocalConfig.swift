@@ -93,6 +93,19 @@ public struct LocalConfig: Codable, Equatable, Sendable {
         return config
     }
 
+    private static func rejectUnknownKeys(in data: Data) throws {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw LocalCheckError.invalidConfig("the file must hold one JSON object")
+        }
+        let unknown = Set(object.keys).subtracting(knownKeys).sorted()
+        guard unknown.isEmpty else {
+            throw LocalCheckError.invalidConfig(
+                "unknown key\(unknown.count == 1 ? "" : "s") \(unknown.map { "\"\($0)\"" }.joined(separator: ", "))"
+                    + " — known keys: \(knownKeys.sorted().joined(separator: ", "))"
+            )
+        }
+    }
+
     /// Checks the cross-field rules decoding cannot express.
     ///
     /// - Throws: ``LocalCheckError/invalidConfig(_:)`` naming the first broken rule.
@@ -136,17 +149,4 @@ public struct LocalConfig: Codable, Equatable, Sendable {
         "base",
         "specs"
     ]
-
-    private static func rejectUnknownKeys(in data: Data) throws {
-        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw LocalCheckError.invalidConfig("the file must hold one JSON object")
-        }
-        let unknown = Set(object.keys).subtracting(knownKeys).sorted()
-        guard unknown.isEmpty else {
-            throw LocalCheckError.invalidConfig(
-                "unknown key\(unknown.count == 1 ? "" : "s") \(unknown.map { "\"\($0)\"" }.joined(separator: ", "))"
-                    + " — known keys: \(knownKeys.sorted().joined(separator: ", "))"
-            )
-        }
-    }
 }

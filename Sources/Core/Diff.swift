@@ -343,10 +343,6 @@ public enum BehavioralDiff {
         }
     }
 
-    private static func label(_ path: String) -> String {
-        path.isEmpty ? "value" : path
-    }
-
     private static func mismatch(
         _ path: String,
         _ baseline: CanonicalValue,
@@ -359,5 +355,9 @@ public enum BehavioralDiff {
             detail: "\(label(path)): baseline=\(baseline.canonicalString) candidate=\(candidate.canonicalString)"
                 + (CanonicalValue.mintedHint(baseline, candidate).map { " — \($0)" } ?? "")
         )
+    }
+
+    private static func label(_ path: String) -> String {
+        path.isEmpty ? "value" : path
     }
 }

@@ -77,26 +77,27 @@ struct BaseCheckout {
         }
     }
 
-    /// Returns `relative` joined onto `directory` with `.` and `..` removed by text alone, never by
-    /// asking the file system, so a symlink along the way is never followed.
+    /// Returns the `.xcodeproj` bundles whose local package references are mirrored.
     ///
-    /// - Parameters:
-    ///   - directory: An absolute directory path.
-    ///   - relative: A path relative to `directory`, such as `../haruspec`.
-    /// - Returns: The absolute file URL; `..` above the file-system root stays at the root.
-    static func lexicallyResolved(_ directory: String, _ relative: String) -> URL {
-        var components: [String] = []
-        for component in (directory + "/" + relative).split(separator: "/") {
-            switch component {
-            case ".":
-                continue
-            case "..":
-                _ = components.popLast()
-            default:
-                components.append(String(component))
+    /// - Parameter config: The repository's settings; its project, or its workspace's absence of one.
+    /// - Returns: The configured project, or every project under the worktree for a workspace; empty
+    ///   when a workspace's worktree holds none.
+    private func projectFiles(config: LocalConfig) -> [URL] {
+        if let project = config.project {
+            return [root.appendingPathComponent(project)]
+        }
+        let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles, .skipsPackageDescendants]
+        )
+        var projects: [URL] = []
+        while let url = enumerator?.nextObject() as? URL {
+            if url.pathExtension == "xcodeproj" {
+                projects.append(url)
             }
         }
-        return URL(fileURLWithPath: "/" + components.joined(separator: "/"))
+        return projects
     }
 
     /// Returns the `relativePath` values of a project file that leave the project's directory — the
@@ -120,26 +121,25 @@ struct BaseCheckout {
         return seen
     }
 
-    /// Returns the `.xcodeproj` bundles whose local package references are mirrored.
+    /// Returns `relative` joined onto `directory` with `.` and `..` removed by text alone, never by
+    /// asking the file system, so a symlink along the way is never followed.
     ///
-    /// - Parameter config: The repository's settings; its project, or its workspace's absence of one.
-    /// - Returns: The configured project, or every project under the worktree for a workspace; empty
-    ///   when a workspace's worktree holds none.
-    private func projectFiles(config: LocalConfig) -> [URL] {
-        if let project = config.project {
-            return [root.appendingPathComponent(project)]
-        }
-        let enumerator = FileManager.default.enumerator(
-            at: root,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        )
-        var projects: [URL] = []
-        while let url = enumerator?.nextObject() as? URL {
-            if url.pathExtension == "xcodeproj" {
-                projects.append(url)
+    /// - Parameters:
+    ///   - directory: An absolute directory path.
+    ///   - relative: A path relative to `directory`, such as `../haruspec`.
+    /// - Returns: The absolute file URL; `..` above the file-system root stays at the root.
+    static func lexicallyResolved(_ directory: String, _ relative: String) -> URL {
+        var components: [String] = []
+        for component in (directory + "/" + relative).split(separator: "/") {
+            switch component {
+            case ".":
+                continue
+            case "..":
+                _ = components.popLast()
+            default:
+                components.append(String(component))
             }
         }
-        return projects
+        return URL(fileURLWithPath: "/" + components.joined(separator: "/"))
     }
 }

@@ -19,19 +19,6 @@ final class ChannelLintTests: XCTestCase {
         try? FileManager.default.removeItem(at: root)
     }
 
-    private func write(_ contents: String, to path: String) throws {
-        let url = root.appendingPathComponent(path)
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try contents.write(to: url, atomically: true, encoding: .utf8)
-    }
-
-    private func audit(_ origins: [TraceOrigin]) -> AuditReport {
-        AuditReport.audit(origins: origins, root: root)
-    }
-
     func testFindsADirectNotificationPostInACoveredClass() throws {
         try write(
             """
@@ -65,6 +52,19 @@ final class ChannelLintTests: XCTestCase {
         let report = audit([TraceOrigin(label: "P", symbol: "Port", source: "App/Port.swift")])
 
         XCTAssertEqual(report.blindSpots, ["NotificationCenter.default"])
+    }
+
+    private func write(_ contents: String, to path: String) throws {
+        let url = root.appendingPathComponent(path)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func audit(_ origins: [TraceOrigin]) -> AuditReport {
+        AuditReport.audit(origins: origins, root: root)
     }
 
     // MARK: - Position decides: a default handed in is a seam, a use is an escape

@@ -10,56 +10,6 @@ import XCTest
 final class MCPServerTests: XCTestCase {
     private let server = MCPServer()
 
-    private func send(_ object: [String: Any]) -> [String: Any]? {
-        guard let encoded = try? JSONSerialization.data(withJSONObject: object) else {
-            XCTFail("request object is not encodable as JSON")
-            return nil
-        }
-        let line = String(decoding: encoded, as: UTF8.self)
-        guard let reply = server.handle(line) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: Data(reply.utf8))) as? [String: Any]
-    }
-
-    private func callTool(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
-        let reply = send(["jsonrpc": "2.0",
-                          "id": 9,
-                          "method": "tools/call",
-                          "params": ["name": name, "arguments": arguments]])
-        return (reply?["result"] as? [String: Any]) ?? [:]
-    }
-
-    private func text(of result: [String: Any]) -> String {
-        ((result["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
-    }
-
-    /// Two tiny traces on disk: a golden, an identical copy, and a diverging candidate.
-    private func writeTraces() throws -> (golden: URL, same: URL, diverged: URL) {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("mcp-traces-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        func trace(_ name: String, total: Int) -> Trace {
-            Trace(name: name, events: [
-                TraceEvent(seq: 1, kind: .call, label: "Cart.checkout"),
-                TraceEvent(
-                    seq: 2,
-                    kind: .notification,
-                    label: "CheckoutCompleted",
-                    payload: .object(["total": .int(Int64(total))]),
-                    tier: .semantic
-                ),
-                TraceEvent(seq: 3, kind: .ret, label: "Cart.checkout")
-            ])
-        }
-        let golden = dir.appendingPathComponent("golden.json")
-        let same = dir.appendingPathComponent("same.json")
-        let diverged = dir.appendingPathComponent("diverged.json")
-        try trace("golden", total: 100).write(to: golden)
-        try trace("same", total: 100).write(to: same)
-        try trace("diverged", total: 101).write(to: diverged)
-        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
-        return (golden, same, diverged)
-    }
-
     func testHandshakeAndToolListing() {
         let initReply = send(["jsonrpc": "2.0",
                               "id": 1,
@@ -152,6 +102,46 @@ final class MCPServerTests: XCTestCase {
         XCTAssertTrue(text(of: result).contains("Cart.checkout"))
     }
 
+    /// Two tiny traces on disk: a golden, an identical copy, and a diverging candidate.
+    private func writeTraces() throws -> (golden: URL, same: URL, diverged: URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("mcp-traces-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        func trace(_ name: String, total: Int) -> Trace {
+            Trace(name: name, events: [
+                TraceEvent(seq: 1, kind: .call, label: "Cart.checkout"),
+                TraceEvent(
+                    seq: 2,
+                    kind: .notification,
+                    label: "CheckoutCompleted",
+                    payload: .object(["total": .int(Int64(total))]),
+                    tier: .semantic
+                ),
+                TraceEvent(seq: 3, kind: .ret, label: "Cart.checkout")
+            ])
+        }
+        let golden = dir.appendingPathComponent("golden.json")
+        let same = dir.appendingPathComponent("same.json")
+        let diverged = dir.appendingPathComponent("diverged.json")
+        try trace("golden", total: 100).write(to: golden)
+        try trace("same", total: 100).write(to: same)
+        try trace("diverged", total: 101).write(to: diverged)
+        addTeardownBlock { try? FileManager.default.removeItem(at: dir) }
+        return (golden, same, diverged)
+    }
+
+    private func callTool(_ name: String, _ arguments: [String: Any]) -> [String: Any] {
+        let reply = send(["jsonrpc": "2.0",
+                          "id": 9,
+                          "method": "tools/call",
+                          "params": ["name": name, "arguments": arguments]])
+        return (reply?["result"] as? [String: Any]) ?? [:]
+    }
+
+    private func text(of result: [String: Any]) -> String {
+        ((result["content"] as? [[String: Any]])?.first?["text"] as? String) ?? ""
+    }
+
     func testUnknownMethodAndMalformedInput() {
         let unknown = send(["jsonrpc": "2.0", "id": 5, "method": "resources/list"])
         XCTAssertEqual(((unknown?["error"] as? [String: Any])?["code"] as? Int), -32601)
@@ -160,7 +150,41 @@ final class MCPServerTests: XCTestCase {
         XCTAssertTrue(garbled?.contains("-32700") ?? false)
     }
 
+    private func send(_ object: [String: Any]) -> [String: Any]? {
+        guard let encoded = try? JSONSerialization.data(withJSONObject: object) else {
+            XCTFail("request object is not encodable as JSON")
+            return nil
+        }
+        let line = String(decoding: encoded, as: UTF8.self)
+        guard let reply = server.handle(line) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: Data(reply.utf8))) as? [String: Any]
+    }
+
     // MARK: - Local check tools
+
+    func testCheckInARepositoryThatHasNotOptedInTeachesTheConfig() throws {
+        let root = try scratchRepository(configured: false)
+        let result = callTool("check", ["root": root.path])
+
+        XCTAssertEqual(result["isError"] as? Bool, true)
+        XCTAssertTrue(text(of: result).contains("\"testTarget\""), text(of: result))
+    }
+
+    func testSaveIntentWritesTheBranchIntentDoc() throws {
+        let root = try scratchRepository(configured: true)
+        let line = #"Changes("LoyaltyPointsEarned", field: "points").increases()"#
+        let result = callTool("save_intent", ["root": root.path, "spec": "cart", "declarations": [line]])
+
+        XCTAssertEqual(result["isError"] as? Bool, false, text(of: result))
+        let doc = try String(
+            contentsOf: root.appendingPathComponent(".haruspec/intent/feature/points.md"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(doc.contains("```haruspec-intent cart\n\(line)\n```"), doc)
+
+        let refused = callTool("save_intent", ["root": root.path, "spec": "cart", "declarations": ["Changes("]])
+        XCTAssertEqual(refused["isError"] as? Bool, true, "an unparseable line never reaches the doc")
+    }
 
     /// A scratch git repository on branch `feature/points`; `configured` adds `.haruspec/config.json`.
     private func scratchRepository(configured: Bool) throws -> URL {
@@ -185,29 +209,5 @@ final class MCPServerTests: XCTestCase {
             try Data(json.utf8).write(to: config)
         }
         return root
-    }
-
-    func testCheckInARepositoryThatHasNotOptedInTeachesTheConfig() throws {
-        let root = try scratchRepository(configured: false)
-        let result = callTool("check", ["root": root.path])
-
-        XCTAssertEqual(result["isError"] as? Bool, true)
-        XCTAssertTrue(text(of: result).contains("\"testTarget\""), text(of: result))
-    }
-
-    func testSaveIntentWritesTheBranchIntentDoc() throws {
-        let root = try scratchRepository(configured: true)
-        let line = #"Changes("LoyaltyPointsEarned", field: "points").increases()"#
-        let result = callTool("save_intent", ["root": root.path, "spec": "cart", "declarations": [line]])
-
-        XCTAssertEqual(result["isError"] as? Bool, false, text(of: result))
-        let doc = try String(
-            contentsOf: root.appendingPathComponent(".haruspec/intent/feature/points.md"),
-            encoding: .utf8
-        )
-        XCTAssertTrue(doc.contains("```haruspec-intent cart\n\(line)\n```"), doc)
-
-        let refused = callTool("save_intent", ["root": root.path, "spec": "cart", "declarations": ["Changes("]])
-        XCTAssertEqual(refused["isError"] as? Bool, true, "an unparseable line never reaches the doc")
     }
 }

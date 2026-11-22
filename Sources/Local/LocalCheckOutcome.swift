@@ -152,6 +152,11 @@ public struct LocalCheckOutcome: Sendable {
         return lines.joined(separator: "\n")
     }
 
+    private func relative(_ url: URL) -> String {
+        let root = repositoryRoot.path + "/"
+        return url.path.hasPrefix(root) ? String(url.path.dropFirst(root.count)) : url.path
+    }
+
     private var missingVerdictLines: [String] {
         entries.compactMap { entry in
             switch entry.result {
@@ -204,11 +209,6 @@ public struct LocalCheckOutcome: Sendable {
             If you did not mean to change behavior, this is a regression: fix the code, don't declare it.
             """
         }
-    }
-
-    private func relative(_ url: URL) -> String {
-        let root = repositoryRoot.path + "/"
-        return url.path.hasPrefix(root) ? String(url.path.dropFirst(root.count)) : url.path
     }
 
     private static func shellQuoted(_ text: String) -> String {

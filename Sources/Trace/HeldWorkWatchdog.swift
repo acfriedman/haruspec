@@ -43,32 +43,6 @@ public enum HeldWorkWatchdog {
         return await body()
     }
 
-    /// Returns the message for a stalled region.
-    ///
-    /// - Parameters:
-    ///   - region: The region that stalled.
-    ///   - held: The held work, summarized.
-    ///   - seconds: How long it went without progress.
-    /// - Returns: The message: what stalled, on what, why, and what to do.
-    static func message(region: String, held: String, seconds: TimeInterval) -> String {
-        """
-        The capture's \(region) has waited \(Int(seconds.rounded())) seconds, with nothing recorded and \
-        no held work run, while the capture holds \(held).
-
-        The capture runs held work only when an operation returns (at settle points and the drain), \
-        inside a sync, and while a derived operation waits for a completion block. Code that waits for \
-        held work any other way waits forever. The usual shapes:
-            an operation awaiting a continuation that queued work resumes:
-                withCheckedContinuation { c in queue.async { c.resume() } }
-            a semaphore or group wait on work handed to a queue
-            a held task awaiting work queued after it
-
-        Each runs fine in production; Haruspec can't capture it yet. Check the callback API the wait \
-        wraps instead (a derived operation waits for a completion block by running held work), or move \
-        the wait out of the operation so the work lands at the next settle point.
-        """
-    }
-
     /// One watched region and the progress it has made, sampled only on the ticker's queue.
     private final class Watch: @unchecked Sendable {
         let region: String
@@ -112,6 +86,32 @@ public enum HeldWorkWatchdog {
         }
     }
 
+    /// Returns the message for a stalled region.
+    ///
+    /// - Parameters:
+    ///   - region: The region that stalled.
+    ///   - held: The held work, summarized.
+    ///   - seconds: How long it went without progress.
+    /// - Returns: The message: what stalled, on what, why, and what to do.
+    static func message(region: String, held: String, seconds: TimeInterval) -> String {
+        """
+        The capture's \(region) has waited \(Int(seconds.rounded())) seconds, with nothing recorded and \
+        no held work run, while the capture holds \(held).
+
+        The capture runs held work only when an operation returns (at settle points and the drain), \
+        inside a sync, and while a derived operation waits for a completion block. Code that waits for \
+        held work any other way waits forever. The usual shapes:
+            an operation awaiting a continuation that queued work resumes:
+                withCheckedContinuation { c in queue.async { c.resume() } }
+            a semaphore or group wait on work handed to a queue
+            a held task awaiting work queued after it
+
+        Each runs fine in production; Haruspec can't capture it yet. Check the callback API the wait \
+        wraps instead (a derived operation waits for a completion block by running held work), or move \
+        the wait out of the operation so the work lands at the next settle point.
+        """
+    }
+
     /// The one timer every watched region shares, so entering a region costs a locked insertion, not a
     /// timer. It stops itself on the first tick with nothing to watch, so back-to-back regions keep it.
     private final class Ticker: @unchecked Sendable {
@@ -134,11 +134,6 @@ public enum HeldWorkWatchdog {
             self.timer = timer
         }
 
-        func remove(_ watch: Watch) {
-            lock.lock(); defer { lock.unlock() }
-            watches[ObjectIdentifier(watch)] = nil
-        }
-
         /// Samples every watched region, or stops when there is none. Runs on `queue`.
         private func tick() {
             lock.lock()
@@ -152,6 +147,11 @@ public enum HeldWorkWatchdog {
             for watch in current {
                 watch.tick(at: now)
             }
+        }
+
+        func remove(_ watch: Watch) {
+            lock.lock(); defer { lock.unlock() }
+            watches[ObjectIdentifier(watch)] = nil
         }
     }
 }

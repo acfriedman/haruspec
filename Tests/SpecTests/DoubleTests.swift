@@ -90,35 +90,7 @@ private final class SilentGauge: Gauge {
     }
 }
 
-private func makeMeteredGauge(_ ctx: SeamContext) -> Gauge {
-    MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
-}
-
-private func makeSilentGauge(_ ctx: SeamContext) -> Gauge {
-    SilentGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
-}
-
 final class DoubleTests: XCTestCase {
-    private func gauge(sweepingThreshold: Bool = false) -> Spec<Gauge> {
-        var spec = Spec<Gauge>("double.gauge")
-            .operations {
-                Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
-                    gauge.add(value: Int(value))
-                }
-            }
-            // The custom return's factory: every field a seam read under the synthesized key, so the
-            // fee is recorded, sweepable at "Metering.tariff.cents", and identical on both sides.
-            .generates(Fee.self) { seams, key in
-                Fee(cents: Int(seams.int("\(key).cents", default: 3)))
-            }
-        if sweepingThreshold {
-            spec = spec.vary {
-                Seam("Metering.threshold", .int(0 ... 8))
-            }
-        }
-        return spec
-    }
-
     func testAGeneratedDoubleNeedsNoAuthoredImplementation() async {
         let verdict = await gauge().baselined(on: makeMeteredGauge).verify(candidate: makeMeteredGauge)
 
@@ -244,4 +216,32 @@ final class DoubleTests: XCTestCase {
 
         XCTAssertEqual(verdict.verdict, .diverged, "sink traffic gates: the drop is a missing Metering.record")
     }
+
+    private func gauge(sweepingThreshold: Bool = false) -> Spec<Gauge> {
+        var spec = Spec<Gauge>("double.gauge")
+            .operations {
+                Op("add", varying: .int(0 ... 10).named("value")) { gauge, value in
+                    gauge.add(value: Int(value))
+                }
+            }
+            // The custom return's factory: every field a seam read under the synthesized key, so the
+            // fee is recorded, sweepable at "Metering.tariff.cents", and identical on both sides.
+            .generates(Fee.self) { seams, key in
+                Fee(cents: Int(seams.int("\(key).cents", default: 3)))
+            }
+        if sweepingThreshold {
+            spec = spec.vary {
+                Seam("Metering.threshold", .int(0 ... 8))
+            }
+        }
+        return spec
+    }
+}
+
+private func makeMeteredGauge(_ ctx: SeamContext) -> Gauge {
+    MeteredGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
+}
+
+private func makeSilentGauge(_ ctx: SeamContext) -> Gauge {
+    SilentGauge(center: ctx.notifications, meter: ctx.double(DoubleMetering.self))
 }

@@ -10,22 +10,6 @@ import XCTest
 // blind spots, and a green stays green.
 
 final class HeldStandInAuditTests: XCTestCase {
-    /// The checkout the audit reads: this file is `<root>/Tests/SpecTests/HeldStandInAuditTests.swift`.
-    private var packageRoot: URL {
-        URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-    }
-
-    private func shipper(_ context: SeamContext) -> any Courier {
-        HeldCourier(
-            scheduler: context.scheduler(.main),
-            queue: context.operationQueue(.serial("shipping")),
-            center: context.notifications
-        )
-    }
-
     func testReachesThroughHeldStandInsAreNamedButDoNotGate() async {
         let spec = Spec<any Courier>("shipping.held").operations { Op("ship") { $0.ship("box") } }
         let verdict = await spec.baselined(on: shipper)
@@ -45,5 +29,21 @@ final class HeldStandInAuditTests: XCTestCase {
 
         XCTAssertEqual(stripped.verdict, .cannotVerify, stripped.report())
         XCTAssertEqual(stripped.qualification.blindSpots, ["Combine", "dispatch"])
+    }
+
+    private func shipper(_ context: SeamContext) -> any Courier {
+        HeldCourier(
+            scheduler: context.scheduler(.main),
+            queue: context.operationQueue(.serial("shipping")),
+            center: context.notifications
+        )
+    }
+
+    /// The checkout the audit reads: this file is `<root>/Tests/SpecTests/HeldStandInAuditTests.swift`.
+    private var packageRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 }

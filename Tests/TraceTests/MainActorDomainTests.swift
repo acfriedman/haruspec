@@ -12,10 +12,6 @@ final class MainActorDomainTests: XCTestCase {
     /// Stands in for a scheduling double.
     private final class Queue {}
 
-    private func events(_ recorder: TraceRecorder) -> [TraceEvent] {
-        recorder.trace().events
-    }
-
     /// A spawned task that hops to the main actor records `main` there and the spawner elsewhere: the
     /// recording frame is nonisolated, so only the thread says where the hop landed.
     func testATaskThatHopsToMainRecordsMainWhereItRuns() async {
@@ -68,6 +64,10 @@ final class MainActorDomainTests: XCTestCase {
         }
 
         XCTAssertEqual(events(recorder).first?.domain, .queue("CartQueue", serial: true))
+    }
+
+    private func events(_ recorder: TraceRecorder) -> [TraceEvent] {
+        recorder.trace().events
     }
 }
 

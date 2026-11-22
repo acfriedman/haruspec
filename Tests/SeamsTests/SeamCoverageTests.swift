@@ -49,34 +49,6 @@ final class SeamCoverageTests: XCTestCase {
 
     // MARK: - End to end: coverage prevents a false EQUIVALENT
 
-    /// "Production" logic reads a clock + a discount from the cassette and posts the total. With
-    /// `extraSeam`, the *changed* branch reaches a new boundary (a surcharge flag) the golden never
-    /// recorded — and whose value happens to be 0 in this environment, so the observable trace is
-    /// *identical*. The trace diff alone would call that EQUIVALENT (a false pass); coverage must catch
-    /// the unrecorded boundary and abstain.
-    private func runSession(cassette: Cassette, extraSeam: Bool) -> Trace {
-        let recorder = TraceRecorder(name: "session", clock: ManualClock())
-        let center = RecordingNotificationCenter()
-
-        TraceContext.$current.withValue(recorder) {
-            let base = cassette.int(seam: "clock", live: { 1000 }) // recorded seam
-            let discount = cassette.int(seam: "discount", live: { 100 }) // recorded seam
-            var total = Int(base - discount) // 900
-            if extraSeam {
-                // A new boundary the golden run never recorded. Live fallback here is 0, so behavior is
-                // observably identical — but the input was NOT held identical, so it's uncertifiable.
-                total += Int(cassette.int(seam: "surcharge", live: { 0 }))
-            }
-            center.post(
-                name: Notification.Name("CheckoutCompleted"),
-                object: nil,
-                userInfo: ["total": total]
-            )
-            Haruspec.marker("checkout.completed")
-        }
-        return recorder.trace()
-    }
-
     func testCleanReplayIsATrustworthyEquivalent() {
         let recording = Cassette()
         let golden = runSession(cassette: recording, extraSeam: false)
@@ -113,5 +85,33 @@ final class SeamCoverageTests: XCTestCase {
             verified.report().contains("⚠️ CANNOT-VERIFY"),
             "the report abstains loudly:\n\(verified.report())"
         )
+    }
+
+    /// "Production" logic reads a clock + a discount from the cassette and posts the total. With
+    /// `extraSeam`, the *changed* branch reaches a new boundary (a surcharge flag) the golden never
+    /// recorded — and whose value happens to be 0 in this environment, so the observable trace is
+    /// *identical*. The trace diff alone would call that EQUIVALENT (a false pass); coverage must catch
+    /// the unrecorded boundary and abstain.
+    private func runSession(cassette: Cassette, extraSeam: Bool) -> Trace {
+        let recorder = TraceRecorder(name: "session", clock: ManualClock())
+        let center = RecordingNotificationCenter()
+
+        TraceContext.$current.withValue(recorder) {
+            let base = cassette.int(seam: "clock", live: { 1000 }) // recorded seam
+            let discount = cassette.int(seam: "discount", live: { 100 }) // recorded seam
+            var total = Int(base - discount) // 900
+            if extraSeam {
+                // A new boundary the golden run never recorded. Live fallback here is 0, so behavior is
+                // observably identical — but the input was NOT held identical, so it's uncertifiable.
+                total += Int(cassette.int(seam: "surcharge", live: { 0 }))
+            }
+            center.post(
+                name: Notification.Name("CheckoutCompleted"),
+                object: nil,
+                userInfo: ["total": total]
+            )
+            Haruspec.marker("checkout.completed")
+        }
+        return recorder.trace()
     }
 }

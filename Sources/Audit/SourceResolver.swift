@@ -75,6 +75,13 @@ private struct SourceIndex {
         }
     }
 
+    private static func path(of url: URL, under root: URL) -> String {
+        let full = url.standardizedFileURL.path
+        let base = root.standardizedFileURL.path
+        guard full.hasPrefix(base) else { return full }
+        return String(full.dropFirst(base.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
     private static let sourceExtensions: Set<String> = ["swift", "m", "mm"]
 
     /// The files declaring one origin, or none — which the caller must treat as a blind spot, not a
@@ -85,15 +92,6 @@ private struct SourceIndex {
         }
         guard let symbol = origin.symbol else { return [] }
         return pathsBySymbol[Self.declarationName(symbol)].map { $0.sorted() } ?? []
-    }
-
-    /// Returns the name a type is declared under, given the name it runs under: a generic type runs as
-    /// `Feed<HeldScheduler>` and is declared as `Feed<S: Scheduler>`, so the arguments are dropped.
-    ///
-    /// - Parameter symbol: The runtime type name an origin recorded.
-    /// - Returns: `symbol` up to its first `<`.
-    static func declarationName(_ symbol: String) -> String {
-        String(symbol.prefix { $0 != "<" })
     }
 
     /// A `#fileID` is `Module/File.swift`, and the module is not necessarily a directory — so match on
@@ -109,11 +107,13 @@ private struct SourceIndex {
         return (narrowed.isEmpty ? candidates : narrowed).sorted()
     }
 
-    private static func path(of url: URL, under root: URL) -> String {
-        let full = url.standardizedFileURL.path
-        let base = root.standardizedFileURL.path
-        guard full.hasPrefix(base) else { return full }
-        return String(full.dropFirst(base.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    /// Returns the name a type is declared under, given the name it runs under: a generic type runs as
+    /// `Feed<HeldScheduler>` and is declared as `Feed<S: Scheduler>`, so the arguments are dropped.
+    ///
+    /// - Parameter symbol: The runtime type name an origin recorded.
+    /// - Returns: `symbol` up to its first `<`.
+    static func declarationName(_ symbol: String) -> String {
+        String(symbol.prefix { $0 != "<" })
     }
 
     // MARK: - Declaration scanning
@@ -154,21 +154,6 @@ private struct SourceIndex {
         return nil
     }
 
-    private static let declarationKeywords: Set<String> = ["class", "actor", "struct", "enum"]
-    private static let modifiers: Set<String> = [
-        "public",
-        "internal",
-        "private",
-        "fileprivate",
-        "open",
-        "package",
-        "final",
-        "indirect",
-        "nonisolated",
-        "dynamic",
-        "static"
-    ]
-
     /// The next whitespace-delimited token, advancing `rest` past it. Attributes with arguments
     /// (`@objc(Cart)`) come back whole, which is all the modifier check needs.
     private static func nextToken(in rest: inout Substring) -> String? {
@@ -186,4 +171,19 @@ private struct SourceIndex {
         let name = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" }
         return name.isEmpty ? nil : String(name)
     }
+
+    private static let declarationKeywords: Set<String> = ["class", "actor", "struct", "enum"]
+    private static let modifiers: Set<String> = [
+        "public",
+        "internal",
+        "private",
+        "fileprivate",
+        "open",
+        "package",
+        "final",
+        "indirect",
+        "nonisolated",
+        "dynamic",
+        "static"
+    ]
 }

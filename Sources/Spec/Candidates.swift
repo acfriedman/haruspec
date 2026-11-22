@@ -93,6 +93,16 @@ public extension BaselinedSpec {
         return await run(candidate, reportsIn: directory)
     }
 
+    private func run(_ candidate: Candidate<S>, reportsIn directory: URL?) async -> CandidateVerdict {
+        await verify(
+            candidate.name,
+            expecting: candidate.expected,
+            declaring: candidate.declared,
+            reportsIn: directory,
+            candidate.make
+        )
+    }
+
     /// Runs one declared port, prints its report, and throws unless it earned the verdict its
     /// `Candidate` declared, the declared-list twin of checking a build inline.
     ///
@@ -105,15 +115,5 @@ public extension BaselinedSpec {
             throw SpecCatalog.CheckFailure(description: "\(candidate) is no longer a declared candidate")
         }
         try verdict.check(in: name)
-    }
-
-    private func run(_ candidate: Candidate<S>, reportsIn directory: URL?) async -> CandidateVerdict {
-        await verify(
-            candidate.name,
-            expecting: candidate.expected,
-            declaring: candidate.declared,
-            reportsIn: directory,
-            candidate.make
-        )
     }
 }

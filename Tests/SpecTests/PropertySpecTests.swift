@@ -91,18 +91,6 @@ final class DerivedPropertyTests: XCTestCase {
 }
 
 final class PropertySpecTests: XCTestCase {
-    private func drawerSpec() -> BaselinedSpec<any Drawer> {
-        Spec<any Drawer>("till")
-            .operations {
-                Op("ring") { (till: any Drawer) in till.ring(amount: 7) }
-            }
-            .observes(
-                Observed("Drawer.count") { $0.count },
-                Observed("Drawer.total") { $0.total }
-            )
-            .baselined { _ in LegacyDrawer() }
-    }
-
     /// A port with no stored counterparts: the snapshots alone carry the state contract to green.
     func testAComputedPortIsEquivalentOnSnapshotsAlone() async {
         let verdict = await drawerSpec().verify { _ in ComputedDrawer() }
@@ -126,5 +114,17 @@ final class PropertySpecTests: XCTestCase {
         let verdict = await drawerSpec().verify { _ in ComputedDrawer() }
 
         XCTAssertEqual(verdict.qualification.observedProperties, "Drawer.count, Drawer.total — snapshots gate")
+    }
+
+    private func drawerSpec() -> BaselinedSpec<any Drawer> {
+        Spec<any Drawer>("till")
+            .operations {
+                Op("ring") { (till: any Drawer) in till.ring(amount: 7) }
+            }
+            .observes(
+                Observed("Drawer.count") { $0.count },
+                Observed("Drawer.total") { $0.total }
+            )
+            .baselined { _ in LegacyDrawer() }
     }
 }

@@ -227,20 +227,6 @@ struct ExplorationPlan<S> {
         }
     }
 
-    /// Ordering `index` under each settle schedule it runs, the all-held one first.
-    ///
-    /// - Parameter index: The ordering's place in ``orderings``.
-    /// - Returns: The orderings a capture drives, settle steps interleaved.
-    func settledOrders(forOrdering index: Int) -> [[Op<S>]] {
-        let order = orderings[index]
-        return SettleSchedules.sample(
-            gaps: Swift.max(0, order.count - 1),
-            max: settleSchedulesPerOrdering,
-            seed: seed &+ UInt64(index)
-        )
-        .map { interleaving($0, into: order) }
-    }
-
     /// The seam cassettes to drive ordering `index` with — an *independent* sample per ordering, which
     /// is what makes the sweep two-dimensional. Ordering 0 keeps the base seed, so a single-ordering
     /// spec generates exactly what it always did.
@@ -257,6 +243,20 @@ struct ExplorationPlan<S> {
             varying: domains,
             seed: seed &+ UInt64(index)
         )
+    }
+
+    /// Ordering `index` under each settle schedule it runs, the all-held one first.
+    ///
+    /// - Parameter index: The ordering's place in ``orderings``.
+    /// - Returns: The orderings a capture drives, settle steps interleaved.
+    func settledOrders(forOrdering index: Int) -> [[Op<S>]] {
+        let order = orderings[index]
+        return SettleSchedules.sample(
+            gaps: Swift.max(0, order.count - 1),
+            max: settleSchedulesPerOrdering,
+            seed: seed &+ UInt64(index)
+        )
+        .map { interleaving($0, into: order) }
     }
 }
 
@@ -401,16 +401,6 @@ enum ExplorationBudget {
         return Split(orderings: orderingCount, schedules: perOrdering, variants: variantCount)
     }
 
-    /// What one run's budget buys on each axis.
-    struct Split: Equatable {
-        /// Orderings explored.
-        let orderings: Int
-        /// Settle schedules each ordering runs under.
-        let schedules: Int
-        /// Seam variants each settled ordering runs against.
-        let variants: Int
-    }
-
     /// Shrinks both axes by the same factor rather than draining one to fill the other: the two find
     /// different bugs (ordering reaches code a second seam value cannot; a seam value is what caught
     /// the dogfood's one-cent divergence), so a budget that zeroes either axis is not a smaller sweep,
@@ -435,6 +425,16 @@ enum ExplorationBudget {
         let scale = (Double(budget) / Double(full)).squareRoot()
         let orderings = Swift.min(cap, Swift.max(1, Int((Double(cap) * scale).rounded())))
         return (orderings, Swift.max(1, budget / orderings))
+    }
+
+    /// What one run's budget buys on each axis.
+    struct Split: Equatable {
+        /// Orderings explored.
+        let orderings: Int
+        /// Settle schedules each ordering runs under.
+        let schedules: Int
+        /// Seam variants each settled ordering runs against.
+        let variants: Int
     }
 }
 
@@ -506,23 +506,6 @@ private func extensions<S>(of shape: OrderingShape, ops: [Op<S>], max: Int, seed
     return sample
 }
 
-/// The ops as one exploration stratum enforces them. `strict` folds the soft `.after` preconditions
-/// into the hard gates, which is how the in-order stratum is built; the out-of-order stratum walks the
-/// declared gates alone and filters for violations afterwards.
-func gated<S>(_ ops: [Op<S>], strict: Bool) -> [Op<S>] {
-    guard strict else {
-        return ops
-    }
-    return ops.map { operation in
-        var copy = operation; copy.gates += operation.afters; return copy
-    }
-}
-
-/// Orderings are identified by their label sequence: two occurrences of one label are interchangeable.
-func orderingKey(_ order: [Op<some Any>]) -> String {
-    order.map(\.label).joined(separator: ">")
-}
-
 /// Depth-first enumeration, stopping at `limit`. Exhaustive when it returns fewer than `limit`.
 private func enumerateExtensions<S>(_ multiset: [Op<S>], limit: Int) -> [[Op<S>]] {
     var result: [[Op<S>]] = []
@@ -549,6 +532,18 @@ private func enumerateExtensions<S>(_ multiset: [Op<S>], limit: Int) -> [[Op<S>]
     }
     recurse([], multiset)
     return result
+}
+
+/// The ops as one exploration stratum enforces them. `strict` folds the soft `.after` preconditions
+/// into the hard gates, which is how the in-order stratum is built; the out-of-order stratum walks the
+/// declared gates alone and filters for violations afterwards.
+func gated<S>(_ ops: [Op<S>], strict: Bool) -> [Op<S>] {
+    guard strict else {
+        return ops
+    }
+    return ops.map { operation in
+        var copy = operation; copy.gates += operation.afters; return copy
+    }
 }
 
 /// `count` distinct extensions built by random walks, skipping anything already in `excluding` or
@@ -612,6 +607,11 @@ private func randomExtension<S>(
     }
     counter.reset()
     return placed
+}
+
+/// Orderings are identified by their label sequence: two occurrences of one label are interchangeable.
+func orderingKey(_ order: [Op<some Any>]) -> String {
+    order.map(\.label).joined(separator: ">")
 }
 
 /// How many valid orderings the declared partial order admits, counted without materializing any of

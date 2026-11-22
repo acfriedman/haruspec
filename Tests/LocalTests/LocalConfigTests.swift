@@ -6,13 +6,6 @@ import XCTest
 final class LocalConfigTests: XCTestCase {
     private let required = #""project":"A.xcodeproj","scheme":"A","destination":"d","testTarget":"T""#
 
-    private func load(_ json: String) throws -> LocalConfig {
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("config-\(UUID().uuidString).json")
-        defer { try? FileManager.default.removeItem(at: url) }
-        try Data(json.utf8).write(to: url)
-        return try LocalConfig.load(from: url)
-    }
-
     func testTheExampleLoadsWithDefaults() throws {
         let config = try load(LocalConfig.example)
         XCTAssertEqual(config.resolvedBase, "main")
@@ -37,6 +30,13 @@ final class LocalConfigTests: XCTestCase {
         XCTAssertThrowsError(try load("{\(required),\"specs\":[]}"))
     }
 
+    private func load(_ json: String) throws -> LocalConfig {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("config-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try Data(json.utf8).write(to: url)
+        return try LocalConfig.load(from: url)
+    }
+
     func testAMissingFileTeachesTheFileToWrite() {
         let url = URL(fileURLWithPath: "/nonexistent/.haruspec/config.json")
         XCTAssertThrowsError(try LocalConfig.load(from: url)) { error in
@@ -53,20 +53,6 @@ final class XcodeTestRunTests: XCTestCase {
         destination: "platform=iOS Simulator,name=iPhone 17",
         testTarget: "AppTests"
     )
-
-    private func run(_ mode: ContinuousMode, intent: URL? = nil) -> XcodeTestRun {
-        var run = XcodeTestRun(
-            checkout: URL(fileURLWithPath: "/repo"),
-            config: config,
-            action: .test(mode),
-            derivedData: URL(fileURLWithPath: "/cache/derived/head")
-        )
-        run.plan = URL(fileURLWithPath: "/cache/cart.plan.json.gz")
-        run.results = mode == .record ? nil : URL(fileURLWithPath: "/run/results/cart")
-        run.intent = intent
-        run.resultBundle = URL(fileURLWithPath: "/run/bundles/cart.xcresult")
-        return run
-    }
 
     func testATestRunReusesTheBuildAndRunsOnlyItsSuite() throws {
         var test = run(.replay)
@@ -114,6 +100,20 @@ final class XcodeTestRunTests: XCTestCase {
         XCTAssertEqual(environment["TEST_RUNNER_HARUSPEC_INTENT_PATH"], "/run/intent/cart.intent.json")
         XCTAssertEqual(environment["TEST_RUNNER_HARUSPEC_RESULTS_DIR"], "/run/results/cart")
         XCTAssertEqual(environment["TEST_RUNNER_HARUSPEC_SOURCE_ROOT"], "/repo")
+    }
+
+    private func run(_ mode: ContinuousMode, intent: URL? = nil) -> XcodeTestRun {
+        var run = XcodeTestRun(
+            checkout: URL(fileURLWithPath: "/repo"),
+            config: config,
+            action: .test(mode),
+            derivedData: URL(fileURLWithPath: "/cache/derived/head")
+        )
+        run.plan = URL(fileURLWithPath: "/cache/cart.plan.json.gz")
+        run.results = mode == .record ? nil : URL(fileURLWithPath: "/run/results/cart")
+        run.intent = intent
+        run.resultBundle = URL(fileURLWithPath: "/run/bundles/cart.xcresult")
+        return run
     }
 
     func testPathsResolveWithoutTouchingTheFileSystem() {

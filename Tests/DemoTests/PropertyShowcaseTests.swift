@@ -12,55 +12,6 @@ import XCTest
 /// whose quantity yields a clean subtotal calls it EQUIVALENT; property gen over the quantity domain
 /// finds the value that bites. Prints the reports an LLM / CLI caller would surface.
 final class PropertyShowcaseTests: XCTestCase {
-    /// Drive a real `CartService`: unit price 999¢, quantity from the `coffeeQty` seam, promo applied.
-    /// (No `removeItem`, so the isolated signal is the rounding off-by-one — not the dropped notification
-    /// the fixed-spec demo already catches.)
-    private func capture(
-        name: String,
-        cassette: Cassette,
-        _ make: (NotificationCenter) -> CartService
-    ) -> Trace {
-        let recorder = TraceRecorder(name: name, clock: ManualClock())
-        let center = RecordingNotificationCenter()
-        let service = TracedCartService(make(center))
-        TraceContext.$current.withValue(recorder) {
-            let qty = Int(cassette.int(seam: "coffeeQty", live: { 10 })) // input from a seam boundary
-            service.addItem(sku: "COFFEE", unitPriceCents: 999, quantity: qty)
-            _ = service.applyPromo("SAVE10")
-            _ = service.checkout()
-        }
-        return recorder.trace()
-    }
-
-    /// The receipt's order ID and timestamp are held still by the fixed issuer; the recompute interval
-    /// gets a generous budget so the isolated signal is the value-dependent discount, not timing.
-    private var comparison: Comparison {
-        Comparison(
-            numericEpsilon: 0,
-            timingBudgets: ["CartService.checkout": 500],
-            unorderedGroups: [["CartDidChange", "AnalyticsDidTrack"]],
-            ignoredKinds: []
-        )
-    }
-
-    /// A differential property: baseline = V1, candidate = `makeCandidate`. Golden records coffeeQty = 10
-    /// → subtotal 9990 (a multiple of 10), where the truncation bug is benign.
-    private func property(
-        candidateName: String,
-        _ makeCandidate: @escaping (NotificationCenter) -> CartService
-    ) -> DifferentialProperty {
-        let recording = Cassette()
-        _ = capture(name: "cartservice.v1", cassette: recording) { CartServiceV1(center: $0, issuer: .fixed()) }
-        let golden = recording.snapshot()
-
-        return DifferentialProperty(golden: golden, comparison: comparison) { cassette, branch in
-            branch == .candidate
-                ? self.capture(name: candidateName, cassette: cassette, makeCandidate)
-                : self
-                .capture(name: "cartservice.v1", cassette: cassette) { CartServiceV1(center: $0, issuer: .fixed()) }
-        }
-    }
-
     func testPropertyGenerationOnRealCartServices() throws {
         let buggy = property(candidateName: "cartservice.buggy") { CartServiceBuggy(center: $0, issuer: .fixed()) }
 
@@ -93,5 +44,54 @@ final class PropertyShowcaseTests: XCTestCase {
         XCTAssertEqual(held.coverage.domainExercised, ["coffeeQty"])
 
         print("=== SHOWCASE END ===")
+    }
+
+    /// A differential property: baseline = V1, candidate = `makeCandidate`. Golden records coffeeQty = 10
+    /// → subtotal 9990 (a multiple of 10), where the truncation bug is benign.
+    private func property(
+        candidateName: String,
+        _ makeCandidate: @escaping (NotificationCenter) -> CartService
+    ) -> DifferentialProperty {
+        let recording = Cassette()
+        _ = capture(name: "cartservice.v1", cassette: recording) { CartServiceV1(center: $0, issuer: .fixed()) }
+        let golden = recording.snapshot()
+
+        return DifferentialProperty(golden: golden, comparison: comparison) { cassette, branch in
+            branch == .candidate
+                ? self.capture(name: candidateName, cassette: cassette, makeCandidate)
+                : self
+                .capture(name: "cartservice.v1", cassette: cassette) { CartServiceV1(center: $0, issuer: .fixed()) }
+        }
+    }
+
+    /// Drive a real `CartService`: unit price 999¢, quantity from the `coffeeQty` seam, promo applied.
+    /// (No `removeItem`, so the isolated signal is the rounding off-by-one — not the dropped notification
+    /// the fixed-spec demo already catches.)
+    private func capture(
+        name: String,
+        cassette: Cassette,
+        _ make: (NotificationCenter) -> CartService
+    ) -> Trace {
+        let recorder = TraceRecorder(name: name, clock: ManualClock())
+        let center = RecordingNotificationCenter()
+        let service = TracedCartService(make(center))
+        TraceContext.$current.withValue(recorder) {
+            let qty = Int(cassette.int(seam: "coffeeQty", live: { 10 })) // input from a seam boundary
+            service.addItem(sku: "COFFEE", unitPriceCents: 999, quantity: qty)
+            _ = service.applyPromo("SAVE10")
+            _ = service.checkout()
+        }
+        return recorder.trace()
+    }
+
+    /// The receipt's order ID and timestamp are held still by the fixed issuer; the recompute interval
+    /// gets a generous budget so the isolated signal is the value-dependent discount, not timing.
+    private var comparison: Comparison {
+        Comparison(
+            numericEpsilon: 0,
+            timingBudgets: ["CartService.checkout": 500],
+            unorderedGroups: [["CartDidChange", "AnalyticsDidTrack"]],
+            ignoredKinds: []
+        )
     }
 }

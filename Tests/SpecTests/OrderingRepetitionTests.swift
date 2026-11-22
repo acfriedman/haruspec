@@ -16,25 +16,6 @@ private final class Ledger {
 }
 
 final class OrderingRepetitionTests: XCTestCase {
-    private func spec(repeating: Int = 2, onceOnPush: Bool = false) -> BaselinedSpec<Ledger> {
-        var push = Op<Ledger>("push") { $0.push("push") }
-        if onceOnPush {
-            push = push.once()
-        }
-        return Spec<Ledger>("ledger.repetition")
-            .operations {
-                push
-                Op("pull") { $0.push("pull") }
-                Op("close") { $0.push("close") }.last()
-            }
-            .vary { Ordering(max: 200, repeating: repeating) }
-            .baselined { _ in Ledger() }
-    }
-
-    private func orderings(_ spec: BaselinedSpec<Ledger>) async -> [[String]] {
-        await spec.record().probes.map(\.ordering)
-    }
-
     func testARepeatableOpIsPlacedTwiceByDefault() async {
         let counts = await orderings(spec()).map { order in order.filter { $0 == "push" }.count }
 
@@ -77,6 +58,25 @@ final class OrderingRepetitionTests: XCTestCase {
             explored.count,
             "interchangeable occurrences of one label must not enumerate the same ordering twice"
         )
+    }
+
+    private func orderings(_ spec: BaselinedSpec<Ledger>) async -> [[String]] {
+        await spec.record().probes.map(\.ordering)
+    }
+
+    private func spec(repeating: Int = 2, onceOnPush: Bool = false) -> BaselinedSpec<Ledger> {
+        var push = Op<Ledger>("push") { $0.push("push") }
+        if onceOnPush {
+            push = push.once()
+        }
+        return Spec<Ledger>("ledger.repetition")
+            .operations {
+                push
+                Op("pull") { $0.push("pull") }
+                Op("close") { $0.push("close") }.last()
+            }
+            .vary { Ordering(max: 200, repeating: repeating) }
+            .baselined { _ in Ledger() }
     }
 
     /// The golden cassette is recorded over the maximal sequence, so a repeated op's second seam read

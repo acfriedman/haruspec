@@ -156,11 +156,6 @@ public extension SeamDomain {
         }
     }
 
-    private func orderedUnique(_ values: [CanonicalValue]) -> [CanonicalValue] {
-        var seen = Set<String>()
-        return values.filter { seen.insert($0.canonicalString).inserted }
-    }
-
     /// The values worth trying *together* — the messy middle of a domain, in priority order: what a
     /// typical reading looks like, as opposed to what its edges look like. The first one is what the
     /// golden template reads, so the template sits inside the declared surface rather than at the
@@ -212,6 +207,11 @@ public extension SeamDomain {
             }
             return orderedUnique(middles.filter(range.contains).map(CanonicalValue.double))
         }
+    }
+
+    private func orderedUnique(_ values: [CanonicalValue]) -> [CanonicalValue] {
+        var seen = Set<String>()
+        return values.filter { seen.insert($0.canonicalString).inserted }
     }
 
     /// The two ends of the domain — what "every seam at its low end" and "every seam at its high

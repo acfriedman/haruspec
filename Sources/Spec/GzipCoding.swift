@@ -32,14 +32,6 @@ enum Gzip {
         }
     }
 
-    /// Whether `data` opens with the two-byte gzip signature.
-    ///
-    /// - Parameter data: The bytes to inspect; fewer than two is never gzip.
-    /// - Returns: `true` for the signature `1F 8B`, whatever follows it.
-    static func isGzip(_ data: Data) -> Bool {
-        data.prefix(2).elementsEqual([0x1F, 0x8B])
-    }
-
     /// Returns `data` wrapped in one deterministic gzip member: a fixed header (MTIME 0, no name, OS
     /// unknown), the raw DEFLATE body, and the CRC32 + ISIZE trailer. Equal inputs give equal archives.
     ///
@@ -102,6 +94,14 @@ enum Gzip {
             throw GzipError.checksumMismatch
         }
         return payload
+    }
+
+    /// Whether `data` opens with the two-byte gzip signature.
+    ///
+    /// - Parameter data: The bytes to inspect; fewer than two is never gzip.
+    /// - Returns: `true` for the signature `1F 8B`, whatever follows it.
+    static func isGzip(_ data: Data) -> Bool {
+        data.prefix(2).elementsEqual([0x1F, 0x8B])
     }
 
     // MARK: - Raw DEFLATE via Compression

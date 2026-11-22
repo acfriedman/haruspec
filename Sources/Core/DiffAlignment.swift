@@ -30,10 +30,6 @@ extension BehavioralDiff {
         let matchedCandidate: Set<Int>
     }
 
-    static func signature(_ event: TraceEvent) -> Signature {
-        Signature(kind: event.kind, label: event.label, domain: event.domain)
-    }
-
     /// Everything the LCS could not align: an event that moved, one that changed isolation domain, and
     /// the genuine absences left over. Split out of `compare` so that pipeline stays readable — the
     /// classification rules here are the fiddly part and deserve their own frame.
@@ -175,6 +171,10 @@ extension BehavioralDiff {
             }
         }
         return pairs
+    }
+
+    static func signature(_ event: TraceEvent) -> Signature {
+        Signature(kind: event.kind, label: event.label, domain: event.domain)
     }
 
     /// Returns each event's content as alignment compares it: its payload, and for a return the

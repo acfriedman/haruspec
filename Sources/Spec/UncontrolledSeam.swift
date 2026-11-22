@@ -46,21 +46,6 @@ public struct UncontrolledSeam: Codable, Sendable, Equatable {
         var field: String
     }
 
-    /// Returns the seam a divergence names, with its position.
-    ///
-    /// - Parameter divergence: One divergence of any kind.
-    /// - Returns: The position and seam for a `valueMismatch` that names its field; `nil` otherwise.
-    private static func seam(of divergence: Divergence) -> (Position, UncontrolledSeam)? {
-        guard divergence.kind == .valueMismatch, let field = divergence.field else {
-            return nil
-        }
-        let value = divergence.candidateValue ?? divergence.baselineValue ?? .null
-        return (
-            Position(label: divergence.label, field: field),
-            UncontrolledSeam(label: divergence.label, field: field, shape: value.shape)
-        )
-    }
-
     /// Returns the fields a set of divergences shows varying — every `valueMismatch` with a field,
     /// once per label and field, in reported order.
     ///
@@ -98,5 +83,20 @@ public struct UncontrolledSeam: Codable, Sendable, Equatable {
             let byPass = readings[position] ?? [:]
             return passes.indices.contains { byPass[$0] != byPass[0] } ? seam : nil
         }
+    }
+
+    /// Returns the seam a divergence names, with its position.
+    ///
+    /// - Parameter divergence: One divergence of any kind.
+    /// - Returns: The position and seam for a `valueMismatch` that names its field; `nil` otherwise.
+    private static func seam(of divergence: Divergence) -> (Position, UncontrolledSeam)? {
+        guard divergence.kind == .valueMismatch, let field = divergence.field else {
+            return nil
+        }
+        let value = divergence.candidateValue ?? divergence.baselineValue ?? .null
+        return (
+            Position(label: divergence.label, field: field),
+            UncontrolledSeam(label: divergence.label, field: field, shape: value.shape)
+        )
     }
 }

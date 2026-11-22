@@ -4,59 +4,11 @@ import HaruspecSeams
 import HaruspecSpec
 import XCTest
 
-// Declaring candidates alongside the ops: that each is verified against the same baseline, that the
-// expectation declared with a candidate is what `metExpectation` answers (so a deliberate
-// counterexample passes by diverging), and that a name that no longer exists fails the lookup rather
-// than silently verifying nothing.
-
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
-    RefactorCart(center: ctx.notifications)
-}
-
 private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
     RoundBugCart(center: ctx.notifications)
 }
 
-/// The wiring an adopting app writes once so each candidate is a one-liner: an unapplied initializer
-/// reference, with the shared collaborators bound here rather than repeated per port.
-private func port(_ make: @escaping (NotificationCenter) -> some PromoCart) -> (SeamContext) -> PromoCart {
-    { context in make(context.notifications) }
-}
-
 final class CandidatesTests: XCTestCase {
-    private func reportsDirectory() -> URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("candidates-\(UUID().uuidString)", isDirectory: true)
-    }
-
-    private func cart() -> BaselinedSpec<PromoCart> {
-        Spec<PromoCart>("promo-cart.candidates")
-            .operations {
-                Op("addCoffee") { cart, seams in
-                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
-                }
-                Op("promo") { $0.applyPromo() }
-                Op("checkout") { _ = $0.checkout() }.last()
-            }
-            .vary {
-                Seam("coffeeQty", .int(1 ... 20))
-                Ordering(max: 4)
-            }
-            .baselined(on: makeGood)
-            .candidates {
-                // Both spellings an adopting app will reach for: a factory reference, and the
-                // trailing-closure form that wires collaborators inline.
-                Candidate("RefactorCart", makeRefactor)
-                Candidate("RoundBugCart", expecting: .diverged) { context in
-                    RoundBugCart(center: context.notifications)
-                }
-            }
-    }
-
     func testCandidateNamesAreDeclarationOrderAndCarryNoVerdict() {
         XCTAssertEqual(cart().candidateNames, ["RefactorCart", "RoundBugCart"])
     }
@@ -121,4 +73,52 @@ final class CandidatesTests: XCTestCase {
         XCTAssertEqual(verdicts.map(\.name), ["RefactorCart", "RoundBugCart"])
         XCTAssertTrue(verdicts.allSatisfy(\.metExpectation), verdicts.map { $0.report() }.joined())
     }
+
+    private func cart() -> BaselinedSpec<PromoCart> {
+        Spec<PromoCart>("promo-cart.candidates")
+            .operations {
+                Op("addCoffee") { cart, seams in
+                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
+                }
+                Op("promo") { $0.applyPromo() }
+                Op("checkout") { _ = $0.checkout() }.last()
+            }
+            .vary {
+                Seam("coffeeQty", .int(1 ... 20))
+                Ordering(max: 4)
+            }
+            .baselined(on: makeGood)
+            .candidates {
+                // Both spellings an adopting app will reach for: a factory reference, and the
+                // trailing-closure form that wires collaborators inline.
+                Candidate("RefactorCart", makeRefactor)
+                Candidate("RoundBugCart", expecting: .diverged) { context in
+                    RoundBugCart(center: context.notifications)
+                }
+            }
+    }
+
+    private func reportsDirectory() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("candidates-\(UUID().uuidString)", isDirectory: true)
+    }
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
+    RefactorCart(center: ctx.notifications)
+}
+
+/// The wiring an adopting app writes once so each candidate is a one-liner: an unapplied initializer
+/// reference, with the shared collaborators bound here rather than repeated per port.
+private func port(_ make: @escaping (NotificationCenter) -> some PromoCart) -> (SeamContext) -> PromoCart {
+    { context in make(context.notifications) }
+}
+
+// Declaring candidates alongside the ops: that each is verified against the same baseline, that the
+// expectation declared with a candidate is what `metExpectation` answers (so a deliberate
+// counterexample passes by diverging), and that a name that no longer exists fails the lookup rather
+// than silently verifying nothing.
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
 }

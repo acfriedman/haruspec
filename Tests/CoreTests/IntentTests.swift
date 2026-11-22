@@ -5,38 +5,6 @@ import XCTest
 /// as `.intended` (non-gating) so an extension-mode verdict gates only on the residual `.collateral`
 /// ones. These tests pin the classification logic against hand-built divergences — no capture needed.
 final class IntentTests: XCTestCase {
-    private func diff(_ divergences: [Divergence]) -> TraceDiff {
-        TraceDiff(
-            verdict: divergences.contains(where: \.isGating) ? .diverged : .equivalent,
-            baselineName: "b",
-            candidateName: "c",
-            divergences: divergences
-        )
-    }
-
-    private func d(_ kind: Divergence.Kind, _ label: String) -> Divergence {
-        Divergence(kind: kind, label: label, baselineSeq: 0, candidateSeq: 0, detail: "")
-    }
-
-    /// A value mismatch as the diff builds one: the field and both values carried structurally.
-    private func changed(
-        _ label: String,
-        _ field: String,
-        from baseline: CanonicalValue,
-        to candidate: CanonicalValue
-    ) -> Divergence {
-        Divergence(
-            kind: .valueMismatch,
-            label: label,
-            baselineSeq: 0,
-            candidateSeq: 0,
-            detail: "\(field): baseline=\(baseline.canonicalString) candidate=\(candidate.canonicalString)",
-            field: field,
-            baselineValue: baseline,
-            candidateValue: candidate
-        )
-    }
-
     func testEmptyIntentIsParityMode() {
         let classified = diff([d(.unexpectedEvent, "LoyaltyPointsEarned")]).classified(against: .none)
         XCTAssertFalse(classified.isEquivalent)
@@ -83,6 +51,25 @@ final class IntentTests: XCTestCase {
         XCTAssertTrue(classified.isEquivalent)
     }
 
+    /// A value mismatch as the diff builds one: the field and both values carried structurally.
+    private func changed(
+        _ label: String,
+        _ field: String,
+        from baseline: CanonicalValue,
+        to candidate: CanonicalValue
+    ) -> Divergence {
+        Divergence(
+            kind: .valueMismatch,
+            label: label,
+            baselineSeq: 0,
+            candidateSeq: 0,
+            detail: "\(field): baseline=\(baseline.canonicalString) candidate=\(candidate.canonicalString)",
+            field: field,
+            baselineValue: baseline,
+            candidateValue: candidate
+        )
+    }
+
     func testReorderAndTimingAreNotYetDeclarable() {
         let classified = diff([
             d(.reordered, "CartDidChange"),
@@ -92,6 +79,19 @@ final class IntentTests: XCTestCase {
             Changes("CartService.checkout")
         })
         XCTAssertEqual(classified.collateralCount, 2, "reorder/timing intent is not expressible yet")
+    }
+
+    private func diff(_ divergences: [Divergence]) -> TraceDiff {
+        TraceDiff(
+            verdict: divergences.contains(where: \.isGating) ? .diverged : .equivalent,
+            baselineName: "b",
+            candidateName: "c",
+            divergences: divergences
+        )
+    }
+
+    private func d(_ kind: Divergence.Kind, _ label: String) -> Divergence {
+        Divergence(kind: kind, label: label, baselineSeq: 0, candidateSeq: 0, detail: "")
     }
 
     func testIntentSpecDecodesPartialJSON() throws {

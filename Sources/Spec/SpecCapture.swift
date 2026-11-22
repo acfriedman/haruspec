@@ -14,17 +14,6 @@ extension Spec {
         await captured(make: make, order: order, cassette: cassette).trace
     }
 
-    /// One capture's trace, and whether a settle point would have had anything to land.
-    struct Captured {
-        let trace: Trace
-        /// Whether held work was waiting when an operation returned and another was still to run.
-        ///
-        /// That is the only place a settle step can change anything. A subject whose seamed work
-        /// all lands inside its own operations (a `sync`, a completion it waits for) gives settle
-        /// points nothing to explore.
-        let heldWorkAtGaps: Bool
-    }
-
     /// ``capture(make:order:cassette:)``, reporting whether the subject held work across a gap.
     ///
     /// - Parameters:
@@ -104,34 +93,6 @@ extension Spec {
         return Captured(trace: recorder.trace(), heldWorkAtGaps: heldWorkAtGaps)
     }
 
-    /// Runs held work as far as `settle` lets it, watched for a stall.
-    ///
-    /// - Parameters:
-    ///   - settle: How far the work may run at this gap.
-    ///   - backlog: The capture's held work.
-    ///   - recorder: The capture's recorder.
-    private static func settleHeld(_ settle: Settle, _ backlog: WorkBacklog, recorder: TraceRecorder) async {
-        await HeldWorkWatchdog.watching("settle:\(settle.rawValue) step", backlog: backlog, recorder: recorder) {
-            await backlog.settle(settle, recorder: recorder)
-        }
-    }
-
-    /// Runs the work a capture's settle schedule left held, watched for a stall, and marks the trace
-    /// when some is still held after it.
-    ///
-    /// - Parameters:
-    ///   - backlog: The capture's held work.
-    ///   - recorder: The capture's recorder.
-    private static func drainHeld(_ backlog: WorkBacklog, recorder: TraceRecorder) async {
-        let region = "drain after the last operation"
-        let drained = await HeldWorkWatchdog.watching(region, backlog: backlog, recorder: recorder) {
-            await backlog.drain(recorder: recorder)
-        }
-        if drained == false {
-            recorder.marker("⟨haruspec: scheduled work still held at snapshot⟩")
-        }
-    }
-
     /// Traps on an op whose closure is isolated to an actor, naming the fix.
     ///
     /// - Parameter operation: The op about to run.
@@ -162,5 +123,44 @@ extension Spec {
             + "isolates it: mark the spec type `nonisolated` (needed under default MainActor "
             + "isolation), or move it out of the @MainActor type. A subject's isolated method is "
             + "still reachable from a nonisolated op with `await`."
+    }
+
+    /// Runs held work as far as `settle` lets it, watched for a stall.
+    ///
+    /// - Parameters:
+    ///   - settle: How far the work may run at this gap.
+    ///   - backlog: The capture's held work.
+    ///   - recorder: The capture's recorder.
+    private static func settleHeld(_ settle: Settle, _ backlog: WorkBacklog, recorder: TraceRecorder) async {
+        await HeldWorkWatchdog.watching("settle:\(settle.rawValue) step", backlog: backlog, recorder: recorder) {
+            await backlog.settle(settle, recorder: recorder)
+        }
+    }
+
+    /// Runs the work a capture's settle schedule left held, watched for a stall, and marks the trace
+    /// when some is still held after it.
+    ///
+    /// - Parameters:
+    ///   - backlog: The capture's held work.
+    ///   - recorder: The capture's recorder.
+    private static func drainHeld(_ backlog: WorkBacklog, recorder: TraceRecorder) async {
+        let region = "drain after the last operation"
+        let drained = await HeldWorkWatchdog.watching(region, backlog: backlog, recorder: recorder) {
+            await backlog.drain(recorder: recorder)
+        }
+        if drained == false {
+            recorder.marker("⟨haruspec: scheduled work still held at snapshot⟩")
+        }
+    }
+
+    /// One capture's trace, and whether a settle point would have had anything to land.
+    struct Captured {
+        let trace: Trace
+        /// Whether held work was waiting when an operation returned and another was still to run.
+        ///
+        /// That is the only place a settle step can change anything. A subject whose seamed work
+        /// all lands inside its own operations (a `sync`, a completion it waits for) gives settle
+        /// points nothing to explore.
+        let heldWorkAtGaps: Bool
     }
 }

@@ -34,16 +34,16 @@ final class PhotoUploader: PhotoUploading, @unchecked Sendable {
         queue.addOperation(operation)
     }
 
-    func isUploading(_ name: String) -> Bool {
-        queue.operations.contains { ($0 as? UploadOperation)?.photo.name == name }
-    }
-
     private func finished(_ name: String) {
         center.post(
             name: .init("PhotoUploaded"),
             object: nil,
             userInfo: ["name": name, "stillUploading": isUploading(name), "queued": queue.operationCount]
         )
+    }
+
+    func isUploading(_ name: String) -> Bool {
+        queue.operations.contains { ($0 as? UploadOperation)?.photo.name == name }
     }
 }
 
@@ -72,18 +72,6 @@ final class InlinePhotoUploader: PhotoUploading {
 // MARK: - Tests
 
 final class HeldOperationQueueSpecTests: XCTestCase {
-    private var uploading: BaselinedSpec<any PhotoUploading> {
-        Spec<any PhotoUploading>("uploading.operation-queue")
-            .operations {
-                Op("cat") { $0.upload("cat.jpg") }
-                Op("dog") { $0.upload("dog.jpg") }
-            }
-            .vary { Ordering(max: 2) }
-            .baselined { context in
-                PhotoUploader(queue: context.operationQueue(.serial("uploads")), center: context.notifications)
-            }
-    }
-
     func testTheUploaderIsEquivalentToItself() async {
         let verdict = await uploading.verify { context in
             PhotoUploader(queue: context.operationQueue(.serial("uploads")), center: context.notifications)
@@ -114,5 +102,17 @@ final class HeldOperationQueueSpecTests: XCTestCase {
 
         XCTAssertEqual(verdict.verdict, .diverged, verdict.report())
         XCTAssertTrue(verdict.report().contains("queue(concurrent):uploads"), verdict.report())
+    }
+
+    private var uploading: BaselinedSpec<any PhotoUploading> {
+        Spec<any PhotoUploading>("uploading.operation-queue")
+            .operations {
+                Op("cat") { $0.upload("cat.jpg") }
+                Op("dog") { $0.upload("dog.jpg") }
+            }
+            .vary { Ordering(max: 2) }
+            .baselined { context in
+                PhotoUploader(queue: context.operationQueue(.serial("uploads")), center: context.notifications)
+            }
     }
 }

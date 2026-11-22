@@ -4,29 +4,6 @@ import XCTest
 /// Focused unit tests for the diff primitive, using hand-built traces so each divergence kind and
 /// each comparison lever is exercised in isolation.
 final class DiffTests: XCTestCase {
-    /// Small builders for readability.
-    private func call(
-        _ seq: Int,
-        _ label: String,
-        _ payload: CanonicalValue? = nil,
-        subject: Int? = 1
-    ) -> TraceEvent {
-        TraceEvent(seq: seq, kind: .call, label: label, subject: subject, payload: payload)
-    }
-
-    private func note(
-        _ seq: Int,
-        _ label: String,
-        _ payload: CanonicalValue? = nil,
-        subject: Int? = 1
-    ) -> TraceEvent {
-        TraceEvent(seq: seq, kind: .notification, label: label, subject: subject, payload: payload)
-    }
-
-    private func trace(_ name: String, _ events: [TraceEvent]) -> Trace {
-        Trace(name: name, events: events)
-    }
-
     func testIdenticalTracesAreEquivalent() {
         let identical = trace("t", [call(0, "a", ["x": 1]), note(1, "N"), call(2, "b")])
         let diff = BehavioralDiff.compare(baseline: identical, candidate: identical)
@@ -174,6 +151,15 @@ final class DiffTests: XCTestCase {
         XCTAssertTrue(renumberedDiff.isEquivalent, "ids number by first sight")
     }
 
+    private func note(
+        _ seq: Int,
+        _ label: String,
+        _ payload: CanonicalValue? = nil,
+        subject: Int? = 1
+    ) -> TraceEvent {
+        TraceEvent(seq: seq, kind: .notification, label: label, subject: subject, payload: payload)
+    }
+
     func testIgnoredKindsAreDropped() {
         let base = trace("base", [call(0, "a")])
         let cand = trace("cand", [call(0, "a"), TraceEvent(seq: 1, kind: .custom, label: "telemetry")])
@@ -185,5 +171,19 @@ final class DiffTests: XCTestCase {
             comparison: Comparison(ignoredKinds: [.custom])
         )
         XCTAssertTrue(setAside.isEquivalent)
+    }
+
+    private func trace(_ name: String, _ events: [TraceEvent]) -> Trace {
+        Trace(name: name, events: events)
+    }
+
+    /// Small builders for readability.
+    private func call(
+        _ seq: Int,
+        _ label: String,
+        _ payload: CanonicalValue? = nil,
+        subject: Int? = 1
+    ) -> TraceEvent {
+        TraceEvent(seq: seq, kind: .call, label: label, subject: subject, payload: payload)
     }
 }

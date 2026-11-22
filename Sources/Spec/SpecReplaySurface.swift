@@ -80,18 +80,6 @@ extension Spec {
     }
 }
 
-/// One replay pass's resolved view of a plan (see `replaySurface(of:)`).
-struct ReplaySurface<S> {
-    let opsByLabel: [String: Op<S>]
-    let planOps: [String]
-    let missingOps: [String]
-    let replayable: [SpecProbe]
-    let distinctOrderings: Int
-    let variedInputs: Bool
-    let exploration: Exploration
-    let qualification: Qualification
-}
-
 /// The union of several label sequences, keeping first-seen order (deterministic gap reporting).
 func orderedUnion(_ sequences: [[String]]) -> [String] {
     var seen = Set<String>()
@@ -102,4 +90,16 @@ func orderedUnion(_ sequences: [[String]]) -> [String] {
         }
     }
     return result
+}
+
+/// One replay pass's resolved view of a plan (see `replaySurface(of:)`).
+struct ReplaySurface<S> {
+    let opsByLabel: [String: Op<S>]
+    let planOps: [String]
+    let missingOps: [String]
+    let replayable: [SpecProbe]
+    let distinctOrderings: Int
+    let variedInputs: Bool
+    let exploration: Exploration
+    let qualification: Qualification
 }

@@ -220,14 +220,6 @@ public enum HTML {
         """
     }
 
-    private static func locationChips(_ divergence: Divergence) -> String {
-        let baselineChip = divergence.baselineSeq.map { "<span class=\"pos base\">baseline #\($0)</span>" } ?? ""
-        let candidateChip = divergence.candidateSeq.map { "<span class=\"pos cand\">candidate #\($0)</span>" } ?? ""
-        let opChip = divergence.op.map { "<span class=\"pos\">in \(esc($0.description))</span>" } ?? ""
-        guard !baselineChip.isEmpty || !candidateChip.isEmpty || !opChip.isEmpty else { return "" }
-        return "<span class=\"loc\">\(baselineChip)\(candidateChip)\(opChip)</span>"
-    }
-
     /// Returns the badge for a divergence's classification, mirroring the `(intended)` /
     /// `(collateral)` / `(advisory)` tags ``TraceDiff/bodyLines()`` prints.
     ///
@@ -245,6 +237,14 @@ public enum HTML {
         }
         // Only worth flagging "collateral" when there's declared intent to contrast against.
         return intentInPlay ? "<span class=\"badge collateral\">collateral</span>" : ""
+    }
+
+    private static func locationChips(_ divergence: Divergence) -> String {
+        let baselineChip = divergence.baselineSeq.map { "<span class=\"pos base\">baseline #\($0)</span>" } ?? ""
+        let candidateChip = divergence.candidateSeq.map { "<span class=\"pos cand\">candidate #\($0)</span>" } ?? ""
+        let opChip = divergence.op.map { "<span class=\"pos\">in \(esc($0.description))</span>" } ?? ""
+        guard !baselineChip.isEmpty || !candidateChip.isEmpty || !opChip.isEmpty else { return "" }
+        return "<span class=\"loc\">\(baselineChip)\(candidateChip)\(opChip)</span>"
     }
 
     // MARK: - Detail parsing
@@ -544,15 +544,15 @@ public extension VerificationResult {
         return "<section class=\"coverage\"><h2>Coverage</h2>\(rows.joined())</section>"
     }
 
+    private func percent(_ fraction: Double) -> String {
+        "\(Int((fraction * 100).rounded()))%"
+    }
+
     private var htmlAbstentionReason: String {
         coverage.unrecordedReach.isEmpty
             ? "Verification was inconclusive because there is no declared seam surface to certify equivalence over."
             : "Verification was inconclusive because the change crossed a boundary the recording "
             + "didn't cover, so the environment wasn't held identical."
-    }
-
-    private func percent(_ fraction: Double) -> String {
-        "\(Int((fraction * 100).rounded()))%"
     }
 }
 

@@ -70,22 +70,6 @@ public enum IntentGrammar {
         return intents
     }
 
-    /// The spec a `` ```haruspec-intent <spec> `` fence names — thrown at, not defaulted, when the
-    /// name is missing: an unpaired block cannot excuse anything.
-    private static func specName(onFence line: String, at lineNumber: Int) throws -> String {
-        let spec = line.dropFirst(3).dropFirst(fenceLabel.count).trimmingCharacters(in: .whitespaces)
-        guard !spec.isEmpty else {
-            throw IntentGrammarError(
-                line: lineNumber,
-                text: line,
-                problem: "the block names no spec",
-                hint: "open the block as ```\(fenceLabel) <spec> — the spec name pairs the "
-                    + "declarations with the plan they excuse (e.g. ```\(fenceLabel) search.combine)"
-            )
-        }
-        return spec
-    }
-
     /// Parses one closed block into `intents`, refusing a spec that already has one — a second
     /// block would silently widen the first.
     private static func close(
@@ -104,6 +88,22 @@ public enum IntentGrammar {
             )
         }
         intents[spec] = try intent(parsing: lines.joined(separator: "\n"), lineOffset: blockStart)
+    }
+
+    /// The spec a `` ```haruspec-intent <spec> `` fence names — thrown at, not defaulted, when the
+    /// name is missing: an unpaired block cannot excuse anything.
+    private static func specName(onFence line: String, at lineNumber: Int) throws -> String {
+        let spec = line.dropFirst(3).dropFirst(fenceLabel.count).trimmingCharacters(in: .whitespaces)
+        guard !spec.isEmpty else {
+            throw IntentGrammarError(
+                line: lineNumber,
+                text: line,
+                problem: "the block names no spec",
+                hint: "open the block as ```\(fenceLabel) <spec> — the spec name pairs the "
+                    + "declarations with the plan they excuse (e.g. ```\(fenceLabel) search.combine)"
+            )
+        }
+        return spec
     }
 
     /// Parses declaration lines, one declaration per line, into an `Intent`. It is the text half of
@@ -152,16 +152,6 @@ struct DeclarationParser {
         self.line = line
         self.number = number
         index = line.startIndex
-    }
-
-    /// The bare one-string declarations, by the `Intent` list each appends to. The labeled ones carry
-    /// their argument label (`Drops(synchronizationOf:)`); the bare ones `nil`. None takes a modifier.
-    private static var stringDeclarations: [String: (label: String?, list: WritableKeyPath<Intent, [String]>)] {
-        [
-            "Awaits": (nil, \.expectedOrderingAdditions),
-            "Drops": ("synchronizationOf", \.expectedOrderingLosses),
-            "Accepts": ("uncaptured", \.acceptedBlindSpots)
-        ]
     }
 
     /// A parsed declaration head, before its modifiers: what the chained `.modifier(…)` calls may
@@ -261,6 +251,16 @@ struct DeclarationParser {
         return .unmodifiable(name)
     }
 
+    /// The bare one-string declarations, by the `Intent` list each appends to. The labeled ones carry
+    /// their argument label (`Drops(synchronizationOf:)`); the bare ones `nil`. None takes a modifier.
+    private static var stringDeclarations: [String: (label: String?, list: WritableKeyPath<Intent, [String]>)] {
+        [
+            "Awaits": (nil, \.expectedOrderingAdditions),
+            "Drops": ("synchronizationOf", \.expectedOrderingLosses),
+            "Accepts": ("uncaptured", \.acceptedBlindSpots)
+        ]
+    }
+
     // MARK: - Tokens
 
     mutating func strings() throws -> [String] {
@@ -288,6 +288,16 @@ struct DeclarationParser {
         throw error("unterminated string", hint: "close the quote")
     }
 
+    mutating func expectLabel(_ label: String, colon: Bool = true) throws {
+        let name = try identifier(expected: "\"\(label)\(colon ? ":" : "")\"")
+        guard name == label else {
+            throw error("expected \"\(label)\(colon ? ":" : "")\", found \"\(name)\"", hint: "")
+        }
+        if colon {
+            try expect(":")
+        }
+    }
+
     mutating func identifier(expected: String) throws -> String {
         skipSpaces()
         var name = ""
@@ -299,16 +309,6 @@ struct DeclarationParser {
             throw error("expected \(expected)", hint: "e.g. Changes(\"Search.query\")")
         }
         return name
-    }
-
-    mutating func expectLabel(_ label: String, colon: Bool = true) throws {
-        let name = try identifier(expected: "\"\(label)\(colon ? ":" : "")\"")
-        guard name == label else {
-            throw error("expected \"\(label)\(colon ? ":" : "")\", found \"\(name)\"", hint: "")
-        }
-        if colon {
-            try expect(":")
-        }
     }
 
     mutating func expect(_ character: Character) throws {
@@ -327,6 +327,10 @@ struct DeclarationParser {
         return true
     }
 
+    func error(_ problem: String, hint: String) -> IntentGrammarError {
+        IntentGrammarError(line: number, text: line, problem: problem, hint: hint)
+    }
+
     mutating func peek() -> Character? {
         skipSpaces()
         return index < line.endIndex ? line[index] : nil
@@ -336,9 +340,5 @@ struct DeclarationParser {
         while index < line.endIndex, line[index] == " " {
             index = line.index(after: index)
         }
-    }
-
-    func error(_ problem: String, hint: String) -> IntentGrammarError {
-        IntentGrammarError(line: number, text: line, problem: problem, hint: hint)
     }
 }

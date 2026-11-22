@@ -4,24 +4,6 @@ import XCTest
 /// The offer a red makes when it has seen several failing cases: one case proves one value, several
 /// prove a shape, and the offer is the narrowest shape every case satisfies.
 final class IntentSuggestionsTests: XCTestCase {
-    private func changed(
-        _ label: String,
-        _ field: String,
-        from baseline: CanonicalValue,
-        to candidate: CanonicalValue
-    ) -> Divergence {
-        Divergence(
-            kind: .valueMismatch,
-            label: label,
-            baselineSeq: 0,
-            candidateSeq: 0,
-            detail: "\(field): baseline=\(baseline.canonicalString) candidate=\(candidate.canonicalString)",
-            field: field,
-            baselineValue: baseline,
-            candidateValue: candidate
-        )
-    }
-
     func testOneCasePinsItsValue() {
         let offer = Divergence.suggestedDeclarations(across: [changed("Receipt", "total", from: 100, to: 120)])
         XCTAssertEqual(offer, [#"Changes("Receipt", field: "total").to(120)"#])
@@ -101,5 +83,23 @@ final class IntentSuggestionsTests: XCTestCase {
             ]
         )
         XCTAssertEqual(intent.declarationsMatching(changed("Receipt", "total", from: 2, to: 1)), [])
+    }
+
+    private func changed(
+        _ label: String,
+        _ field: String,
+        from baseline: CanonicalValue,
+        to candidate: CanonicalValue
+    ) -> Divergence {
+        Divergence(
+            kind: .valueMismatch,
+            label: label,
+            baselineSeq: 0,
+            candidateSeq: 0,
+            detail: "\(field): baseline=\(baseline.canonicalString) candidate=\(candidate.canonicalString)",
+            field: field,
+            baselineValue: baseline,
+            candidateValue: candidate
+        )
     }
 }

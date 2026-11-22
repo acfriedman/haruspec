@@ -23,17 +23,6 @@ final class GitTests: XCTestCase {
         try? FileManager.default.removeItem(at: root.deletingLastPathComponent())
     }
 
-    private func git(_ arguments: String...) throws {
-        let result = try Shell.run(["git"] + arguments, in: root)
-        XCTAssertEqual(result.status, 0, result.stderr)
-    }
-
-    private func write(_ path: String, _ text: String) throws {
-        let url = root.appendingPathComponent(path)
-        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try Data(text.utf8).write(to: url)
-    }
-
     func testTheMergeBaseIsWhereTheBranchLeftMain() throws {
         let base = try Git(directory: root).commit("HEAD")
         try git("checkout", "--quiet", "-b", "feature/rewards")
@@ -88,5 +77,16 @@ final class GitTests: XCTestCase {
         let moved = try BaseCheckout.prepare(commit: base, directory: directory, config: config)
         XCTAssertEqual(moved.root, checkout.root)
         XCTAssertEqual(try Git(directory: moved.root).commit("HEAD"), base)
+    }
+
+    private func write(_ path: String, _ text: String) throws {
+        let url = root.appendingPathComponent(path)
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: url)
+    }
+
+    private func git(_ arguments: String...) throws {
+        let result = try Shell.run(["git"] + arguments, in: root)
+        XCTAssertEqual(result.status, 0, result.stderr)
     }
 }

@@ -103,23 +103,11 @@ struct ExtensionCounter {
         return extensions()
     }
 
-    /// Records that the walk placed `label`, so subsequent weights are conditioned on it.
-    mutating func take(_ label: String) {
-        guard isWeighted, let slot = slot(of: label) else { return }
-        counts[slot] -= 1
-        remaining -= 1
-    }
-
     /// Restores the full multiset for the next walk. The memo is deliberately kept — it is a property of
     /// the partial order, not of one walk, which is what makes weighting cheap across a whole sample.
     mutating func reset() {
         counts = declared
         remaining = declared.reduce(0, +)
-    }
-
-    private func slot(of label: String) -> Int? {
-        // Frontier labels are few; a linear scan beats hashing here.
-        labels.firstIndex(of: label)
     }
 
     /// Orderings of the current remaining state.
@@ -143,5 +131,17 @@ struct ExtensionCounter {
         }
         memo[key] = total
         return total
+    }
+
+    /// Records that the walk placed `label`, so subsequent weights are conditioned on it.
+    mutating func take(_ label: String) {
+        guard isWeighted, let slot = slot(of: label) else { return }
+        counts[slot] -= 1
+        remaining -= 1
+    }
+
+    private func slot(of label: String) -> Int? {
+        // Frontier labels are few; a linear scan beats hashing here.
+        labels.firstIndex(of: label)
     }
 }

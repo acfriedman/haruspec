@@ -28,13 +28,13 @@ final class GoodMeteredCart: MeteredCart {
         self.center = center
     }
 
-    private func price(_ sku: String) -> Int {
-        ["COFFEE": 1299, "MUG": 899][sku] ?? 0
-    }
-
     func add(sku: String, quantity: Int) {
         cents += price(sku) * max(0, quantity)
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["cents": cents])
+    }
+
+    private func price(_ sku: String) -> Int {
+        ["COFFEE": 1299, "MUG": 899][sku] ?? 0
     }
 
     func setEager(_ eager: Bool) {

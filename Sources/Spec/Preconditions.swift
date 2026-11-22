@@ -9,6 +9,19 @@ import Foundation
 
 // MARK: - Soft preconditions
 
+extension Spec {
+    /// How many of these orderings break a declared precondition — the stratum size a verdict reports.
+    func outOfOrderCount(among orderings: [[String]]) -> Int {
+        let declared = preconditions(of: operations)
+        return orderings.filter { !violatedPreconditions(in: $0, declaredBy: declared).isEmpty }.count
+    }
+
+    /// The preconditions this label sequence breaks, for the verdict's failing order.
+    func preconditionViolations(in order: [String]) -> [String] {
+        violatedPreconditions(in: order, declaredBy: preconditions(of: operations))
+    }
+}
+
 /// Each op's declared `.after` labels, keyed by op label — the form `violatedPreconditions` reads, and
 /// the only form available on the replay path, where an ordering is a bare label sequence.
 func preconditions(of ops: [Op<some Any>]) -> [String: [String]] {
@@ -38,17 +51,4 @@ func violatedPreconditions(in order: [String], declaredBy declared: [String: [St
         ran.insert(label)
     }
     return violations
-}
-
-extension Spec {
-    /// How many of these orderings break a declared precondition — the stratum size a verdict reports.
-    func outOfOrderCount(among orderings: [[String]]) -> Int {
-        let declared = preconditions(of: operations)
-        return orderings.filter { !violatedPreconditions(in: $0, declaredBy: declared).isEmpty }.count
-    }
-
-    /// The preconditions this label sequence breaks, for the verdict's failing order.
-    func preconditionViolations(in order: [String]) -> [String] {
-        violatedPreconditions(in: order, declaredBy: preconditions(of: operations))
-    }
 }

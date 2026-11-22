@@ -111,29 +111,6 @@ enum SchedulerEmitter {
         return DeclSyntax("\(raw: source)")
     }
 
-    /// Returns the double's witness for one requirement: a hand-off to the capture's backlog.
-    private static func method(
-        _ function: FunctionDeclSyntax,
-        shape: SchedulingShape,
-        label _: String,
-        discipline: String
-    ) -> String {
-        let queue = "on: self, label: queueLabel, discipline: .\(discipline)"
-        let body = switch shape {
-        case let .enqueue(work):
-            "__seams.backlog.enqueue(\(queue), \(work))"
-        case let .spawn(operation):
-            "__seams.backlog.spawn(\(queue), \(operation))"
-        case let .delayed(work, delay):
-            "__seams.backlog.enqueue(\(queue), after: TimeInterval(\(delay)), \(work))"
-        case let .notify(work, group):
-            "__seams.backlog.enqueue(\(queue), notifying: \(group), \(work))"
-        case let .sync(work):
-            "__seams.backlog.runSync(\(queue), \(work))"
-        }
-        return "    func \(function.name.text)\(function.signature.trimmedDescription) {\n        \(body)\n    }"
-    }
-
     /// Classifies a requirement by its parameters, or rejects it naming the shapes a scheduler holds.
     private static func classify(_ function: FunctionDeclSyntax, in protoName: String) throws -> SchedulingShape {
         let reject = MacroError("\(protoName).\(function.name.text): \(acceptedShapes)")
@@ -170,6 +147,29 @@ enum SchedulerEmitter {
 
     private static func internalName(_ parameter: FunctionParameterSyntax) -> String {
         (parameter.secondName ?? parameter.firstName).text
+    }
+
+    /// Returns the double's witness for one requirement: a hand-off to the capture's backlog.
+    private static func method(
+        _ function: FunctionDeclSyntax,
+        shape: SchedulingShape,
+        label _: String,
+        discipline: String
+    ) -> String {
+        let queue = "on: self, label: queueLabel, discipline: .\(discipline)"
+        let body = switch shape {
+        case let .enqueue(work):
+            "__seams.backlog.enqueue(\(queue), \(work))"
+        case let .spawn(operation):
+            "__seams.backlog.spawn(\(queue), \(operation))"
+        case let .delayed(work, delay):
+            "__seams.backlog.enqueue(\(queue), after: TimeInterval(\(delay)), \(work))"
+        case let .notify(work, group):
+            "__seams.backlog.enqueue(\(queue), notifying: \(group), \(work))"
+        case let .sync(work):
+            "__seams.backlog.runSync(\(queue), \(work))"
+        }
+        return "    func \(function.name.text)\(function.signature.trimmedDescription) {\n        \(body)\n    }"
     }
 }
 

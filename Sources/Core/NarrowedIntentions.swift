@@ -154,6 +154,16 @@ public struct Changes: Intention {
         narrowed(.within(range))
     }
 
+    private func narrowed(_ relation: ValueRelation) -> Changes {
+        precondition(
+            self.relation == nil,
+            "Changes(\"\(label)\") already declares \(self.relation!.dslText); one value relation per declaration"
+        )
+        var narrowed = self
+        narrowed.relation = relation
+        return narrowed
+    }
+
     /// Only in a probe whose recorded reads of `seam` all returned `value`.
     public func when(_ seam: String, is value: CanonicalValue) -> Changes {
         var narrowed = self
@@ -169,16 +179,6 @@ public struct Changes: Intention {
         )
         var narrowed = self
         narrowed.scope = .only(in: op)
-        return narrowed
-    }
-
-    private func narrowed(_ relation: ValueRelation) -> Changes {
-        precondition(
-            self.relation == nil,
-            "Changes(\"\(label)\") already declares \(self.relation!.dslText); one value relation per declaration"
-        )
-        var narrowed = self
-        narrowed.relation = relation
         return narrowed
     }
 

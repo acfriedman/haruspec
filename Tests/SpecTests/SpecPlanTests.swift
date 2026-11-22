@@ -74,26 +74,6 @@ private final class GreedySeamCart: PromoCart {
     }
 }
 
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
-    RefactorCart(center: ctx.notifications)
-}
-
-private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
-    RoundBugCart(center: ctx.notifications)
-}
-
-private func makeLoyalty(_ ctx: SeamContext) -> PromoCart {
-    LoyaltyCart(center: ctx.notifications)
-}
-
-private func makeGreedy(_ ctx: SeamContext) -> PromoCart {
-    GreedySeamCart(center: ctx.notifications, context: ctx)
-}
-
 final class SpecPlanTests: XCTestCase {
     /// The authored spec — identical source on the "base" and "branch" side, as it would be in git.
     /// Only the factory differs per test, standing in for what a checkout does to the code under it.
@@ -277,4 +257,24 @@ final class SpecPlanTests: XCTestCase {
         XCTAssertEqual(catalog.filter { $0.covers(anyOf: ["PromoCart"]) }.count, 1)
         XCTAssertTrue(catalog.filter { $0.covers(anyOf: ["PaymentService"]) }.isEmpty)
     }
+}
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
+    RefactorCart(center: ctx.notifications)
+}
+
+private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
+    RoundBugCart(center: ctx.notifications)
+}
+
+private func makeLoyalty(_ ctx: SeamContext) -> PromoCart {
+    LoyaltyCart(center: ctx.notifications)
+}
+
+private func makeGreedy(_ ctx: SeamContext) -> PromoCart {
+    GreedySeamCart(center: ctx.notifications, context: ctx)
 }

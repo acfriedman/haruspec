@@ -6,19 +6,6 @@ import HaruspecSeams
 import HaruspecTrace
 import XCTest
 
-// What a run spends and what it covers. The defects these pin: the seam sample used to be the *same*
-// 64 vectors for every ordering (a 1-D sweep in a 2-D shape), the ordering sample used to be the
-// enumeration's lexicographic prefix (all sharing a long common head), and neither the spent budget nor
-// the swept fraction reached the verdict — a spec that covered 2% reported "50 orderings explored".
-
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
-    RefactorCart(center: ctx.notifications)
-}
-
 /// The baseline's behavior everywhere except the very top of the declared quantity domain — the shape
 /// of bug a uniform sample finds by luck and a boundary-first one finds by construction.
 private final class TopOfRangeBugCart: PromoCart {
@@ -343,4 +330,17 @@ final class ExplorationTests: XCTestCase {
             try SpecVerdict(jsonData: JSONSerialization.data(withJSONObject: json))
         )
     }
+}
+
+// What a run spends and what it covers. The defects these pin: the seam sample used to be the *same*
+// 64 vectors for every ordering (a 1-D sweep in a 2-D shape), the ordering sample used to be the
+// enumeration's lexicographic prefix (all sharing a long common head), and neither the spent budget nor
+// the swept fraction reached the verdict — a spec that covered 2% reported "50 orderings explored".
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
+    RefactorCart(center: ctx.notifications)
 }

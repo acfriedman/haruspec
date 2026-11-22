@@ -64,6 +64,17 @@ extension DeclarationParser {
         return true
     }
 
+    /// One value relation per declaration — a second is a contradiction, refused with both named.
+    func relate(_ relation: ValueRelation, into modifiers: inout Modifiers) throws {
+        if let existing = modifiers.relation {
+            throw error(
+                "\(relation.dslText) contradicts \(existing.dslText)",
+                hint: "one value relation per declaration — say .to, .increases, .decreases, or .within, not two"
+            )
+        }
+        modifiers.relation = relation
+    }
+
     /// The modifiers about where the event was recorded — `.only(in:)`, `.once(per:)`, `.after`,
     /// `.before`; `false` when `name` is none of them.
     private mutating func placementModifier(_ name: String, into modifiers: inout Modifiers) throws -> Bool {
@@ -82,17 +93,6 @@ extension DeclarationParser {
             return false
         }
         return true
-    }
-
-    /// One value relation per declaration — a second is a contradiction, refused with both named.
-    func relate(_ relation: ValueRelation, into modifiers: inout Modifiers) throws {
-        if let existing = modifiers.relation {
-            throw error(
-                "\(relation.dslText) contradicts \(existing.dslText)",
-                hint: "one value relation per declaration — say .to, .increases, .decreases, or .within, not two"
-            )
-        }
-        modifiers.relation = relation
     }
 
     /// One op scope per declaration — `.once(per:)` already says which op, so a second scope

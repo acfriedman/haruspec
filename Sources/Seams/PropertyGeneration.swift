@@ -143,47 +143,6 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         return schedule
     }
 
-    /// The combined stream's finite head: the two all-edges vectors, then one interior vector per
-    /// interior rung of the widest domain. A vector the golden already holds is dropped (it would
-    /// replay the golden itself), and with a single declared seam the all-edges vectors are its own
-    /// aggregate pins again, so only the true middles are kept.
-    private static func combinedSchedule(
-        _ domains: [String: SeamDomain],
-        golden: [String: [CanonicalValue]]
-    ) -> [Combined] {
-        guard !domains.isEmpty else {
-            return []
-        }
-        func heldByGolden(_ value: (SeamDomain) -> CanonicalValue) -> Bool {
-            domains.allSatisfy { seam, domain in
-                let track = golden[seam] ?? []
-                return !track.isEmpty && track.allSatisfy { $0.canonicalString == value(domain).canonicalString }
-            }
-        }
-        var schedule: [Combined] = []
-        if domains.count > 1 {
-            if !heldByGolden({ $0.extremes.low }) {
-                schedule.append(.lowEdges)
-            }
-            if !heldByGolden({ $0.extremes.high }) {
-                schedule.append(.highEdges)
-            }
-        }
-        let rungs = domains.values.map(\.interiorValues.count).max() ?? 0
-        for index in 0 ..< rungs {
-            let single = domains.count == 1 ? domains.values.first : nil
-            // One seam: an interior value that is also an edge is a scheduled pin already.
-            if let single, let value = single.interior(at: index),
-               single.boundaryValues.contains(where: { $0.canonicalString == value.canonicalString }) {
-                continue
-            }
-            if !heldByGolden({ $0.interior(at: index) ?? .null }) {
-                schedule.append(.interior(index))
-            }
-        }
-        return schedule
-    }
-
     /// One seam's entries: its edges across the whole track, interleaved with its edges at a single
     /// reading.
     ///
@@ -233,20 +192,45 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         return pins
     }
 
-    /// Which stream variant `index` draws from. Even variants are edge pins and odd ones combined,
-    /// until the pins run out; from there every variant is combined, and the combined stream itself
-    /// goes random once its scheduled head is spent.
-    private static func slot(forVariant index: Int, edges: [Pin], combined: [Combined]) -> Slot {
-        let interleaved = 2 * edges.count
-        if index < interleaved {
-            if index.isMultiple(of: 2) {
-                return .edge(edges[index / 2])
-            }
-            let position = index / 2
-            return position < combined.count ? .combined(combined[position]) : .random
+    /// The combined stream's finite head: the two all-edges vectors, then one interior vector per
+    /// interior rung of the widest domain. A vector the golden already holds is dropped (it would
+    /// replay the golden itself), and with a single declared seam the all-edges vectors are its own
+    /// aggregate pins again, so only the true middles are kept.
+    private static func combinedSchedule(
+        _ domains: [String: SeamDomain],
+        golden: [String: [CanonicalValue]]
+    ) -> [Combined] {
+        guard !domains.isEmpty else {
+            return []
         }
-        let position = edges.count + (index - interleaved)
-        return position < combined.count ? .combined(combined[position]) : .random
+        func heldByGolden(_ value: (SeamDomain) -> CanonicalValue) -> Bool {
+            domains.allSatisfy { seam, domain in
+                let track = golden[seam] ?? []
+                return !track.isEmpty && track.allSatisfy { $0.canonicalString == value(domain).canonicalString }
+            }
+        }
+        var schedule: [Combined] = []
+        if domains.count > 1 {
+            if !heldByGolden({ $0.extremes.low }) {
+                schedule.append(.lowEdges)
+            }
+            if !heldByGolden({ $0.extremes.high }) {
+                schedule.append(.highEdges)
+            }
+        }
+        let rungs = domains.values.map(\.interiorValues.count).max() ?? 0
+        for index in 0 ..< rungs {
+            let single = domains.count == 1 ? domains.values.first : nil
+            // One seam: an interior value that is also an edge is a scheduled pin already.
+            if let single, let value = single.interior(at: index),
+               single.boundaryValues.contains(where: { $0.canonicalString == value.canonicalString }) {
+                continue
+            }
+            if !heldByGolden({ $0.interior(at: index) ?? .null }) {
+                schedule.append(.interior(index))
+            }
+        }
+        return schedule
     }
 
     public var variedSeams: Set<String> {
@@ -275,6 +259,22 @@ public struct DomainSeamGenerator: SeamValueGenerator {
 
     public mutating func beginVariant(_ index: Int) {
         slot = Self.slot(forVariant: index, edges: edges, combined: combined)
+    }
+
+    /// Which stream variant `index` draws from. Even variants are edge pins and odd ones combined,
+    /// until the pins run out; from there every variant is combined, and the combined stream itself
+    /// goes random once its scheduled head is spent.
+    private static func slot(forVariant index: Int, edges: [Pin], combined: [Combined]) -> Slot {
+        let interleaved = 2 * edges.count
+        if index < interleaved {
+            if index.isMultiple(of: 2) {
+                return .edge(edges[index / 2])
+            }
+            let position = index / 2
+            return position < combined.count ? .combined(combined[position]) : .random
+        }
+        let position = edges.count + (index - interleaved)
+        return position < combined.count ? .combined(combined[position]) : .random
     }
 
     public mutating func generate(seam: String, at position: Int, like recorded: CanonicalValue) -> CanonicalValue {

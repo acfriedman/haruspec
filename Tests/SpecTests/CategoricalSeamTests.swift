@@ -16,19 +16,6 @@ private final class Greeter {
 }
 
 final class CategoricalSeamTests: XCTestCase {
-    private func spec(recording: @escaping (String) -> Void) -> BaselinedSpec<Greeter> {
-        Spec<Greeter>("greeter.categorical")
-            .operations {
-                Op("greet") { sut, seams in
-                    let salutation = seams.string("salutation", default: "hello")
-                    recording(salutation)
-                    sut.greet(salutation)
-                }
-            }
-            .vary { Seam("salutation", .oneOf("hello", "hola", "bonjour")) }
-            .baselined { _ in Greeter() }
-    }
-
     func testEveryDeclaredValueIsReachable() async {
         // Recording explores the declared surface, so the generated cassettes should between them
         // cover the whole set rather than pinning one value.
@@ -52,6 +39,19 @@ final class CategoricalSeamTests: XCTestCase {
         _ = await spec(recording: { second.append($0) }).record()
 
         XCTAssertEqual(first, second, "generation is seeded; a categorical draw must be reproducible")
+    }
+
+    private func spec(recording: @escaping (String) -> Void) -> BaselinedSpec<Greeter> {
+        Spec<Greeter>("greeter.categorical")
+            .operations {
+                Op("greet") { sut, seams in
+                    let salutation = seams.string("salutation", default: "hello")
+                    recording(salutation)
+                    sut.greet(salutation)
+                }
+            }
+            .vary { Seam("salutation", .oneOf("hello", "hola", "bonjour")) }
+            .baselined { _ in Greeter() }
     }
 
     /// The golden probe reads each declared seam's first interior value — for a named set, its first

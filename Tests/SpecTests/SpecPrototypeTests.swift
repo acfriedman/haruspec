@@ -56,10 +56,6 @@ final class RefactorCart: PromoCart {
         self.center = center
     }
 
-    private var subtotal: Int {
-        lines.reduce(0) { $0 + $1.price * $1.qty }
-    }
-
     func addItem(priceCents: Int, qty: Int) {
         lines.append((priceCents, qty))
         center.post(name: .init("CartChanged"), object: nil, userInfo: ["subtotal": subtotal])
@@ -75,6 +71,10 @@ final class RefactorCart: PromoCart {
         center.post(name: .init("CheckoutCompleted"), object: nil, userInfo: ["total": total])
         Haruspec.marker("checkout_completed")
         return total
+    }
+
+    private var subtotal: Int {
+        lines.reduce(0) { $0 + $1.price * $1.qty }
     }
 }
 
@@ -134,25 +134,6 @@ final class RoundBugCart: PromoCart {
     }
 }
 
-/// System factories, typed to the protocol so the differential harness sees one system type across the
-/// baseline and each candidate. (An inline `{ GoodCart(...) }` returns a concrete type upcast to the
-/// protocol `S`, which defeats closure-parameter inference — a typed factory is the clean idiom.)
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
-    RefactorCart(center: ctx.notifications)
-}
-
-private func makeOrderBug(_ ctx: SeamContext) -> PromoCart {
-    OrderBugCart(center: ctx.notifications)
-}
-
-private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
-    RoundBugCart(center: ctx.notifications)
-}
-
 /// A minimal SUT that posts to `NotificationCenter.default` directly — with *no* injected center,
 /// exactly like a faithful port of legacy code. `posts: false` models a candidate that never fires.
 final class DefaultPinger {
@@ -196,27 +177,7 @@ final class SilentAnalyticsCart: AnalyticsCart {
     }
 }
 
-private func makeTracking(_ ctx: SeamContext) -> AnalyticsCart {
-    TrackingCart(center: ctx.notifications)
-}
-
-private func makeSilent(_ ctx: SeamContext) -> AnalyticsCart {
-    SilentAnalyticsCart(center: ctx.notifications)
-}
-
 final class SpecPrototypeTests: XCTestCase {
-    /// The entire authored surface — this is all a developer writes. No recorder, interceptor, or context.
-    private func cart() -> Spec<PromoCart> {
-        Spec<PromoCart>("promo-cart")
-            .operations {
-                Op("addCoffee") { cart, seams in
-                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
-                }
-                Op("promo") { $0.applyPromo() }
-                Op("checkout") { _ = $0.checkout() }.last()
-            }
-    }
-
     func testSpecPrototype() async {
         let base = cart().baselined(on: makeGood) // declared order only
         let explored = cart().vary { Ordering(max: 50) }.baselined(on: makeGood) // + call-ordering variation
@@ -261,10 +222,16 @@ final class SpecPrototypeTests: XCTestCase {
         print("=== ARG PARAMETERIZATION END ===")
     }
 
-    /// The spec declares *no* `.observe(...)` allowlist, so capture is all-notifications by default.
-    private func analyticsCart() -> Spec<AnalyticsCart> {
-        Spec<AnalyticsCart>("analytics-cart")
-            .operations { Op("add") { $0.addItem() } }
+    /// The entire authored surface — this is all a developer writes. No recorder, interceptor, or context.
+    private func cart() -> Spec<PromoCart> {
+        Spec<PromoCart>("promo-cart")
+            .operations {
+                Op("addCoffee") { cart, seams in
+                    cart.addItem(priceCents: 999, qty: Int(seams.int("coffeeQty", default: 10)))
+                }
+                Op("promo") { $0.applyPromo() }
+                Op("checkout") { _ = $0.checkout() }.last()
+            }
     }
 
     /// Capture-all default: a channel the spec never listed (`AnalyticsDidTrack`) is still watched,
@@ -307,4 +274,37 @@ final class SpecPrototypeTests: XCTestCase {
             "Comparison.ignoredNotificationNames drops the channel identically"
         )
     }
+
+    /// The spec declares *no* `.observe(...)` allowlist, so capture is all-notifications by default.
+    private func analyticsCart() -> Spec<AnalyticsCart> {
+        Spec<AnalyticsCart>("analytics-cart")
+            .operations { Op("add") { $0.addItem() } }
+    }
+}
+
+/// System factories, typed to the protocol so the differential harness sees one system type across the
+/// baseline and each candidate. (An inline `{ GoodCart(...) }` returns a concrete type upcast to the
+/// protocol `S`, which defeats closure-parameter inference — a typed factory is the clean idiom.)
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
+}
+
+private func makeRefactor(_ ctx: SeamContext) -> PromoCart {
+    RefactorCart(center: ctx.notifications)
+}
+
+private func makeOrderBug(_ ctx: SeamContext) -> PromoCart {
+    OrderBugCart(center: ctx.notifications)
+}
+
+private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
+    RoundBugCart(center: ctx.notifications)
+}
+
+private func makeTracking(_ ctx: SeamContext) -> AnalyticsCart {
+    TrackingCart(center: ctx.notifications)
+}
+
+private func makeSilent(_ ctx: SeamContext) -> AnalyticsCart {
+    SilentAnalyticsCart(center: ctx.notifications)
 }

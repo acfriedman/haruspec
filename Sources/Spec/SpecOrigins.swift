@@ -35,15 +35,6 @@ extension Spec {
         return verdict.audited(against: root)
     }
 
-    /// The subject's own accepted channels joined onto a port's declaration: spec-level facts about
-    /// the baseline's sources, check-site facts about this candidate, one set for the audit to
-    /// resolve.
-    func mergingAcceptances(into intent: Intent) -> Intent {
-        var declared = intent
-        declared.acceptedBlindSpots += acceptedBlindSpots
-        return declared
-    }
-
     /// The reached origins that belong to the *subject* — every traced label minus the collaborators
     /// the run injected through `SeamContext.inject`. Filtered before the verdict ever holds them,
     /// because the origin list IS the audit's denominator ("declared in", the files a completeness
@@ -53,6 +44,15 @@ extension Spec {
     private func subjectOrigins(from collector: OriginCollector) -> [TraceOrigin] {
         let injected = collector.injectedLabels
         return collector.snapshot.filter { !injected.contains($0.label) }
+    }
+
+    /// The subject's own accepted channels joined onto a port's declaration: spec-level facts about
+    /// the baseline's sources, check-site facts about this candidate, one set for the audit to
+    /// resolve.
+    func mergingAcceptances(into intent: Intent) -> Intent {
+        var declared = intent
+        declared.acceptedBlindSpots += acceptedBlindSpots
+        return declared
     }
 }
 

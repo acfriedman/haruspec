@@ -62,6 +62,15 @@ public extension Divergence {
         }
     }
 
+    /// `.only(in: op)` when every case in `group` was recorded under the same op; `nil` when any
+    /// case carries no op or the ops differ — the bare form is then the narrowest provable one.
+    private static func scope(across group: [Divergence]) -> OpScope? {
+        guard let op = group.first?.op?.label, group.allSatisfy({ $0.op?.label == op }) else {
+            return nil
+        }
+        return .only(in: op)
+    }
+
     /// The narrowest relation every mismatch in `group` satisfies, or `nil` when only the bare
     /// field does.
     private static func relation(across group: [Divergence]) -> ValueRelation? {
@@ -93,15 +102,6 @@ public extension Divergence {
             return nil
         }
         return .within(low ... high)
-    }
-
-    /// `.only(in: op)` when every case in `group` was recorded under the same op; `nil` when any
-    /// case carries no op or the ops differ — the bare form is then the narrowest provable one.
-    private static func scope(across group: [Divergence]) -> OpScope? {
-        guard let op = group.first?.op?.label, group.allSatisfy({ $0.op?.label == op }) else {
-            return nil
-        }
-        return .only(in: op)
     }
 
     /// One declaration text for this divergence's kind and label, with the modifiers given.

@@ -42,18 +42,18 @@ final class WaitingCatalog: Catalog, @unchecked Sendable {
         self.center = center
     }
 
-    /// The everyday async bridge over a queue.
-    func fetch() async -> Int {
-        await withCheckedContinuation { continuation in
-            queue.async { continuation.resume(returning: 42) }
-        }
-    }
-
     /// A spawned task awaiting work queued after it.
     func refresh() {
         spawner.spawn { [self] in
             let count = await fetch()
             center.post(name: .init("CatalogRefreshed"), object: nil, userInfo: ["count": count])
+        }
+    }
+
+    /// The everyday async bridge over a queue.
+    func fetch() async -> Int {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: 42) }
         }
     }
 
@@ -82,33 +82,6 @@ final class HeldWorkWaitTests: XCTestCase {
     private final class Box: @unchecked Sendable {
         var context: SeamContext?
         var messages: [String] = []
-    }
-
-    /// Runs one capture of `operation`, returning each stall message the watchdog reported.
-    private func stalls(_ label: String, _ operation: @escaping (any Catalog) async -> Void) async -> [String] {
-        let box = Box()
-        let spec = Spec<any Catalog>("catalog.waits").operations { Op(label) { await operation($0) } }
-        let onStall: @Sendable (String) -> Void = { message in
-            box.messages.append(message)
-            Task { await box.context?.backlog.drain(recorder: nil) }
-        }
-        await HeldWorkWatchdog.$stallLimit.withValue(0.3) {
-            await HeldWorkWatchdog.$onStall.withValue(onStall) {
-                _ = await spec.captured(
-                    make: { context in
-                        box.context = context
-                        return WaitingCatalog(
-                            queue: context.double(DoubleCatalogQueue.self),
-                            spawner: context.double(DoubleCatalogSpawner.self),
-                            center: context.notifications
-                        )
-                    },
-                    order: spec.operations,
-                    cassette: Cassette()
-                )
-            }
-        }
-        return box.messages
     }
 
     func testAnOperationAwaitingAContinuationQueuedWorkResumesIsCaught() async throws {
@@ -161,5 +134,32 @@ final class HeldWorkWaitTests: XCTestCase {
         let messages = await stalls("prefetch") { $0.prefetch() }
 
         XCTAssertEqual(messages, [])
+    }
+
+    /// Runs one capture of `operation`, returning each stall message the watchdog reported.
+    private func stalls(_ label: String, _ operation: @escaping (any Catalog) async -> Void) async -> [String] {
+        let box = Box()
+        let spec = Spec<any Catalog>("catalog.waits").operations { Op(label) { await operation($0) } }
+        let onStall: @Sendable (String) -> Void = { message in
+            box.messages.append(message)
+            Task { await box.context?.backlog.drain(recorder: nil) }
+        }
+        await HeldWorkWatchdog.$stallLimit.withValue(0.3) {
+            await HeldWorkWatchdog.$onStall.withValue(onStall) {
+                _ = await spec.captured(
+                    make: { context in
+                        box.context = context
+                        return WaitingCatalog(
+                            queue: context.double(DoubleCatalogQueue.self),
+                            spawner: context.double(DoubleCatalogSpawner.self),
+                            center: context.notifications
+                        )
+                    },
+                    order: spec.operations,
+                    cassette: Cassette()
+                )
+            }
+        }
+        return box.messages
     }
 }

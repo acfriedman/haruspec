@@ -4,14 +4,6 @@ import HaruspecSeams
 @testable import HaruspecSpec
 import XCTest
 
-// The plan artifact's file-layer guarantees: gzip round-trip (a committed multi-MB plan shrinks to
-// hundreds of KB without touching replay semantics), content-sniffed decompression, deterministic
-// archives, and the schemaVersion gate that keeps a stale artifact from replaying with confidence.
-
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
 final class SpecPlanArtifactTests: XCTestCase {
     private func cart() -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.artifact")
@@ -133,4 +125,12 @@ final class SpecPlanArtifactTests: XCTestCase {
             )
         }
     }
+}
+
+// The plan artifact's file-layer guarantees: gzip round-trip (a committed multi-MB plan shrinks to
+// hundreds of KB without touching replay semantics), content-sniffed decompression, deterministic
+// archives, and the schemaVersion gate that keeps a stale artifact from replaying with confidence.
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
 }

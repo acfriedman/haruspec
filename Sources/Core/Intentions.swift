@@ -48,14 +48,6 @@ public enum DomainName: Sendable, Equatable {
         }
     }
 
-    /// `actor:SwiftCartActor#3` → `actor:SwiftCartActor`; everything else unchanged.
-    static func droppingInstance(_ description: String) -> String {
-        guard description.hasPrefix("actor:"), let hash = description.lastIndex(of: "#") else {
-            return description
-        }
-        return String(description[..<hash])
-    }
-
     /// The declaration spelling — `.queue("com.emporium.cart")`.
     ///
     /// Used by unobserved-intent warnings, grammar errors, and the report's suggested
@@ -86,6 +78,14 @@ public enum DomainName: Sendable, Equatable {
             guard recorded.hasPrefix("actor:") else { return nil }
             self = .actor(String(Self.droppingInstance(recorded).dropFirst("actor:".count)))
         }
+    }
+
+    /// `actor:SwiftCartActor#3` → `actor:SwiftCartActor`; everything else unchanged.
+    static func droppingInstance(_ description: String) -> String {
+        guard description.hasPrefix("actor:"), let hash = description.lastIndex(of: "#") else {
+            return description
+        }
+        return String(description[..<hash])
     }
 }
 

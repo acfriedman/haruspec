@@ -20,10 +20,6 @@ public final class CartServiceV2: CartService {
         self.issuer = issuer
     }
 
-    private var lineCount: Int {
-        order.count
-    }
-
     public func addItem(sku: String, unitPriceCents: Int, quantity: Int) {
         if lines[sku] == nil {
             order.append(sku)
@@ -67,5 +63,9 @@ public final class CartServiceV2: CartService {
         // this variant's internals (and type name) are fully restructured.
         Haruspec.marker("checkout_completed")
         return receipt
+    }
+
+    private var lineCount: Int {
+        order.count
     }
 }

@@ -4,18 +4,6 @@ import HaruspecSeams
 import HaruspecSpec
 import XCTest
 
-// The CI harness over record/replay: that the environment contract is honored exactly (a selected mode
-// with a missing destination is a hard failure, an absent mode disables the suite), and that each side
-// writes the artifacts CI gates on with a `succeeded` that tracks the verdict.
-
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
-    RoundBugCart(center: ctx.notifications)
-}
-
 final class ContinuousRunTests: XCTestCase {
     private func scratch() -> URL {
         FileManager.default.temporaryDirectory
@@ -313,6 +301,10 @@ final class ContinuousRunTests: XCTestCase {
     }
 }
 
+private func makeRoundBug(_ ctx: SeamContext) -> PromoCart {
+    RoundBugCart(center: ctx.notifications)
+}
+
 /// The spec every case drives, apart from the class body so the body stays readable.
 private extension ContinuousRunTests {
     func cart(
@@ -373,4 +365,12 @@ extension ContinuousRunTests {
         XCTAssertTrue(outcome.succeeded)
         XCTAssertNil(outcome.artifactPath)
     }
+}
+
+// The CI harness over record/replay: that the environment contract is honored exactly (a selected mode
+// with a missing destination is a hard failure, an absent mode disables the suite), and that each side
+// writes the artifacts CI gates on with a `succeeded` that tracks the verdict.
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
 }

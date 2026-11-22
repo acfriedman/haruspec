@@ -25,15 +25,6 @@ final class ConcurrencyDomainTests: XCTestCase {
     }
 
     @MainActor
-    private func recordOnMain(_ recorder: TraceRecorder) {
-        recorder.marker("onMain")
-    }
-
-    private func domains(of recorder: TraceRecorder) -> [String: ConcurrencyDomain] {
-        Dictionary(uniqueKeysWithValues: recorder.trace().events.map { ($0.label, $0.domain) })
-    }
-
-    @MainActor
     func testResolvesMainActorAndActorInstances() async {
         let recorder = TraceRecorder(name: "domains")
         recordOnMain(recorder)
@@ -44,6 +35,11 @@ final class ConcurrencyDomainTests: XCTestCase {
         // Nominal type, not a scheduling artifact — the actor runs on the cooperative pool, which the
         // label rung would have reported as `ambient`.
         XCTAssertEqual(byLabel["Ledger.post"], .actor("Ledger", instance: 1))
+    }
+
+    @MainActor
+    private func recordOnMain(_ recorder: TraceRecorder) {
+        recorder.marker("onMain")
     }
 
     /// Two instances of one actor type are distinct domains, numbered by the same symbolic-identity
@@ -73,6 +69,10 @@ final class ConcurrencyDomainTests: XCTestCase {
         let byLabel = domains(of: recorder)
         XCTAssertEqual(byLabel["checkout-work"], .queue("com.emporium.checkout", serial: true))
         XCTAssertEqual(byLabel["analytics-work"], .queue("com.emporium.analytics", serial: true))
+    }
+
+    private func domains(of recorder: TraceRecorder) -> [String: ConcurrencyDomain] {
+        Dictionary(uniqueKeysWithValues: recorder.trace().events.map { ($0.label, $0.domain) })
     }
 
     /// Work the runtime scheduled with nothing nominal to key on is `.ambient` — explicitly unordered,

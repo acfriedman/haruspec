@@ -47,10 +47,6 @@ final class RestructuredLedger: AuditedLedger {
         self.center = center
     }
 
-    private var cents: Int {
-        entries.reduce(0, +)
-    }
-
     func add(cents: Int) {
         entries.append(cents)
         center.post(name: .init("LedgerChanged"), object: nil, userInfo: ["total": self.cents])
@@ -59,6 +55,10 @@ final class RestructuredLedger: AuditedLedger {
     func total() -> Int {
         center.post(name: .init("LedgerRead"), object: nil, userInfo: ["total": cents])
         return cents
+    }
+
+    private var cents: Int {
+        entries.reduce(0, +)
     }
 }
 

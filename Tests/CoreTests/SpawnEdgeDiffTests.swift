@@ -10,32 +10,7 @@ import XCTest
 /// becoming `await` deletes the edge while *strengthening* the ordering, and calling that a loss
 /// would make the pass red on exactly the migration it serves.
 final class SpawnEdgeDiffTests: XCTestCase {
-    private func event(
-        _ seq: Int,
-        _ label: String,
-        on domain: ConcurrencyDomain,
-        spawnedBy: Int? = nil
-    ) -> TraceEvent {
-        TraceEvent(
-            seq: seq,
-            kind: .effect,
-            label: label,
-            domain: domain,
-            payload: ["value": 1],
-            tier: .semantic,
-            spawnedBy: spawnedBy
-        )
-    }
-
-    private func trace(_ name: String, _ events: [TraceEvent]) -> Trace {
-        Trace(name: name, events: events)
-    }
-
     private let cart = ConcurrencyDomain.queue("com.emporium.cart", serial: true)
-
-    private func edgeDivergences(_ diff: TraceDiff) -> [Divergence] {
-        diff.divergences.filter { $0.kind == .orderingLost || $0.kind == .orderingAdded }
-    }
 
     /// Same edge on both sides: nothing to say.
     func testAPreservedEdgeIsNoDivergence() {
@@ -233,5 +208,30 @@ final class SpawnEdgeDiffTests: XCTestCase {
 
         XCTAssertEqual(edgeDivergences(diff).map(\.kind), [.orderingLost])
         XCTAssertEqual(edgeDivergences(diff).first?.label, "Inventory.reserve")
+    }
+
+    private func trace(_ name: String, _ events: [TraceEvent]) -> Trace {
+        Trace(name: name, events: events)
+    }
+
+    private func event(
+        _ seq: Int,
+        _ label: String,
+        on domain: ConcurrencyDomain,
+        spawnedBy: Int? = nil
+    ) -> TraceEvent {
+        TraceEvent(
+            seq: seq,
+            kind: .effect,
+            label: label,
+            domain: domain,
+            payload: ["value": 1],
+            tier: .semantic,
+            spawnedBy: spawnedBy
+        )
+    }
+
+    private func edgeDivergences(_ diff: TraceDiff) -> [Divergence] {
+        diff.divergences.filter { $0.kind == .orderingLost || $0.kind == .orderingAdded }
     }
 }

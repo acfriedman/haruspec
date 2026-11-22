@@ -46,6 +46,9 @@ final class IsolatedOpTests: XCTestCase {
     }
 }
 
+@MainActor
+private func applyOnMain(_: PromoCart) async {}
+
 /// Carries a non-`Sendable` op out of the main actor for inspection.
 private struct Carried<T>: @unchecked Sendable {
     let value: T
@@ -66,6 +69,3 @@ private struct MainActorSpec {
         Carried(value: DerivedOp("add") { _, _ in })
     }
 }
-
-@MainActor
-private func applyOnMain(_: PromoCart) async {}

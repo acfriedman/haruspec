@@ -308,35 +308,6 @@ extension Spec {
         )
     }
 
-    /// The green exit: every replayable probe held. Coverage decides whether that EQUIVALENT can be
-    /// trusted — unreplayable ops or seam misses anywhere downgrade it to CANNOT-VERIFY. Zero
-    /// replayable probes observed nothing, so the classified empty diff reads back the whole
-    /// declaration list as unobserved.
-    private func heldReplayVerdict(
-        diff: TraceDiff,
-        replays: [Cassette],
-        surface: ReplaySurface<S>,
-        plan: SpecPlan,
-        observations: [IntentObservation]
-    ) -> SpecVerdict {
-        let coverage = coverage(
-            replays: replays,
-            domainHeld: true,
-            declaredOps: surface.planOps,
-            missingOps: surface.missingOps,
-            sweptSeams: plan.variedSeams
-        )
-        return SpecVerdict(
-            result: VerificationResult(diff: diff, coverage: coverage),
-            orderingsExplored: surface.exploration.orderingsExplored,
-            failingOrder: nil,
-            counterexample: nil,
-            exploration: surface.exploration,
-            qualification: surface.qualification,
-            intentObservations: observations
-        )
-    }
-
     /// The red exit: pins the reported failing case — the richest of the sweep — and carries the rest.
     ///
     /// Makes no unobserved-intent claim: the reported diff is one case's, and a declaration it did
@@ -367,6 +338,35 @@ extension Spec {
                 ? preconditionViolations(in: probe.ordering)
                 : nil,
             failingCases: failingCases,
+            intentObservations: observations
+        )
+    }
+
+    /// The green exit: every replayable probe held. Coverage decides whether that EQUIVALENT can be
+    /// trusted — unreplayable ops or seam misses anywhere downgrade it to CANNOT-VERIFY. Zero
+    /// replayable probes observed nothing, so the classified empty diff reads back the whole
+    /// declaration list as unobserved.
+    private func heldReplayVerdict(
+        diff: TraceDiff,
+        replays: [Cassette],
+        surface: ReplaySurface<S>,
+        plan: SpecPlan,
+        observations: [IntentObservation]
+    ) -> SpecVerdict {
+        let coverage = coverage(
+            replays: replays,
+            domainHeld: true,
+            declaredOps: surface.planOps,
+            missingOps: surface.missingOps,
+            sweptSeams: plan.variedSeams
+        )
+        return SpecVerdict(
+            result: VerificationResult(diff: diff, coverage: coverage),
+            orderingsExplored: surface.exploration.orderingsExplored,
+            failingOrder: nil,
+            counterexample: nil,
+            exploration: surface.exploration,
+            qualification: surface.qualification,
             intentObservations: observations
         )
     }

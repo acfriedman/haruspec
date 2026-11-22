@@ -59,22 +59,6 @@ final class MovedWriteJournal: Journal, @unchecked Sendable {
 // MARK: - Tests
 
 final class NamedQueueTests: XCTestCase {
-    private func context() -> SeamContext {
-        SeamContext(notifications: NotificationCenter(), cassette: Cassette())
-    }
-
-    private var journal: BaselinedSpec<any Journal> {
-        Spec<any Journal>("journal.named")
-            .operations { Op("save") { $0.save("a") } }
-            .baselined { context in
-                TwoQueueJournal(
-                    state: context.double(DoubleJournalQueue.self, label: "state"),
-                    disk: context.double(DoubleJournalQueue.self, label: "io"),
-                    center: context.notifications
-                )
-            }
-    }
-
     func testNamedQueuesAreEquivalentToThemselves() async {
         let verdict = await journal.verify { context in
             TwoQueueJournal(
@@ -101,6 +85,18 @@ final class NamedQueueTests: XCTestCase {
             verdict.report().contains("Written: ran on a different domain (queue(serial):io → queue(serial):state)"),
             verdict.report()
         )
+    }
+
+    private var journal: BaselinedSpec<any Journal> {
+        Spec<any Journal>("journal.named")
+            .operations { Op("save") { $0.save("a") } }
+            .baselined { context in
+                TwoQueueJournal(
+                    state: context.double(DoubleJournalQueue.self, label: "state"),
+                    disk: context.double(DoubleJournalQueue.self, label: "io"),
+                    center: context.notifications
+                )
+            }
     }
 
     func testAnUnnamedQueueStillRecordsAsItsProtocol() async {
@@ -134,5 +130,9 @@ final class NamedQueueTests: XCTestCase {
         XCTAssertTrue(queues.contains("a HeldOperationQueue and a HeldOperationQueue"), queues)
         XCTAssertTrue(schedulers.contains(#"context.scheduler(.serial("io"))"#), schedulers)
         XCTAssertTrue(schedulers.contains("a HeldScheduler and a HeldScheduler"), schedulers)
+    }
+
+    private func context() -> SeamContext {
+        SeamContext(notifications: NotificationCenter(), cassette: Cassette())
     }
 }

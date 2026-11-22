@@ -12,12 +12,12 @@ final class WorkBacklogTests: XCTestCase {
     /// Stands in for a scheduling double: the identity `sync` drains by.
     private final class Queue {}
 
-    private func events(_ recorder: TraceRecorder) -> [TraceEvent] {
-        recorder.trace().events
-    }
-
     private func labels(_ recorder: TraceRecorder) -> [String] {
         events(recorder).map(\.label)
+    }
+
+    private func events(_ recorder: TraceRecorder) -> [TraceEvent] {
+        recorder.trace().events
     }
 
     // MARK: Holding and draining

@@ -58,11 +58,6 @@ public struct ArgumentDomain<T> {
         return copy
     }
 
-    /// `<op>.<name-or-position>` — synthesized, so there is no second place to keep it in sync.
-    func key(for label: String, at position: Int) -> String {
-        "\(label).\(name ?? String(position))"
-    }
-
     func read(_ seams: SeamContext, seam: String) -> T {
         decode(seams, seam)
     }
@@ -76,6 +71,11 @@ public struct ArgumentDomain<T> {
         case let .generated(fields, _):
             fields.map { (seam: $0.key, domain: $0.value) }.sorted { $0.seam < $1.seam }
         }
+    }
+
+    /// `<op>.<name-or-position>` — synthesized, so there is no second place to keep it in sync.
+    func key(for label: String, at position: Int) -> String {
+        "\(label).\(name ?? String(position))"
     }
 
     /// The factory to register for a generated argument, `nil` for a scalar.
@@ -215,6 +215,20 @@ public extension Op {
         declare(third, key: keys[2])
     }
 
+    /// Two arguments of one op cannot share a name: they would read the same track, and the second
+    /// would consume a cursor the first advanced. (A generated argument reads no op-scoped track;
+    /// its position holds a synthesized key nothing consumes.)
+    private static func keys(_ label: String, _ names: [String?]) -> [String] {
+        let keys = names.enumerated().map { position, name in
+            "\(label).\(name ?? String(position))"
+        }
+        precondition(
+            Set(keys).count == keys.count,
+            "\(label) declares two arguments with the same name — they would share one seam track"
+        )
+        return keys
+    }
+
     /// Folds one argument into the op's declared surface: a scalar owns its synthesized key; a
     /// generated model contributes its type-scoped field domains and the factory that builds it.
     private mutating func declare(_ argument: ArgumentDomain<some Any>, key: String) {
@@ -228,19 +242,5 @@ public extension Op {
                 argumentMakers.append((type: maker.type, make: maker.make))
             }
         }
-    }
-
-    /// Two arguments of one op cannot share a name: they would read the same track, and the second
-    /// would consume a cursor the first advanced. (A generated argument reads no op-scoped track;
-    /// its position holds a synthesized key nothing consumes.)
-    private static func keys(_ label: String, _ names: [String?]) -> [String] {
-        let keys = names.enumerated().map { position, name in
-            "\(label).\(name ?? String(position))"
-        }
-        precondition(
-            Set(keys).count == keys.count,
-            "\(label) declares two arguments with the same name — they would share one seam track"
-        )
-        return keys
     }
 }

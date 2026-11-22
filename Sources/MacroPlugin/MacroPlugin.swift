@@ -5,16 +5,16 @@ import SwiftSyntaxMacros
 
 // MARK: - Shared instrumentation emitter
 
+/// `originArguments` for a symbol known at expansion time.
+func originArguments(label: String, symbol: String?, sourceExpression: String?) -> String {
+    originArguments(label: label, symbolExpression: symbol.map(literalString), sourceExpression: sourceExpression)
+}
+
 /// The `noteOrigin` argument list an instrumented body registers itself with. `symbolExpression` and
 /// `sourceExpression` are already Swift expressions — a string literal, a `#fileID` literal from the
 /// expansion context, a runtime `type(of:)` read — or nil where there is nothing to point at.
 func originArguments(label: String, symbolExpression: String?, sourceExpression: String?) -> String {
     "\(literalString(label)), symbol: \(symbolExpression ?? "nil"), source: \(sourceExpression ?? "nil")"
-}
-
-/// `originArguments` for a symbol known at expansion time.
-func originArguments(label: String, symbol: String?, sourceExpression: String?) -> String {
-    originArguments(label: label, symbolExpression: symbol.map(literalString), sourceExpression: sourceExpression)
 }
 
 /// Builds the `call`/`ret` instrumented body shared by the forwarder and the double.

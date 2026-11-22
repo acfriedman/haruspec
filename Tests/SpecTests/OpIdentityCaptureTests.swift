@@ -32,10 +32,6 @@ final class OpIdentityCaptureTests: XCTestCase {
         }
     }
 
-    private static func makeSubject(_ context: SeamContext) -> Subject {
-        Subject(queue: context.double(DoubleOpsQueue.self))
-    }
-
     func testEventsCarryTheOpTheyWereRecordedUnderAcrossTheQueueHop() async {
         let spec = Spec<Subject>("ops")
             .operations {
@@ -82,5 +78,9 @@ final class OpIdentityCaptureTests: XCTestCase {
         let trace = await spec.capture(make: Self.makeSubject, order: order, cassette: Cassette())
         let positions = trace.events.filter { $0.label == "act-sync" }.map(\.op?.position)
         XCTAssertEqual(positions, [0, 1])
+    }
+
+    private static func makeSubject(_ context: SeamContext) -> Subject {
+        Subject(queue: context.double(DoubleOpsQueue.self))
     }
 }

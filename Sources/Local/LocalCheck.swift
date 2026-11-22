@@ -159,6 +159,37 @@ public struct LocalCheck: Sendable {
         return (ended, replaying)
     }
 
+    /// Decides whether `marker`'s spec is part of this change's slice, recording its baseline first
+    /// when no recording of it says which files it covers.
+    ///
+    /// - Parameters:
+    ///   - marker: The spec and its hosting suite.
+    ///   - changed: Repo-relative files changed since the merge base.
+    ///   - all: Whether every spec is in the slice regardless of coverage.
+    ///   - base: The merge base's side, which records into the cache.
+    /// - Returns: `nil` to replay the spec, or the result that ends its check — untouched, or no
+    ///   baseline.
+    /// - Throws: The errors of preparing and recording the base.
+    private func scope(
+        _ marker: CensusMarker,
+        changed: Set<String>,
+        all: Bool,
+        base: inout BaseSide
+    ) throws -> LocalCheckOutcome.SpecResult? {
+        // Coverage from an older base predicts the slice before paying for a recording at this one.
+        if !all, let scope = base.scope(of: marker.spec), scope.files.isDisjoint(with: changed) {
+            return .untouched(recordedAt: scope.recordedAt)
+        }
+        if !FileManager.default.fileExists(atPath: base.plan(for: marker.spec).path),
+           let ended = try base.record(marker) {
+            return ended
+        }
+        if !all, let scope = base.scope(of: marker.spec), scope.files.isDisjoint(with: changed) {
+            return .untouched(recordedAt: scope.recordedAt)
+        }
+        return nil
+    }
+
     /// Writes `outcome`'s verdicts into the intent doc as evidence, when that changes the file.
     ///
     /// - Parameters:
@@ -189,37 +220,6 @@ public struct LocalCheck: Sendable {
             sources.contains((path as NSString).pathExtension)
                 && RecordedCoverage.expandingHeaders([path]).isDisjoint(with: guarded)
         }.sorted()
-    }
-
-    /// Decides whether `marker`'s spec is part of this change's slice, recording its baseline first
-    /// when no recording of it says which files it covers.
-    ///
-    /// - Parameters:
-    ///   - marker: The spec and its hosting suite.
-    ///   - changed: Repo-relative files changed since the merge base.
-    ///   - all: Whether every spec is in the slice regardless of coverage.
-    ///   - base: The merge base's side, which records into the cache.
-    /// - Returns: `nil` to replay the spec, or the result that ends its check — untouched, or no
-    ///   baseline.
-    /// - Throws: The errors of preparing and recording the base.
-    private func scope(
-        _ marker: CensusMarker,
-        changed: Set<String>,
-        all: Bool,
-        base: inout BaseSide
-    ) throws -> LocalCheckOutcome.SpecResult? {
-        // Coverage from an older base predicts the slice before paying for a recording at this one.
-        if !all, let scope = base.scope(of: marker.spec), scope.files.isDisjoint(with: changed) {
-            return .untouched(recordedAt: scope.recordedAt)
-        }
-        if !FileManager.default.fileExists(atPath: base.plan(for: marker.spec).path),
-           let ended = try base.record(marker) {
-            return ended
-        }
-        if !all, let scope = base.scope(of: marker.spec), scope.files.isDisjoint(with: changed) {
-            return .untouched(recordedAt: scope.recordedAt)
-        }
-        return nil
     }
 
     /// Builds the working tree once and replays each spec's own suite against it.

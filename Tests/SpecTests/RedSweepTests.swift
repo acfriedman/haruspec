@@ -40,15 +40,21 @@ private final class LoudAndQuietBugCart: PromoCart {
     }
 }
 
-private func makeGood(_ ctx: SeamContext) -> PromoCart {
-    GoodCart(center: ctx.notifications)
-}
-
-private func makeLoudAndQuiet(_ ctx: SeamContext) -> PromoCart {
-    LoudAndQuietBugCart(center: ctx.notifications)
-}
-
 final class RedSweepTests: XCTestCase {
+    func testALoudBugDoesNotHideAQuietOne() async throws {
+        let verdict = await cart().verify(candidate: makeLoudAndQuiet)
+        XCTAssertEqual(verdict.verdict, .diverged)
+
+        let cases = try XCTUnwrap(verdict.failingCases, "a live red carries every failing case")
+        let found = verdict.diff.divergences + cases.unreported(beside: verdict.diff.divergences)
+        XCTAssertTrue(found.contains { $0.label == "CartChanged" }, "the loud bug")
+        XCTAssertTrue(found.contains { $0.label == "CheckoutCompleted" }, "the quiet bug, behind the loud one")
+
+        let report = verdict.report()
+        XCTAssertTrue(report.contains("CartChanged"), report)
+        XCTAssertTrue(report.contains("CheckoutCompleted"), report)
+    }
+
     private func cart() -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.red-sweep")
             .operations {
@@ -63,20 +69,6 @@ final class RedSweepTests: XCTestCase {
                 Ordering(max: 10)
             }
             .baselined(on: makeGood)
-    }
-
-    func testALoudBugDoesNotHideAQuietOne() async throws {
-        let verdict = await cart().verify(candidate: makeLoudAndQuiet)
-        XCTAssertEqual(verdict.verdict, .diverged)
-
-        let cases = try XCTUnwrap(verdict.failingCases, "a live red carries every failing case")
-        let found = verdict.diff.divergences + cases.unreported(beside: verdict.diff.divergences)
-        XCTAssertTrue(found.contains { $0.label == "CartChanged" }, "the loud bug")
-        XCTAssertTrue(found.contains { $0.label == "CheckoutCompleted" }, "the quiet bug, behind the loud one")
-
-        let report = verdict.report()
-        XCTAssertTrue(report.contains("CartChanged"), report)
-        XCTAssertTrue(report.contains("CheckoutCompleted"), report)
     }
 
     func testOtherCasesListEachFindingOnceAndSkipWhatTheReportedCaseShows() {
@@ -115,4 +107,12 @@ final class RedSweepTests: XCTestCase {
         XCTAssertEqual(others.map(\.label), ["CheckoutCompleted"], "one line per finding, values aside")
         XCTAssertEqual(others.first?.candidateValue, .int(1), "the first case's example is kept")
     }
+}
+
+private func makeLoudAndQuiet(_ ctx: SeamContext) -> PromoCart {
+    LoudAndQuietBugCart(center: ctx.notifications)
+}
+
+private func makeGood(_ ctx: SeamContext) -> PromoCart {
+    GoodCart(center: ctx.notifications)
 }

@@ -36,6 +36,18 @@ struct CompletionBlock {
         let type: String
     }
 
+    /// Returns the internal names of `function`'s parameters whose values a `call` records. A
+    /// completion block is not an argument value: its delivery is recorded as its own event.
+    ///
+    /// - Parameter function: A protocol method requirement.
+    /// - Returns: Every parameter's internal name, in order, except the completion block's.
+    static func recordedArgumentNames(of function: FunctionDeclSyntax) -> [String] {
+        let completion = of(function)?.name
+        return function.signature.parameterClause.parameters
+            .map { ($0.secondName ?? $0.firstName).text }
+            .filter { $0 != completion }
+    }
+
     /// Returns the completion block of `function`, or `nil` when it takes none.
     ///
     /// - Parameter function: A protocol method requirement.
@@ -63,44 +75,6 @@ struct CompletionBlock {
             localType: spelledWithoutEscaping(last.type),
             arguments: arguments
         )
-    }
-
-    /// Returns the internal names of `function`'s parameters whose values a `call` records. A
-    /// completion block is not an argument value: its delivery is recorded as its own event.
-    ///
-    /// - Parameter function: A protocol method requirement.
-    /// - Returns: Every parameter's internal name, in order, except the completion block's.
-    static func recordedArgumentNames(of function: FunctionDeclSyntax) -> [String] {
-        let completion = of(function)?.name
-        return function.signature.parameterClause.parameters
-            .map { ($0.secondName ?? $0.firstName).text }
-            .filter { $0 != completion }
-    }
-
-    /// The block's bound argument names inside a recording closure: `__b0, __b1, …`.
-    var boundNames: [String] {
-        arguments.indices.map { "__b\($0)" }
-    }
-
-    /// Returns the statements that record one delivery and run `deliver` between its two events.
-    ///
-    /// - Parameters:
-    ///   - eventLabel: The delivery's label, `"<label>.<method>.<block>"`.
-    ///   - deliver: The statement that runs the block, with the arguments bound as ``boundNames``.
-    /// - Returns: The statements, newline-separated; they read `__oracle` and `self` from the
-    ///   enclosing method.
-    func recordedDelivery(eventLabel: String, deliver: String) -> String {
-        let label = quotedLiteral(eventLabel)
-        let payload = arguments.isEmpty ? "" : ", args: ["
-            + zip(arguments, boundNames)
-            .map { "\(quotedLiteral($0.key)): RuntimeValue.canonical(\($1) as Any)" }
-            .joined(separator: ", ")
-            + "]"
-        return [
-            "__oracle?.call(\(label), subject: self\(payload))",
-            deliver,
-            "__oracle?.ret(\(label), subject: self)"
-        ].joined(separator: "\n")
     }
 
     /// Strips attributes (`@escaping`, `@Sendable`), optionality, and wrapping parentheses down to a
@@ -136,19 +110,32 @@ struct CompletionBlock {
         let spelled = type.trimmedDescription
         return spelled == "Void" || spelled == "()"
     }
-}
 
-/// Whether a block argument's type is the Cocoa error slot: an optional `Error` or `NSError`.
-///
-/// - Parameter type: The block argument's spelled type.
-/// - Returns: `true` for `(any Error)?`, `Error?`, `NSError?`, and their implicitly unwrapped forms.
-func isErrorSlot(_ type: String) -> Bool {
-    guard type.hasSuffix("?") || type.hasSuffix("!") else { return false }
-    var bare = String(type.dropLast())
-    if bare.hasPrefix("("), bare.hasSuffix(")") {
-        bare = String(bare.dropFirst().dropLast())
+    /// Returns the statements that record one delivery and run `deliver` between its two events.
+    ///
+    /// - Parameters:
+    ///   - eventLabel: The delivery's label, `"<label>.<method>.<block>"`.
+    ///   - deliver: The statement that runs the block, with the arguments bound as ``boundNames``.
+    /// - Returns: The statements, newline-separated; they read `__oracle` and `self` from the
+    ///   enclosing method.
+    func recordedDelivery(eventLabel: String, deliver: String) -> String {
+        let label = quotedLiteral(eventLabel)
+        let payload = arguments.isEmpty ? "" : ", args: ["
+            + zip(arguments, boundNames)
+            .map { "\(quotedLiteral($0.key)): RuntimeValue.canonical(\($1) as Any)" }
+            .joined(separator: ", ")
+            + "]"
+        return [
+            "__oracle?.call(\(label), subject: self\(payload))",
+            deliver,
+            "__oracle?.ret(\(label), subject: self)"
+        ].joined(separator: "\n")
     }
-    return ["any Error", "Error", "NSError"].contains(bare)
+
+    /// The block's bound argument names inside a recording closure: `__b0, __b1, …`.
+    var boundNames: [String] {
+        arguments.indices.map { "__b\($0)" }
+    }
 }
 
 /// Returns `type` spelled without its `@escaping` attribute, which describes a parameter rather than
@@ -166,4 +153,17 @@ func spelledWithoutEscaping(_ type: TypeSyntax) -> String {
     let specifiers = attributed.specifiers.map(\.trimmedDescription)
     return (specifiers + kept.map(\.trimmedDescription) + [attributed.baseType.trimmedDescription])
         .joined(separator: " ")
+}
+
+/// Whether a block argument's type is the Cocoa error slot: an optional `Error` or `NSError`.
+///
+/// - Parameter type: The block argument's spelled type.
+/// - Returns: `true` for `(any Error)?`, `Error?`, `NSError?`, and their implicitly unwrapped forms.
+func isErrorSlot(_ type: String) -> Bool {
+    guard type.hasSuffix("?") || type.hasSuffix("!") else { return false }
+    var bare = String(type.dropLast())
+    if bare.hasPrefix("("), bare.hasSuffix(")") {
+        bare = String(bare.dropFirst().dropLast())
+    }
+    return ["any Error", "Error", "NSError"].contains(bare)
 }
