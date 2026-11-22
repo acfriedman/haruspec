@@ -11,10 +11,9 @@ concurrency:
 
 jobs:
   test:
-    # self-hosted while the repo is private (free-tier minutes exhausted; macOS burns
-    # them at 10x). Flip to macos-15 in the SAME commit that makes the repo public —
-    # a self-hosted runner on a public repo executes fork PRs on the host machine.
-    runs-on: self-hosted
+    # GitHub-hosted: the repo is public, and a self-hosted runner would execute
+    # fork PRs on the host machine.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Run engine tests
