@@ -37,9 +37,6 @@ Paths are relative to the root of this repository (`haruspec/`):
 `LegacyAppTests/`, real plans in `HaruspecPlans/`. Cite it only where the engine has no equivalent, since
 the staleness routine has to clone it to check those sources.
 
-Background, never a source: `haruspec-proj-mgmt/planning/` (design cards and `glossary.md`) and the
-contributor series in `haruspec-proj-mgmt/explainers/`. Read them for the reasons; cite the engine.
-
 ## House rules
 
 - **Only what ships.** No roadmap, no proposals, nothing unbuilt. A gap is stated as a gap, in the
