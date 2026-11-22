@@ -1,40 +1,69 @@
 #!/bin/sh
-# Auto-formats staged Swift files and blocks the commit only on real SwiftLint
-# errors (warnings are printed but never block — matches the Xcode build-phase
-# policy in example-xcode-migration). Enable with:
-#   git config core.hooksPath .githooks
+# Holds each commit to the repository's own style. SwiftStepdown reorders the staged Swift files so each
+# helper sits below the code that uses it, and SwiftFormat formats them; both results are staged. Then
+# SwiftLucid lints the doc comments the commit adds or changes, tests included, and SwiftLint lints the
+# staged files. An error from either stops the commit; warnings print without blocking. Enable it once
+# per clone with `git config core.hooksPath .githooks`; `git commit --no-verify` skips it.
+#
+# SwiftLucid and SwiftStepdown are pinned in BuildTools and run as built binaries, rebuilt only when
+# missing or older than the pin, since even an up-to-date `swift run` spends a second or two checking.
+# SwiftFormat and SwiftLint come from Homebrew (`brew install swiftformat swiftlint`) and are skipped,
+# with a note, where missing.
 
-REPO_ROOT=$(git rev-parse --show-toplevel)
-cd "$REPO_ROOT" || exit 1
+cd "$(git rev-parse --show-toplevel)" || exit 1
 export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 
-# The staged list lives in a file, not a variable: command substitution strips
-# the NUL separators, which would concatenate every path into one bad argument.
-STAGED_LIST=$(mktemp)
-trap 'rm -f "$STAGED_LIST"' EXIT
-git diff --cached --name-only --diff-filter=ACMR -z -- '*.swift' >"$STAGED_LIST"
+tools=BuildTools/.build/release
 
-if [ ! -s "$STAGED_LIST" ]; then
-    exit 0
-fi
-
-if command -v swiftformat >/dev/null 2>&1; then
-    if ! xargs -0 swiftformat --quiet <"$STAGED_LIST"; then
-        echo "pre-commit: swiftformat reported a problem formatting staged files — check output above." >&2
+# Builds a BuildTools product when its binary is missing or older than the pin, so it runs current.
+build_tool() {
+    binary="$tools/$1"
+    if [ ! -x "$binary" ] || [ -n "$(find BuildTools/Package.swift BuildTools/Package.resolved -newer "$binary" -print -quit 2>/dev/null)" ]; then
+        swift build --quiet -c release --package-path BuildTools --product "$1" || return 1
+        touch "$binary"
     fi
-    xargs -0 git add <"$STAGED_LIST"
-else
-    echo "pre-commit: swiftformat not found (brew install swiftformat) — skipping format" >&2
+}
+
+# The staged list lives in a file, not a variable: command substitution strips the NUL separators, which
+# would join every path into one bad argument.
+staged=$(mktemp)
+trap 'rm -f "$staged"' EXIT
+git diff --cached --name-only --diff-filter=ACMR -z -- '*.swift' >"$staged"
+
+if [ -s "$staged" ]; then
+    if build_tool swiftstepdown; then
+        # Manifests are top-level code, where order matters, so they never reach SwiftStepdown.
+        grep -z -v -e '^BuildTools/' -e 'Package\.swift$' "$staged" | xargs -0 -r "$tools/swiftstepdown" ||
+            echo "pre-commit: SwiftStepdown reported a problem reordering the staged files; see above." >&2
+    else
+        echo "pre-commit: SwiftStepdown failed to build; skipping reordering." >&2
+    fi
+    if command -v swiftformat >/dev/null 2>&1; then
+        xargs -0 swiftformat --quiet <"$staged" ||
+            echo "pre-commit: SwiftFormat reported a problem formatting the staged files; see above." >&2
+    else
+        echo "pre-commit: swiftformat not found (brew install swiftformat); skipping formatting." >&2
+    fi
+    xargs -0 git add <"$staged"
 fi
 
-if command -v swiftlint >/dev/null 2>&1; then
-    if ! xargs -0 swiftlint lint --quiet <"$STAGED_LIST"; then
-        echo "pre-commit: SwiftLint reported blocking errors above — commit aborted." >&2
-        echo "pre-commit: warnings alone don't block; use 'git commit --no-verify' to bypass in a pinch." >&2
+if build_tool swiftlucid; then
+    if ! "$tools/swiftlucid" --staged --include-tests .; then
+        echo "pre-commit: SwiftLucid found doc-comment errors above, so the commit stops." >&2
         exit 1
     fi
 else
-    echo "pre-commit: swiftlint not found (brew install swiftlint) — skipping lint" >&2
+    echo "pre-commit: SwiftLucid failed to build; skipping doc-comment lint." >&2
+fi
+
+[ -s "$staged" ] || exit 0
+if command -v swiftlint >/dev/null 2>&1; then
+    if ! xargs -0 swiftlint lint --quiet <"$staged"; then
+        echo "pre-commit: SwiftLint found errors above, so the commit stops; warnings alone don't block." >&2
+        exit 1
+    fi
+else
+    echo "pre-commit: swiftlint not found (brew install swiftlint); skipping lint." >&2
 fi
 
 exit 0

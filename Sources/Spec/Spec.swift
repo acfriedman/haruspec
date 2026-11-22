@@ -31,7 +31,7 @@ public protocol NamedQueueDouble: SeamDouble, QueueNaming {
 }
 
 public extension NamedQueueDouble {
-    // gloss:exempt implements QueueNaming.naming(_:), documented on the protocol
+    // swiftlucid:exempt implements QueueNaming.naming(_:), documented on the protocol
     func naming(_ label: String) -> String {
         "context.double(\(Self.self).self, label: \"\(label)\")"
     }

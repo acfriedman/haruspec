@@ -1,0 +1,4 @@
+{
+  "rules": { "missing-doc": "off", "module-doc-*": "off" },
+  "exclude": ["BuildTools", "lyceum"]
+}

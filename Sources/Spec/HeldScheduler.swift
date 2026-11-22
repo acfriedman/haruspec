@@ -25,9 +25,9 @@ import HaruspecTrace
 /// `group` has meaning under test, and only on the immediate form, where `DispatchQueue` honors it too:
 /// the work is in the group until it has run.
 public struct HeldScheduler: Scheduler, Sendable {
-    // gloss:exempt implements Scheduler.SchedulerTimeType; DispatchQueue's, documented on the type
+    // swiftlucid:exempt implements Scheduler.SchedulerTimeType; DispatchQueue's, documented on the type
     public typealias SchedulerTimeType = DispatchQueue.SchedulerTimeType
-    // gloss:exempt implements Scheduler.SchedulerOptions; DispatchQueue's, documented on the type
+    // swiftlucid:exempt implements Scheduler.SchedulerOptions; DispatchQueue's, documented on the type
     public typealias SchedulerOptions = DispatchQueue.SchedulerOptions
 
     /// The queue a scheduler stands in for, which names the domain its work records on.
@@ -77,18 +77,18 @@ public struct HeldScheduler: Scheduler, Sendable {
         identity = Identity(discipline)
     }
 
-    // gloss:exempt implements Scheduler.now, documented on the type
+    // swiftlucid:exempt implements Scheduler.now, documented on the type
     public var now: SchedulerTimeType {
         let nanoseconds = UInt64((backlog.virtualTime * 1_000_000_000).rounded())
         return SchedulerTimeType(DispatchTime(uptimeNanoseconds: Self.epoch + nanoseconds))
     }
 
-    // gloss:exempt implements Scheduler.minimumTolerance; virtual time has no slack
+    // swiftlucid:exempt implements Scheduler.minimumTolerance; virtual time has no slack
     public var minimumTolerance: SchedulerTimeType.Stride {
         .zero
     }
 
-    // gloss:exempt implements Scheduler.schedule(options:_:), documented on the type
+    // swiftlucid:exempt implements Scheduler.schedule(options:_:), documented on the type
     public func schedule(options: SchedulerOptions?, _ action: @escaping () -> Void) {
         guard let group = options?.group else {
             return hold(after: nil, action)
@@ -100,7 +100,7 @@ public struct HeldScheduler: Scheduler, Sendable {
         }
     }
 
-    // gloss:exempt implements Scheduler.schedule(after:tolerance:options:_:), documented on the type
+    // swiftlucid:exempt implements Scheduler.schedule(after:tolerance:options:_:), documented on the type
     public func schedule(
         after date: SchedulerTimeType,
         tolerance _: SchedulerTimeType.Stride,
@@ -110,7 +110,7 @@ public struct HeldScheduler: Scheduler, Sendable {
         hold(after: delay(until: date), action)
     }
 
-    // gloss:exempt implements Scheduler.schedule(after:interval:tolerance:options:_:), documented on the type
+    // swiftlucid:exempt implements Scheduler.schedule(after:interval:tolerance:options:_:), documented on the type
     public func schedule(
         after date: SchedulerTimeType,
         interval: SchedulerTimeType.Stride,
@@ -175,7 +175,7 @@ public struct HeldScheduler: Scheduler, Sendable {
             self.discipline = discipline
         }
 
-        // gloss:exempt implements QueueNaming.naming(_:), documented on the protocol
+        // swiftlucid:exempt implements QueueNaming.naming(_:), documented on the protocol
         func naming(_ label: String) -> String {
             let kind = discipline == .concurrent ? "concurrent" : "serial"
             return "context.scheduler(.\(kind)(\"\(label)\"))"
@@ -193,7 +193,7 @@ public struct HeldScheduler: Scheduler, Sendable {
             return cancelled
         }
 
-        // gloss:exempt implements Cancellable.cancel()
+        // swiftlucid:exempt implements Cancellable.cancel()
         func cancel() {
             lock.lock(); defer { lock.unlock() }
             cancelled = true

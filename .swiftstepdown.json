@@ -1,0 +1,4 @@
+{
+  "moves": "internal",
+  "exclude": ["BuildTools", "lyceum", "Package.swift"]
+}

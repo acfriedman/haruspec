@@ -17,7 +17,7 @@ public protocol QueueNaming: AnyObject {
 }
 
 public extension QueueNaming {
-    // gloss:exempt default for QueueNaming.queueKind, documented on the protocol
+    // swiftlucid:exempt default for QueueNaming.queueKind, documented on the protocol
     var queueKind: String {
         String(describing: type(of: self))
     }

@@ -17,7 +17,7 @@ public protocol TraceClock: Sendable {
 public struct WallClock: TraceClock {
     /// Creates a clock over the process's monotonic uptime.
     public init() {}
-    // gloss:exempt implements TraceClock.now(), documented on the protocol
+    // swiftlucid:exempt implements TraceClock.now(), documented on the protocol
     public func now() -> Int64 {
         Int64(bitPattern: DispatchTime.now().uptimeNanoseconds)
     }
@@ -35,7 +35,7 @@ public final class ManualClock: TraceClock, @unchecked Sendable {
         ticks = start
     }
 
-    // gloss:exempt implements TraceClock.now(), documented on the protocol
+    // swiftlucid:exempt implements TraceClock.now(), documented on the protocol
     public func now() -> Int64 {
         lock.lock(); defer { lock.unlock() }
         return ticks

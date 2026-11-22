@@ -22,3 +22,26 @@ jobs:
         run: |
           unset TOOLCHAINS
           swift test
+
+  style:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # SwiftLucid judges only what changed since the base, so it needs that history.
+          fetch-depth: 0
+      - uses: actions/cache@v4
+        with:
+          path: BuildTools/.build
+          key: buildtools-${{ runner.os }}-${{ hashFiles('BuildTools/Package.resolved') }}
+      - name: Build the pinned tools
+        run: |
+          unset TOOLCHAINS
+          swift build -c release --package-path BuildTools --product swiftlucid
+          swift build -c release --package-path BuildTools --product swiftstepdown
+      - name: Lint the doc comments this change adds or changes
+        run: |
+          base=${{ github.event.pull_request.base.sha || github.event.before }}
+          BuildTools/.build/release/swiftlucid --include-tests --since "$base" .
+      - name: Check every file is in stepdown order
+        run: BuildTools/.build/release/swiftstepdown --lint Sources Tests

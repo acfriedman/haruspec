@@ -64,14 +64,14 @@ public final class HeldOperationQueue: OperationQueue, QueueNaming, @unchecked S
         }
     }
 
-    // gloss:exempt implements QueueNaming.naming(_:), documented on the protocol
+    // swiftlucid:exempt implements QueueNaming.naming(_:), documented on the protocol
     public func naming(_ label: String) -> String {
         "context.operationQueue(.\(discipline == .concurrent ? "concurrent" : "serial")(\"\(label)\"))"
     }
 
     // MARK: - Adding work
 
-    // gloss:exempt overrides OperationQueue.addOperation(_:), documented on the type
+    // swiftlucid:exempt overrides OperationQueue.addOperation(_:), documented on the type
     override public func addOperation(_ operation: Operation) {
         precondition(
             !operation.isExecuting && !operation.isFinished,
@@ -80,12 +80,12 @@ public final class HeldOperationQueue: OperationQueue, QueueNaming, @unchecked S
         add(Entry(operation, isBarrier: false, cause: WorkBacklog.causeHere()))
     }
 
-    // gloss:exempt overrides OperationQueue.addOperation(_:), documented on the type
+    // swiftlucid:exempt overrides OperationQueue.addOperation(_:), documented on the type
     override public func addOperation(_ block: @escaping @Sendable () -> Void) {
         addOperation(BlockOperation(block: block))
     }
 
-    // gloss:exempt overrides OperationQueue.addOperations(_:waitUntilFinished:), documented on the type
+    // swiftlucid:exempt overrides OperationQueue.addOperations(_:waitUntilFinished:), documented on the type
     override public func addOperations(_ operations: [Operation], waitUntilFinished wait: Bool) {
         precondition(
             !wait || operations.isEmpty,
@@ -98,25 +98,25 @@ public final class HeldOperationQueue: OperationQueue, QueueNaming, @unchecked S
         operations.forEach(addOperation)
     }
 
-    // gloss:exempt overrides OperationQueue.addBarrierBlock(_:), documented on the type
+    // swiftlucid:exempt overrides OperationQueue.addBarrierBlock(_:), documented on the type
     override public func addBarrierBlock(_ barrier: @escaping @Sendable () -> Void) {
         add(Entry(BlockOperation(block: barrier), isBarrier: true, cause: WorkBacklog.causeHere()))
     }
 
     // MARK: - Reading and steering it
 
-    // gloss:exempt overrides OperationQueue.operations: added and not yet finished, in the order added
+    // swiftlucid:exempt overrides OperationQueue.operations: added and not yet finished, in the order added
     override public var operations: [Operation] {
         lock.lock(); defer { lock.unlock() }
         return entries.filter { $0.state != .finished }.map(\.operation)
     }
 
-    // gloss:exempt overrides OperationQueue.operationCount
+    // swiftlucid:exempt overrides OperationQueue.operationCount
     override public var operationCount: Int {
         operations.count
     }
 
-    // gloss:exempt overrides OperationQueue.isSuspended, documented on the type
+    // swiftlucid:exempt overrides OperationQueue.isSuspended, documented on the type
     override public var isSuspended: Bool {
         get {
             lock.lock(); defer { lock.unlock() }
@@ -128,17 +128,17 @@ public final class HeldOperationQueue: OperationQueue, QueueNaming, @unchecked S
         }
     }
 
-    // gloss:exempt overrides OperationQueue.maxConcurrentOperationCount, documented on the type
+    // swiftlucid:exempt overrides OperationQueue.maxConcurrentOperationCount, documented on the type
     override public var maxConcurrentOperationCount: Int {
         didSet { startReady() }
     }
 
-    // gloss:exempt overrides OperationQueue.cancelAllOperations()
+    // swiftlucid:exempt overrides OperationQueue.cancelAllOperations()
     override public func cancelAllOperations() {
         operations.forEach { $0.cancel() }
     }
 
-    // gloss:exempt overrides OperationQueue.waitUntilAllOperationsAreFinished(), documented on the type
+    // swiftlucid:exempt overrides OperationQueue.waitUntilAllOperationsAreFinished(), documented on the type
     override public func waitUntilAllOperationsAreFinished() {
         precondition(
             operations.isEmpty,
