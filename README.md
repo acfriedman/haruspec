@@ -5,7 +5,7 @@ Prove a change kept the behavior you didn't mean to change.
 ![Tests](https://github.com/acfriedman/haruspec/actions/workflows/tests.yml/badge.svg)
 ![Swift 6.0](https://img.shields.io/badge/Swift-6.0-orange)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20iOS-blue)
-![License](https://img.shields.io/badge/license-Apache%202.0-green)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 Haruspec is a spec-driven differential testing framework for Swift and Objective-C. Your existing
 code is the **behavioral oracle**: you declare a **spec** of what the subject does (its operations,
@@ -284,4 +284,4 @@ Swift 6.0 (Xcode 16 or later) · macOS 13+ · iOS 16+
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE).
+MIT License. See [LICENSE](LICENSE).
