@@ -1,6 +1,6 @@
 # Haruspec
 
-Prove a change kept the behavior you didn't mean to change.
+Your code's current behavior is the baseline: prove a change did what you intended, and nothing else.
 
 ![Tests](https://github.com/acfriedman/haruspec/actions/workflows/tests.yml/badge.svg)
 ![Swift 6.0](https://img.shields.io/badge/Swift-6.0-orange)
