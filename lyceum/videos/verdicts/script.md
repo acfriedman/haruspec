@@ -43,7 +43,7 @@ sources:
   - docs/verdicts.md (the paired concept doc)
   - example-xcode-migration/docs/dogfood/local-check.md (the loyalty points red and green, 63 to 126)
 verified:
-  ".": "149aa314b7f3"
+  ".": "a4832ac4c6f3"
   example-xcode-migration: "c177f1d3f947"
 ---
 
