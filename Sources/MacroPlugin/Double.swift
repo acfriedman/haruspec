@@ -79,8 +79,17 @@ enum DoubleEmitter {
         return DeclSyntax("\(raw: source)")
     }
 
-    /// One synthesized method: records `call`/`ret` exactly as a forwarder would, around a body that
-    /// is a no-op — or, for a value-returning requirement, a generated seam read.
+    /// Returns one synthesized method, which records `call`/`ret` exactly as a forwarder would, around a
+    /// body that is a no-op — or, for a value-returning requirement, a generated seam read.
+    ///
+    /// - Parameters:
+    ///   - function: The protocol's non-static method requirement.
+    ///   - label: The boundary's trace label; the method's seam key and event label are
+    ///     `"<label>.<method>"`.
+    ///   - symbol: The double's class name, recorded as the call's origin.
+    ///   - file: The stamped protocol's `#fileID`, recorded as the call's origin; `nil` when the
+    ///     expansion context cannot locate it.
+    /// - Returns: The method's source, as Swift source.
     private static func doubleMethod(
         _ function: FunctionDeclSyntax,
         label: String,
@@ -201,12 +210,20 @@ enum DoubleEmitter {
         """
     }
 
-    /// The synthesized body: nothing for `Void`, a seam read with the type's zero as its default for
-    /// scalar returns, the type's empty for collections, `nil` for optionals, and — for a custom type,
-    /// which has no universal zero — the factory the spec declared with `.generates(_:_:)`, resolved
-    /// fail-fast at the first call. Every seam key doubles as the `.vary` override point —
-    /// `Seam("Inventory.stock", .int(0 ... 5))` turns a zero into swept surface with no change to the
-    /// double, and a factory's field keys (`"<key>.<field>"`) sweep the same way.
+    /// Returns the synthesized body for a value-returning requirement. Every seam key doubles as the
+    /// `.vary` override point, so a defaulted zero becomes swept surface with no change to the double.
+    ///
+    /// - Parameters:
+    ///   - returnType: The requirement's spelled return type; `nil` for a requirement with no return clause.
+    ///   - key: The seam key the read uses, `"<label>.<member>"`.
+    /// - Returns: The body as Swift source: empty for `nil`, `Void`, or `()`; otherwise a `return` statement
+    ///   of a seam read defaulted to the type's zero for a scalar, the type's empty for a collection, and
+    ///   for a custom type (which has no universal zero) the factory the spec declared with
+    ///   `.generates(_:_:)`, or `nil` when the type is optional and no factory was declared.
+    ///
+    /// `Seam("Inventory.stock", .int(0 ... 5))` sweeps a defaulted `Int`, and a factory's field keys
+    /// (`"<key>.<field>"`) sweep the same way. A missing factory for a required custom type traps at the
+    /// first call.
     private static func defaultedReturn(type returnType: String?, key: String) -> String {
         guard let returnType else { return "" }
         // `Int!` accepts a bare `Int`, so a defaulted read satisfies it. A `?` is remembered: `nil` is
@@ -250,9 +267,13 @@ enum DoubleEmitter {
         }
     }
 
-    /// The genuine empty for a collection-shaped return, or `nil` when the type isn't one. Sugar and
-    /// generic spellings alike, so a pasted Obj-C interface's `[String: Any]` and a Swift protocol's
-    /// `Dictionary<String, Any>` land on the same zero.
+    /// Returns the genuine empty for a collection-shaped return. Sugar and generic spellings alike, so a
+    /// pasted Obj-C interface's `[String: Any]` and a Swift protocol's `Dictionary<String, Any>` land on
+    /// the same zero.
+    ///
+    /// - Parameter type: The return's spelled type, with optional sugar stripped.
+    /// - Returns: `[:]` or `[]` as a Swift expression, or `nil` when the type is not an array, set, or
+    ///   dictionary.
     private static func emptyLiteral(for type: String) -> String? {
         if type.hasPrefix("[") {
             return topLevelColon(in: type) ? "[:]" : "[]"
@@ -266,8 +287,11 @@ enum DoubleEmitter {
         return nil
     }
 
-    /// Whether a `[...]` spelling is a dictionary — a `:` at bracket depth 1 (`[String: Int]`), not
-    /// one nested inside an element type (`[[String: Int]]` is an *array* of dictionaries).
+    /// Returns whether a `[...]` spelling is a dictionary — a `:` at bracket depth 1 (`[String: Int]`),
+    /// not one nested inside an element type (`[[String: Int]]` is an *array* of dictionaries).
+    ///
+    /// - Parameter type: A spelled type that opens with `[`.
+    /// - Returns: Whether the spelling has a `:` outside every nested bracket, angle, and parenthesis.
     private static func topLevelColon(in type: String) -> Bool {
         var depth = 0
         for character in type {

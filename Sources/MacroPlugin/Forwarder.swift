@@ -93,8 +93,15 @@ enum ForwarderEmitter {
         return DeclSyntax("\(raw: source)")
     }
 
-    /// One traced forwarding method: same signature and attributes as the requirement, body forwards
-    /// to `__wrapped`.
+    /// Returns one traced forwarding method: same signature and attributes as the requirement, body
+    /// forwards to `__wrapped`.
+    ///
+    /// - Parameters:
+    ///   - function: The protocol's non-static method requirement.
+    ///   - label: The stable trace label of the stamped protocol; the method's event label is
+    ///     `"<label>.<method>"`.
+    ///   - timed: Whether the method also records its duration as a signpost interval.
+    /// - Returns: The method's source, as Swift source.
     ///
     /// An `async` requirement is recorded *as the isolation it forwards into*: the body runs in a
     /// nested function whose `isolated` parameter is the wrapped actor when there is one, else the
@@ -185,11 +192,20 @@ enum ForwarderEmitter {
             + "\(indent(delivery))\n} }"
     }
 
-    /// One forwarding property. A read-only `var x: T { get }` forwards as a plain computed property
-    /// — reads are not effects, so nothing records; a `{ get async }` requirement (how an actor
-    /// witnesses state) forwards with `await`. A `{ get set }` requirement forwards both accessors,
-    /// and the setter records the write as a `stateChange` before it forwards. The wrapped object's
-    /// *internal* writes never cross this wrapper, so only boundary writes are on the trace.
+    /// Returns one forwarding property. A read-only `var x: T { get }` forwards as a plain computed
+    /// property — reads are not effects, so nothing records; a `{ get async }` requirement (how an actor
+    /// witnesses state) forwards with `await`.
+    ///
+    /// - Parameters:
+    ///   - variable: The protocol's non-static property requirement.
+    ///   - label: The stable trace label of the stamped protocol; a write's event label is
+    ///     `"<label>.<name>"`.
+    /// - Returns: The property's source, as Swift source, or `nil` when the requirement is not a simple
+    ///   typed `var`.
+    ///
+    /// A `{ get set }` requirement forwards both accessors, and the setter records the write as a
+    /// `stateChange` before it forwards. The wrapped object's *internal* writes never cross this wrapper,
+    /// so only boundary writes are on the trace.
     private static func forwardingProperty(_ variable: VariableDeclSyntax, label: String) -> String? {
         guard variable.bindingSpecifier.tokenKind == .keyword(.var),
               let binding = variable.bindings.first,
@@ -216,17 +232,23 @@ enum ForwarderEmitter {
         """
     }
 
-    /// Whether a protocol var requirement's accessor block declares `set`.
+    /// Returns whether a protocol var requirement's accessor block declares `set`.
+    ///
+    /// - Parameter binding: The requirement's pattern binding.
+    /// - Returns: `false` when the binding has no accessor block or its accessors include no `set`.
     private static func hasSetterRequirement(_ binding: PatternBindingSyntax) -> Bool {
         guard case let .accessors(accessors) = binding.accessorBlock?.accessors else { return false }
         return accessors.contains { $0.accessorSpecifier.tokenKind == .keyword(.set) }
     }
 
-    /// The origin an instrumented forward registers: the *wrapped* type, read at runtime, and no
-    /// source. The generated forwarder lives in the protocol's file, but the behavior lives in
-    /// whatever it wraps — an Obj-C class the audit finds by `@implementation`, a Swift port it finds
-    /// by declaration — and naming the pasted-interface file would let an audit read a file with
-    /// nothing in it and call the label covered.
+    /// Returns the origin an instrumented forward registers: the *wrapped* type, read at runtime, and no
+    /// source. The behavior lives in whatever the forwarder wraps, so naming the pasted-interface file
+    /// would let an audit read a file with nothing in it and call the label covered.
+    ///
+    /// - Parameter label: The stable trace label of the stamped protocol.
+    /// - Returns: The origin's argument list, as Swift source.
+    ///
+    /// The audit finds an Obj-C class by `@implementation` and a Swift port by declaration.
     private static func wrappedOrigin(label: String) -> String {
         originArguments(
             label: label,
@@ -235,8 +257,13 @@ enum ForwarderEmitter {
         )
     }
 
-    /// The forwarder's witness of a pasted `init` requirement. Conformance demands one, but a
+    /// Returns the forwarder's witness of a pasted `init` requirement. Conformance demands one, but a
     /// forwarder has nothing to construct — so it traps, naming the two routes that do.
+    ///
+    /// - Parameters:
+    ///   - initializer: The pasted `init` requirement to witness.
+    ///   - generatedName: The forwarder's class name, which the trap message names.
+    /// - Returns: The witness's source, as Swift source.
     private static func refusingInit(_ initializer: InitializerDeclSyntax, generatedName: String) -> String {
         let message = "\(generatedName) is a forwarder, not a conformer — wrap one: "
             + "\(generatedName)(<conformer>), or construct it from its type: "
@@ -246,10 +273,17 @@ enum ForwarderEmitter {
             + "    }"
     }
 
-    /// The derived construction: each parameter of the designated pasted init resolves by type —
-    /// the capture's notification center for a `NotificationCenter`, the conformance-matched
-    /// synthesized double for a collaborator boundary — and the conformer is built through the
-    /// requirement itself, then wrapped. What this cannot resolve, `resolve` reports at spec
+    /// Returns the derived construction, the forwarder's `resolving` initializer: each parameter of the
+    /// designated pasted init resolves by type, and the conformer is built through the requirement itself,
+    /// then wrapped.
+    ///
+    /// - Parameters:
+    ///   - initializer: The designated pasted `init` requirement.
+    ///   - wrapped: The existential the forwarder wraps, as Swift source (`any <Protocol>`).
+    /// - Returns: The initializer's source, as Swift source.
+    ///
+    /// A `NotificationCenter` parameter resolves to the capture's notification center, a collaborator
+    /// boundary to the conformance-matched synthesized double. What cannot resolve is reported at spec
     /// construction with the authored `.baselined { }` spelled out.
     private static func resolvingInit(_ initializer: InitializerDeclSyntax, wrapped: String) -> String {
         let arguments = initializer.signature.parameterClause.parameters.map { param -> String in
@@ -270,7 +304,10 @@ enum ForwarderEmitter {
     }
 }
 
-/// Whether a protocol var requirement's accessor block declares `get async`.
+/// Returns whether a protocol var requirement's accessor block declares `get async`.
+///
+/// - Parameter binding: The requirement's pattern binding.
+/// - Returns: `false` when the binding has no accessor block or no accessor is `async`.
 func hasAsyncGetter(_ binding: PatternBindingSyntax) -> Bool {
     guard case let .accessors(accessors) = binding.accessorBlock?.accessors else { return false }
     return accessors.contains { $0.effectSpecifiers?.asyncSpecifier != nil }

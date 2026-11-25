@@ -34,13 +34,19 @@ public final class SeamDefaults: @unchecked Sendable {
         "\(seam).\(key)"
     }
 
-    /// Writes are recorded as observable behavior and kept in-memory; they do not mutate real storage.
+    /// Records a write as observable behavior, kept in memory; real storage is never mutated.
+    ///
+    /// - Parameters:
+    ///   - value: The value written, in canonical form.
+    ///   - key: The defaults key, as production code spells it.
     public func set(_ value: CanonicalValue, forKey key: String) {
         lock.lock(); defer { lock.unlock() }
         writes[key] = value
     }
 
-    /// The set of writes performed during this run (for asserting write-side behavior).
+    /// Returns the writes performed during this run (for asserting write-side behavior).
+    ///
+    /// - Returns: Each written key's last value; empty when nothing was written.
     public func recordedWrites() -> [String: CanonicalValue] {
         lock.lock(); defer { lock.unlock() }
         return writes

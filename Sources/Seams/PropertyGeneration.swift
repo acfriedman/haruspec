@@ -16,19 +16,30 @@ import HaruspecCore
 // MARK: - Generation seam (the swappable commodity layer)
 
 /// Produces seam values for generated cassette variants. Implementations own their own
-/// determinism/seeding; `generate` is called once per track position. Returning `recorded` unchanged
-/// means "don't vary this seam." Swap in a library-backed conformance to change *how* values are
-/// generated without touching `DifferentialProperty`.
+/// determinism/seeding; `generate` is called once per track position.
+///
+/// Returning `recorded` unchanged means "don't vary this seam." Swap in a library-backed conformance to
+/// change *how* values are generated without touching `DifferentialProperty`.
 public protocol SeamValueGenerator {
     /// The seams this generator varies — the declared *domain surface*, reported into `Coverage`.
     var variedSeams: Set<String> { get }
-    /// One reading, at its `position` in that seam's track. A seam read once per op occurrence has as
-    /// many positions as the op has occurrences, and "the second add" is a different input from "every
-    /// add" — which is what the position lets a generator address.
+    /// Returns one reading for a generated variant, at its `position` in that seam's track.
+    ///
+    /// - Parameters:
+    ///   - seam: The seam id whose track is being generated.
+    ///   - position: The reading's zero-based index in that seam's track.
+    ///   - recorded: The golden template's reading at that position.
+    /// - Returns: The reading the variant holds at that position; `recorded` itself leaves it unvaried.
+    ///
+    /// A seam read once per op occurrence has as many positions as the op has occurrences, and "the
+    /// second add" is a different input from "every add" — which is what the position lets a generator
+    /// address.
     mutating func generate(seam: String, at position: Int, like recorded: CanonicalValue) -> CanonicalValue
     /// Called before each variant's track positions, so a generator can make *which* variant this is
     /// mean something — the hook boundary-first generation hangs on. Optional: the default does
     /// nothing, and a purely random generator needs nothing.
+    ///
+    /// - Parameter index: The variant's zero-based position in the run.
     mutating func beginVariant(_ index: Int)
 }
 
@@ -55,8 +66,9 @@ public struct SplitMix64: RandomNumberGenerator {
 
 /// The built-in, dependency-free generator: **edges and middles interleaved, then uniform sampling**
 /// over a declared per-seam `SeamDomain`, seeded by SplitMix64. A seam with no declared domain replays
-/// its recorded value unchanged, so the generated surface is exactly the declared seams. This is the
-/// default `SeamValueGenerator`; swapping in a library-backed one is a one-type change.
+/// its recorded value unchanged, so the generated surface is exactly the declared seams.
+///
+/// This is the default `SeamValueGenerator`; swapping in a library-backed one is a one-type change.
 ///
 /// Two streams share the variant budget, alternating from the first variant, so any prefix of the
 /// schedule holds both kinds:
@@ -134,8 +146,15 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         slot = Self.slot(forVariant: 0, edges: edges, combined: combined)
     }
 
-    /// Round-robin over sorted seams — sorted so the schedule doesn't ride on dictionary order, which
-    /// would make a run's inputs unreproducible across processes.
+    /// Returns the one-factor stream's edge pins, round-robin over sorted seams — sorted so the schedule
+    /// doesn't ride on dictionary order, which would make a run's inputs unreproducible across processes.
+    ///
+    /// - Parameters:
+    ///   - domains: The value domain declared for each seam, keyed by seam.
+    ///   - golden: The template cassette's tracks, keyed by seam; a seam absent or empty here counts as
+    ///     read once.
+    /// - Returns: Every seam's first pin, then every seam's second, and so on; empty when no domain
+    ///   declares an edge.
     private static func boundarySchedule(
         _ domains: [String: SeamDomain],
         golden: [String: [CanonicalValue]]
@@ -201,10 +220,17 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         return pins
     }
 
-    /// The combined stream's finite head: the two all-edges vectors, then one interior vector per
-    /// interior rung of the widest domain. A vector the golden already holds is dropped (it would
-    /// replay the golden itself), and with a single declared seam the all-edges vectors are its own
-    /// aggregate pins again, so only the true middles are kept.
+    /// Returns the combined stream's finite head: the two all-edges vectors, then one interior vector per
+    /// interior rung of the widest domain.
+    ///
+    /// - Parameters:
+    ///   - domains: The value domain declared for each seam, keyed by seam.
+    ///   - golden: The template cassette's tracks, keyed by seam.
+    /// - Returns: The scheduled combined vectors in order; empty when `domains` is.
+    ///
+    /// A vector the golden already holds is dropped (it would replay the golden itself), and with a
+    /// single declared seam the all-edges vectors are its own aggregate pins again, so only the true
+    /// middles are kept.
     private static func combinedSchedule(
         _ domains: [String: SeamDomain],
         golden: [String: [CanonicalValue]]
@@ -254,14 +280,21 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         edges.count
     }
 
-    /// How many edge pins a budget of `variants` runs: every other slot until the schedule is spent.
+    /// Returns how many edge pins a budget of `variants` runs: every other slot until the schedule is
+    /// spent.
+    ///
+    /// - Parameter variants: The variant budget; zero or negative runs none.
+    /// - Returns: A count from `0` through ``scheduledBoundaryEdges``.
     public func boundaryEdgesCovered(within variants: Int) -> Int {
         Swift.min(edges.count, Swift.max(0, (variants + 1) / 2))
     }
 
-    /// How many variants of `variants` move every declared seam at once — all-edges vectors, interior
-    /// rungs, and uniform samples together: the budget's share that reaches a pairing of two seams'
-    /// values.
+    /// Returns how many variants of `variants` move every declared seam at once — all-edges vectors,
+    /// interior rungs, and uniform samples together: the budget's share that reaches a pairing of two
+    /// seams' values.
+    ///
+    /// - Parameter variants: The variant budget; zero or negative runs none.
+    /// - Returns: The budget less the edge pins it runs; `0` for a budget of zero or less.
     public func combinedVariantsCovered(within variants: Int) -> Int {
         Swift.max(0, variants) - boundaryEdgesCovered(within: variants)
     }
@@ -270,9 +303,15 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         slot = Self.slot(forVariant: index, edges: edges, combined: combined)
     }
 
-    /// Which stream variant `index` draws from. Even variants are edge pins and odd ones combined,
-    /// until the pins run out; from there every variant is combined, and the combined stream itself
-    /// goes random once its scheduled head is spent.
+    /// Returns which stream variant `index` draws from. Even variants are edge pins and odd ones
+    /// combined, until the pins run out; from there every variant is combined.
+    ///
+    /// - Parameters:
+    ///   - index: The variant's zero-based position in the run.
+    ///   - edges: The one-factor stream's pins, in schedule order.
+    ///   - combined: The combined stream's finite head, in schedule order.
+    /// - Returns: The variant's edge pin or combined vector; `.random` once the combined stream's
+    ///   scheduled head is spent.
     private static func slot(forVariant index: Int, edges: [Pin], combined: [Combined]) -> Slot {
         let interleaved = 2 * edges.count
         if index < interleaved {
@@ -306,7 +345,12 @@ public struct DomainSeamGenerator: SeamValueGenerator {
 }
 
 private extension SeamDomain {
-    /// The interior rung a combined variant reads, cycling a domain with fewer rungs than the widest.
+    /// Returns the interior rung a combined variant reads, cycling a domain with fewer rungs than the
+    /// widest.
+    ///
+    /// - Parameter index: The rung's zero-based index across the widest domain's rungs.
+    /// - Returns: The interior value at `index`, wrapping past this domain's last; `nil` when the domain
+    ///   has no interior values.
     func interior(at index: Int) -> CanonicalValue? {
         let values = interiorValues
         return values.isEmpty ? nil : values[index % values.count]
@@ -316,9 +360,17 @@ private extension SeamDomain {
 // MARK: - Variant generation from the golden template
 
 public extension CassetteData {
-    /// Produces `count` variants of this golden cassette, asking `generator` for each reading. The golden
+    /// Returns `count` variants of this golden cassette, asking `generator` for each reading. The golden
     /// cassette is the *template* — the seam skeleton (which seams, each arity, each type) is real, only
-    /// the values vary — which keeps generation "derived from the real recording," not fabricated.
+    /// the values vary.
+    ///
+    /// - Parameters:
+    ///   - count: How many variants to produce; zero or negative produces none.
+    ///   - generator: The generator so far, which receives a variant start and a request per reading.
+    /// - Returns: The variants in order, each with this cassette's seams and track lengths and no
+    ///   bindings; empty when `count` is not positive.
+    ///
+    /// The template keeps generation "derived from the real recording," not fabricated.
     func generatedVariants(count: Int, using generator: inout some SeamValueGenerator) -> [CassetteData] {
         var variants: [CassetteData] = []
         variants.reserveCapacity(max(0, count))
@@ -341,8 +393,15 @@ public extension CassetteData {
         return variants
     }
 
-    /// Convenience: variants via the built-in domain generator (dependency-free). The golden's own track
+    /// Returns variants via the built-in domain generator (dependency-free). The golden's own track
     /// lengths go in, so the boundary pass can pin a single reading of a repeatedly-read seam.
+    ///
+    /// - Parameters:
+    ///   - count: How many variants to produce; zero or negative produces none.
+    ///   - domains: The value domain of each seam to vary, keyed by seam; a seam without one keeps its
+    ///     golden readings.
+    ///   - seed: The seed of the random tail; the same domains, tracks, and seed give the same variants.
+    /// - Returns: The variants in order, as ``generatedVariants(count:using:)`` returns them.
     func generatedVariants(count: Int, varying domains: [String: SeamDomain], seed: UInt64) -> [CassetteData] {
         var generator = DomainSeamGenerator(domains: domains, seed: seed, golden: tracks)
         return generatedVariants(count: count, using: &generator)

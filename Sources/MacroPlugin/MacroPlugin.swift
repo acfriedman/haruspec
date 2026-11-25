@@ -5,7 +5,15 @@ import SwiftSyntaxMacros
 
 // MARK: - Shared instrumentation emitter
 
-/// `originArguments` for a symbol known at expansion time.
+/// Returns the `noteOrigin` argument list for a symbol known at expansion time.
+///
+/// - Parameters:
+///   - label: The traced label as plain text, unquoted.
+///   - symbol: The symbol's name as plain text, unquoted; `nil` where there is nothing to point at.
+///   - sourceExpression: A Swift expression naming the source, such as a `#fileID` literal from the
+///     expansion context; `nil` where there is nothing to point at.
+/// - Returns: The arguments as Swift source, the quoted label first, with `nil` written out for a
+///   missing symbol or source.
 func originArguments(label: String, symbol: String?, sourceExpression: String?) -> String {
     originArguments(label: label, symbolExpression: symbol.map(literalString), sourceExpression: sourceExpression)
 }
@@ -139,13 +147,20 @@ func tracedBody(
 
 // MARK: - Shared helpers
 
-/// Renders `value` as Swift source for a string literal — labels are plain identifiers, but escape
-/// anyway so a pathological one cannot break out of the generated expression.
+/// Returns `value` as Swift source for a string literal, escaped so a pathological label cannot break
+/// out of the generated expression.
+///
+/// - Parameter value: The literal's content as plain text, unquoted and unescaped.
+/// - Returns: A Swift string-literal expression whose value is `value`.
 func quotedLiteral(_ value: String) -> String {
     StringLiteralExprSyntax(content: value).description
 }
 
-/// Extracts the first positional string-literal argument of a macro attribute, if present.
+/// Returns the first positional string-literal argument of a macro attribute.
+///
+/// - Parameter node: The macro attribute as written at the use site.
+/// - Returns: The literal's text, or `nil` when the first argument is labeled, not a string literal, or
+///   absent.
 func stringArgument(of node: AttributeSyntax) -> String? {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self),
           let first = arguments.first, first.label == nil,
@@ -153,7 +168,12 @@ func stringArgument(of node: AttributeSyntax) -> String? {
     return literal.segments.compactMap { $0.as(StringSegmentSyntax.self)?.content.text }.joined()
 }
 
-/// Extracts a labeled string-literal argument of a macro attribute, if present.
+/// Returns a labeled string-literal argument of a macro attribute.
+///
+/// - Parameters:
+///   - node: The macro attribute as written at the use site.
+///   - name: The argument label, without its colon.
+/// - Returns: The literal's text, or `nil` when no argument with that label is a string literal.
 func stringArgument(of node: AttributeSyntax, name: String) -> String? {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else { return nil }
     for argument in arguments where argument.label?.text == name {
@@ -164,12 +184,20 @@ func stringArgument(of node: AttributeSyntax, name: String) -> String? {
     return nil
 }
 
-/// Whether a modifier list marks the declaration `static` or `class` (a type member, no instance `self`).
+/// Returns whether a modifier list marks the declaration `static` or `class` (a type member, no
+/// instance `self`).
+///
+/// - Parameter modifiers: The declaration's modifier list.
+/// - Returns: Whether the list contains `static` or `class`.
 func isStaticOrClass(_ modifiers: DeclModifierListSyntax) -> Bool {
     modifiers.contains { $0.name.tokenKind == .keyword(.static) || $0.name.tokenKind == .keyword(.class) }
 }
 
-/// Indent each line of a generated body by two levels (eight spaces), for readability of the expansion.
+/// Returns a generated body with each line indented two levels (eight spaces), for readability of the
+/// expansion.
+///
+/// - Parameter body: Swift source, its lines separated by `\n`.
+/// - Returns: The same source with eight spaces before every line, empty lines included.
 func indent(_ body: String) -> String {
     body.split(separator: "\n", omittingEmptySubsequences: false).map { "        \($0)" }.joined(separator: "\n")
 }
@@ -182,7 +210,12 @@ struct MacroError: Error, CustomStringConvertible {
     }
 }
 
-/// Extracts a labeled boolean-literal argument of a macro attribute, if present.
+/// Returns a labeled boolean-literal argument of a macro attribute.
+///
+/// - Parameters:
+///   - node: The macro attribute as written at the use site.
+///   - name: The argument label, without its colon.
+/// - Returns: The literal's value, or `nil` when no argument with that label is a boolean literal.
 func boolArgument(of node: AttributeSyntax, name: String) -> Bool? {
     guard let arguments = node.arguments?.as(LabeledExprListSyntax.self) else { return nil }
     for argument in arguments where argument.label?.text == name {
@@ -193,7 +226,11 @@ func boolArgument(of node: AttributeSyntax, name: String) -> Bool? {
     return nil
 }
 
-/// Renders a Swift double-quoted string literal for a known-safe label.
+/// Returns a Swift double-quoted string literal for a known-safe label.
+///
+/// - Parameter value: The label as plain text; must contain no `"`, `\`, or newline, since nothing is
+///   escaped.
+/// - Returns: `value` wrapped in double quotes, as a Swift expression.
 func literalString(_ value: String) -> String {
     "\"\(value)\""
 }

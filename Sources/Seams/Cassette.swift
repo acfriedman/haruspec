@@ -79,8 +79,10 @@ public final class Cassette: @unchecked Sendable {
     }
 
     /// How far replay advanced through each seam's track (seam id → recorded values consumed). A seam
-    /// with a positive cursor was *exercised*; the coverage adapter reads this to tell an exercised
-    /// boundary from a declared-but-never-reached one. Empty in `.record` mode.
+    /// with a positive cursor was *exercised*.
+    ///
+    /// The coverage adapter reads this to tell an exercised boundary from a declared-but-never-reached
+    /// one. A recording counts its reads the same way.
     public var replayProgress: [String: Int] {
         lock.lock(); defer { lock.unlock() }
         return reads
@@ -192,7 +194,14 @@ public extension Cassette {
         return nil
     }
 
-    /// Binary payloads (e.g. a recorded HTTP body) ride as base64 strings.
+    /// Returns a binary seam read; see ``step(seam:qualifier:live:)``. Binary payloads (e.g. a recorded
+    /// HTTP body) ride as base64 strings.
+    ///
+    /// - Parameters:
+    ///   - seam: The seam id.
+    ///   - live: The real dependency, run on a recording or a miss.
+    /// - Returns: The bytes this read is answered with; `live`'s value when the recorded value is not a
+    ///   base64 string.
     func data(seam: String, live: () -> Data) -> Data {
         let recorded = step(seam: seam, live: { .string(live().base64EncodedString()) })
         if case let .string(b64) = recorded, let decoded = Data(base64Encoded: b64) {

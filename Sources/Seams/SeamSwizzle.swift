@@ -20,9 +20,15 @@ import ObjectiveC
 /// (or ObjC) methods are swizzlable; pure-Swift static/vtable dispatch is not. Install under `#if DEBUG` /
 /// harness setup so production is untouched; when no cassette is bound the paired method passes through.
 public enum SeamSwizzle {
-    /// Exchange two instance-method implementations on `cls`. Afterwards, invoking `original` runs
+    /// Exchanges two instance-method implementations on `cls`. Afterwards, invoking `original` runs
     /// `replacement`'s body and vice-versa — so `replacement` reaches the original by calling *itself*.
-    /// Returns `false` if either selector isn't found (e.g. the method isn't `@objc`).
+    ///
+    /// - Parameters:
+    ///   - cls: The class whose instance methods are exchanged.
+    ///   - original: The selector of the method being replaced.
+    ///   - replacement: The selector of the paired method that takes its place.
+    /// - Returns: Whether the exchange happened; `false`, with nothing changed, when either selector is
+    ///   not an instance method of `cls` (e.g. the method isn't `@objc`).
     @discardableResult
     public static func exchange(_ cls: AnyClass, _ original: Selector, with replacement: Selector) -> Bool {
         guard let originalMethod = class_getInstanceMethod(cls, original),

@@ -27,7 +27,10 @@ public struct SeamEnvironment {
         cassette.string(seam: "\(seam).calendar", live: live) ?? ""
     }
 
-    /// Reconstructed Foundation values, for code that wants the types rather than the identifiers.
+    /// Returns the reconstructed Foundation locale, for code that wants the type rather than the identifier.
+    ///
+    /// - Returns: The locale whose identifier ``localeIdentifier(live:)`` returns, with the live read
+    ///   taken from ``Foundation/Locale/current``.
     public func locale() -> Locale {
         Locale(identifier: localeIdentifier())
     }

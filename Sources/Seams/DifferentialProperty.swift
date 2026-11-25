@@ -57,8 +57,14 @@ public struct DifferentialProperty {
         }
     }
 
-    /// Diffs baseline vs candidate over `count` generated variants, stopping at (and shrinking) the first
-    /// divergence. `generator` supplies the values — the commodity seam.
+    /// Returns the outcome of diffing baseline vs candidate over `count` generated variants, stopping at
+    /// (and shrinking) the first divergence.
+    ///
+    /// - Parameters:
+    ///   - count: How many variants to generate from the golden; zero or negative checks none.
+    ///   - generator: The source of each generated reading — the commodity seam.
+    /// - Returns: The number of variants generated, at most one counterexample (the first divergence,
+    ///   shrunk), and coverage that credits the swept seams as domain-exercised only when none diverged.
     public func check(count: Int, using generator: some SeamValueGenerator) -> Result {
         var gen = generator
         let variants = golden.generatedVariants(count: count, using: &gen)
@@ -83,9 +89,15 @@ public struct DifferentialProperty {
         return Result(checked: variants.count, counterexamples: counterexamples, coverage: coverage)
     }
 
-    /// Delta-debugging-lite localization: reset each seam to its golden reading and keep the reset only
-    /// if the divergence survives. What's left generated is the minimal set of *readings* needed to
-    /// reproduce — the "localize the change" the engine's north star asks for. Iterating *all* golden
+    /// Returns a counterexample localized delta-debugging-lite: each seam reset to its golden reading,
+    /// the reset kept only if the divergence survives.
+    ///
+    /// - Parameter failing: A generated cassette on which the branches diverge.
+    /// - Returns: A copy of `failing` that still diverges, with every seam and reading the divergence
+    ///   does not need restored to the golden's.
+    ///
+    /// What's left generated is the minimal set of *readings* needed to reproduce — the "localize the
+    /// change" the engine's north star asks for. Iterating *all* golden
     /// seams (sorted for a deterministic result) is correct regardless of which the generator varied: an
     /// un-varied seam already equals golden, so resetting it is a harmless no-op.
     ///
@@ -116,14 +128,23 @@ public struct DifferentialProperty {
         return minimal
     }
 
-    /// The diff iff the two branches diverge on this variant.
+    /// Returns the diff iff the two branches diverge on this variant.
+    ///
+    /// - Parameter variant: The generated cassette both branches replay.
+    /// - Returns: The non-equivalent diff, or `nil` when the branches are equivalent on `variant`.
     private func diverges(on variant: CassetteData) -> TraceDiff? {
         let result = diff(on: variant)
         return result.isEquivalent ? nil : result
     }
 
-    /// Convenience: check with the built-in domain generator (dependency-free). `varying` names the
-    /// seams to generate; the rest replay their golden values.
+    /// Returns ``check(count:using:)``'s outcome with the built-in domain generator (dependency-free).
+    /// `varying` names the seams to generate; the rest replay their golden values.
+    ///
+    /// - Parameters:
+    ///   - count: How many variants to generate from the golden; zero or negative checks none.
+    ///   - domains: The value domain of each seam to generate, keyed by seam.
+    ///   - seed: The seed of the generator's random tail; the same seed gives the same variants.
+    /// - Returns: The outcome, as ``check(count:using:)`` returns it.
     public func check(
         count: Int,
         varying domains: [String: SeamDomain],
@@ -132,18 +153,29 @@ public struct DifferentialProperty {
         check(count: count, using: DomainSeamGenerator(domains: domains, seed: seed))
     }
 
-    /// The resolved verdict for a property run, in the engine's own `VerificationResult` vocabulary:
+    /// Returns the resolved verdict for a property run, in the engine's own `VerificationResult`
+    /// vocabulary. The domain credit is additive: it never flips a `CANNOT-VERIFY` to a pass (see `Coverage`).
+    ///
+    /// - Parameters:
+    ///   - count: How many variants to generate from the golden; zero or negative checks none.
+    ///   - generator: The source of each generated reading — the commodity seam.
+    /// - Returns: The first counterexample's diff, or the golden's own diff when none diverged, with the
+    ///   run's coverage.
+    ///
+    /// The verdict, by outcome:
     ///  - held over the surface → the golden's `EQUIVALENT` diff, with the swept seams credited as
     ///    domain-exercised (breadth beyond the single point).
     ///  - a counterexample → its `DIVERGED` diff, which stands (a caught path-dependent regression).
-    /// The domain credit is additive: it never flips a `CANNOT-VERIFY` to a pass (see `Coverage`).
     public func verify(count: Int, using generator: some SeamValueGenerator) -> VerificationResult {
         let result = check(count: count, using: generator)
         let representative = result.firstFailure?.diff ?? diff(on: golden)
         return VerificationResult(diff: representative, coverage: result.coverage)
     }
 
-    /// Runs both branches against one variant and diffs them.
+    /// Returns the diff of both branches run against one variant.
+    ///
+    /// - Parameter variant: The generated cassette both branches replay.
+    /// - Returns: The baseline-vs-candidate diff under this property's `comparison`.
     private func diff(on variant: CassetteData) -> TraceDiff {
         let baselineReplay = Cassette(replaying: variant)
         let baseline = run(baselineReplay, .baseline)
@@ -151,7 +183,14 @@ public struct DifferentialProperty {
         return BehavioralDiff.compare(baseline: baseline, candidate: candidate, comparison: comparison)
     }
 
-    /// Convenience: verify with the built-in domain generator (dependency-free).
+    /// Returns ``verify(count:using:)``'s verdict with the built-in domain generator (dependency-free).
+    ///
+    /// - Parameters:
+    ///   - count: How many variants to generate from the golden; zero or negative checks none.
+    ///   - domains: The value domain of each seam to generate, keyed by seam; a golden seam without one
+    ///     replays its golden values.
+    ///   - seed: The seed of the generator's random tail; the same seed gives the same variants.
+    /// - Returns: The verdict, as ``verify(count:using:)`` returns it.
     public func verify(
         count: Int,
         varying domains: [String: SeamDomain],

@@ -84,7 +84,14 @@ enum CatalogEmitter {
         return DeclSyntax("\(raw: source)")
     }
 
-    /// Walks the requirements once: methods become op entries, `var`s become observed properties.
+    /// Returns the catalog's entries for the protocol's requirements: methods become op entries, `var`s
+    /// become observed properties.
+    ///
+    /// - Parameters:
+    ///   - proto: The pasted protocol whose requirements the catalog covers.
+    ///   - labelRoot: The trace label of the stamped protocol, which property labels extend.
+    /// - Returns: The `DerivedOp(...)` entries and the `DerivedProperty(...)` entries, each as Swift source;
+    ///   either list is empty when the protocol has no requirement of that kind that derives.
     private static func derivedEntries(
         of proto: ProtocolDeclSyntax,
         labelRoot: String
@@ -106,15 +113,25 @@ enum CatalogEmitter {
         return (entries, properties)
     }
 
-    /// One `DerivedProperty(...)` entry for a `var` requirement. A `{ get async }` requirement —
+    /// Returns one `DerivedProperty(...)` entry for a `var` requirement. A `{ get async }` requirement —
     /// how an actor port witnesses a property — reads back with `await`.
+    ///
+    /// - Parameters:
+    ///   - name: The property requirement's name.
+    ///   - labelRoot: The trace label of the stamped protocol; the entry's label is this root, a dot,
+    ///     and `name`.
+    ///   - isAsync: Whether the requirement's getter is `async`.
+    /// - Returns: The entry as Swift source.
     private static func derivedProperty(_ name: String, labelRoot: String, isAsync: Bool) -> String {
         "            DerivedProperty(\(quotedLiteral(name)), "
             + "label: \(quotedLiteral("\(labelRoot).\(name)"))) { __sut in \(isAsync ? "await " : "")__sut.\(name) }"
     }
 
-    /// One `DerivedOp(...)` entry: the argument list and the forwarding call, both written from the
-    /// signature alone.
+    /// Returns one `DerivedOp(...)` entry: the argument list and the forwarding call, both written from
+    /// the signature alone.
+    ///
+    /// - Parameter function: A non-static, non-generic method requirement of the pasted protocol.
+    /// - Returns: The entry as Swift source.
     private static func derivedOp(_ function: FunctionDeclSyntax) -> String {
         let label = function.name.text
         // A completion block is not generated input: the op hands in a block that signals, and
@@ -176,9 +193,17 @@ enum CatalogEmitter {
         """
     }
 
-    /// The type heuristic for one parameter: which `DerivedArgument` it declares, and the expression
-    /// that reads its generated value back at the call. Imported IUO/optional sugar is stripped —
-    /// a generated value is always concrete, and a `T` satisfies a `T!`/`T?` parameter.
+    /// Returns the type heuristic for one parameter: which `DerivedArgument` it declares, and the
+    /// expression that reads its generated value back at the call.
+    ///
+    /// - Parameters:
+    ///   - parameter: A parameter of the method requirement.
+    ///   - position: The parameter's zero-based index among the method's generated arguments.
+    /// - Returns: The `DerivedArgument` as a Swift expression (`.pending` when no heuristic fits), and a
+    ///   Swift expression reading the generated value out of `__values` as the parameter's type.
+    ///
+    /// Imported IUO/optional sugar is stripped — a generated value is always concrete, and a `T`
+    /// satisfies a `T!`/`T?` parameter.
     private static func map(
         _ parameter: FunctionParameterSyntax,
         at position: Int

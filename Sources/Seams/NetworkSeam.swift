@@ -5,8 +5,10 @@ import HaruspecCore
 /// no-swizzling interception point. Register it on a `URLSessionConfiguration` and every request the
 /// session makes is either **recorded** (record mode delegates to the real network / a live handler
 /// and captures status + body) or **replayed** (replay mode serves the recorded response headlessly,
-/// no network required). That headless replay is the whole point: CI can re-run the changed code
-/// against the golden branch's recorded responses in a pure process.
+/// no network required).
+///
+/// That headless replay is the whole point: CI can re-run the changed code against the golden branch's
+/// recorded responses in a pure process.
 ///
 /// v0 keys by `method + URL` and captures status code + body. Header capture, request-body matching,
 /// and streaming are not captured. `URLProtocol` instances are created by the URL
@@ -18,8 +20,15 @@ public final class CassetteURLProtocol: URLProtocol {
     private nonisolated(unsafe) static var cassette: Cassette?
     private nonisolated(unsafe) static var liveHandler: (@Sendable (URLRequest) -> (status: Int, body: Data))?
 
-    /// Point a session's config at this protocol. `liveHandler` supplies responses in record mode
-    /// (inject a local one in tests, or omit to let real network run); replay ignores it.
+    /// Returns a session configuration whose requests route through this protocol, and makes
+    /// `cassette` the one every such request records into or replays from.
+    ///
+    /// - Parameters:
+    ///   - cassette: The cassette that answers every request, keyed by method and URL; it replaces any
+    ///     cassette an earlier install set.
+    ///   - liveHandler: The response a request gets when the cassette records or misses, as a status code
+    ///     and body; `nil` means status `0` with an empty body. Replay ignores it.
+    /// - Returns: An ephemeral configuration whose only protocol class is ``CassetteURLProtocol``.
     public static func install(
         cassette: Cassette,
         liveHandler: (@Sendable (URLRequest) -> (status: Int, body: Data))? = nil

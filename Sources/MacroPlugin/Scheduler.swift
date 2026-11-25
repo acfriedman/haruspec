@@ -112,6 +112,13 @@ enum SchedulerEmitter {
     }
 
     /// Classifies a requirement by its parameters, or rejects it naming the shapes a scheduler holds.
+    ///
+    /// - Parameters:
+    ///   - function: A non-static method requirement of the stamped scheduling protocol.
+    ///   - protoName: The stamped protocol's name, which the rejection names.
+    /// - Returns: The requirement's scheduling shape, carrying its parameters' internal names.
+    /// - Throws: A `MacroError` listing the accepted shapes when the requirement is `async`, throwing,
+    ///   generic, or value-returning, or its parameters match none of them.
     private static func classify(_ function: FunctionDeclSyntax, in protoName: String) throws -> SchedulingShape {
         let reject = MacroError("\(protoName).\(function.name.text): \(acceptedShapes)")
         let signature = function.signature
@@ -150,6 +157,14 @@ enum SchedulerEmitter {
     }
 
     /// Returns the double's witness for one requirement: a hand-off to the capture's backlog.
+    ///
+    /// - Parameters:
+    ///   - function: The method requirement to witness.
+    ///   - shape: The requirement's scheduling shape.
+    ///   - label: The stamped protocol's trace label.
+    ///   - discipline: The stamp's `schedules:` case, spelled without its leading dot: `serial`,
+    ///     `concurrent`, or `main`.
+    /// - Returns: The witness's source, as Swift source.
     private static func method(
         _ function: FunctionDeclSyntax,
         shape: SchedulingShape,

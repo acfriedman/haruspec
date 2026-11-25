@@ -12,6 +12,12 @@ public enum Seam {
 
     /// Runs `body` with `cassette` bound as the ambient seam source (record or replay). Seam reads
     /// inside route through it; reads outside any binding stay live.
+    ///
+    /// - Parameters:
+    ///   - cassette: The cassette that answers seam reads for the dynamic scope of `body`.
+    ///   - body: The work to run with the cassette bound.
+    /// - Returns: The value `body` returns.
+    /// - Throws: The error `body` throws, unchanged.
     @discardableResult
     public static func bind<T>(_ cassette: Cassette, _ body: () throws -> T) rethrows -> T {
         try $cassette.withValue(cassette, operation: body)

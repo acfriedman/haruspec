@@ -6,7 +6,12 @@ import HaruspecCore
 /// place the cassette (an `HaruspecSeams` concept) meets `Coverage` (an `HaruspecCore` concept); the diff
 /// engine never sees a cassette.
 public extension Cassette {
-    /// Builds the coverage signal for this replay against a declared seam registry.
+    /// Returns the coverage signal for this replay against a declared seam registry.
+    ///
+    /// - Parameter registry: The seam ids of the boundaries the harness knows about; `nil` means the
+    ///   seams this cassette has tracks for.
+    /// - Returns: The coverage, declaring every registry seam, with each cleanly exercised seam counted
+    ///   and a gap for each unreached seam and each miss.
     ///
     /// The **registry is the coverage map** (docs/seams.md): the boundaries the harness knows about. When it
     /// isn't declared explicitly it defaults to the seams the golden run recorded — an honest but
@@ -46,7 +51,13 @@ public extension Cassette {
         return Coverage(declared: Array(declared), exercised: exercised, gaps: gaps)
     }
 
-    /// Convenience: pairs a trace diff with this replay's coverage into the resolved `VerificationResult`.
+    /// Returns a trace diff paired with this replay's coverage, as the resolved `VerificationResult`.
+    ///
+    /// - Parameters:
+    ///   - diff: The trace diff of the run this cassette replayed into.
+    ///   - registry: The seam ids of the boundaries the harness knows about; `nil` means the seams this
+    ///     cassette has tracks for.
+    /// - Returns: The result over `diff`, with coverage as ``coverage(declaring:)`` reports it.
     func verify(_ diff: TraceDiff, declaring registry: [String]? = nil) -> VerificationResult {
         VerificationResult(diff: diff, coverage: coverage(declaring: registry))
     }

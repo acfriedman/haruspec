@@ -29,7 +29,9 @@ public final class SeamFileSystem: @unchecked Sendable {
         lock.lock(); written[path] = data; lock.unlock()
     }
 
-    /// Writes performed during this run (in-memory; for asserting write-side behavior).
+    /// Returns the writes performed during this run (in-memory; for asserting write-side behavior).
+    ///
+    /// - Returns: Each written path's last data; empty when nothing was written.
     public func recordedWrites() -> [String: Data] {
         lock.lock(); defer { lock.unlock() }
         return written

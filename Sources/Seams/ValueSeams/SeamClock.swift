@@ -7,6 +7,7 @@ import HaruspecCore
 // `Date()`) is the later source-shim / swizzle mechanism, layered on this same cassette.
 
 /// A clock whose readings are recorded/replayed. Stands in for production reading wall-clock time.
+///
 /// Record once and two replays return the *same* timestamps — nondeterministic time becomes diffable.
 public struct SeamClock {
     private let cassette: Cassette
@@ -23,7 +24,9 @@ public struct SeamClock {
         self.live = live
     }
 
-    /// Seconds since the epoch — recorded on the golden run, replayed identically thereafter.
+    /// Returns seconds since the epoch — recorded on the golden run, replayed identically thereafter.
+    ///
+    /// - Returns: The recorded reading on replay; the live clock's reading on a recording or a miss.
     public func now() -> Double {
         cassette.double(seam: seam, live: live)
     }
