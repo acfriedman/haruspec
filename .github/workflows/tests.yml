@@ -13,7 +13,11 @@ jobs:
   test:
     # GitHub-hosted: the repo is public, and a self-hosted runner would execute
     # fork PRs on the host machine.
-    runs-on: macos-15
+    runs-on: macos-26
+    env:
+      # The oldest Xcode the package supports (Swift 6.2, the manifest's tools version),
+      # so code that only a newer compiler accepts fails here, not in an adopter's build.
+      DEVELOPER_DIR: /Applications/Xcode_26.0.1.app/Contents/Developer
     steps:
       - uses: actions/checkout@v4
       - name: Run engine tests
@@ -24,7 +28,7 @@ jobs:
           swift test
 
   style:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
         with:
