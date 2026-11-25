@@ -35,6 +35,9 @@ public struct SourceResolver: Sendable {
 
     /// Resolves each origin against one walk of the tree. Order is preserved, so a caller can zip the
     /// results back onto the verdict's origin list.
+    ///
+    /// - Parameter origins: The declarations to find, as the instrumentation registered them.
+    /// - Returns: One resolution per origin, in the same order; empty when `origins` is.
     public func resolve(_ origins: some Sequence<TraceOrigin>) -> [SourceResolution] {
         let origins = Array(origins)
         guard !origins.isEmpty else { return [] }
@@ -84,8 +87,11 @@ private struct SourceIndex {
 
     private static let sourceExtensions: Set<String> = ["swift", "m", "mm"]
 
-    /// The files declaring one origin, or none — which the caller must treat as a blind spot, not a
-    /// clean read (see `SourceResolution`).
+    /// Returns the files declaring one origin.
+    ///
+    /// - Parameter origin: The declaration to find, as the instrumentation registered it.
+    /// - Returns: The declaring files relative to the root, sorted; empty when none is found, which the
+    ///   caller must treat as a blind spot, not a clean read (see ``SourceResolution``).
     func files(declaring origin: TraceOrigin) -> [String] {
         if let fileID = origin.source {
             return matches(forFileID: fileID)
@@ -94,9 +100,14 @@ private struct SourceIndex {
         return pathsBySymbol[Self.declarationName(symbol)].map { $0.sorted() } ?? []
     }
 
-    /// A `#fileID` is `Module/File.swift`, and the module is not necessarily a directory — so match on
-    /// the file name and use the module only to break a tie. An unbroken tie keeps *every* candidate:
-    /// auditing a file too many is harmless, missing the real one is the failure this exists to avoid.
+    /// Returns the files a `#fileID` names. A `#fileID` is `Module/File.swift`, and the module is not
+    /// necessarily a directory — so the file name decides and the module only breaks a tie.
+    ///
+    /// - Parameter fileID: The declaring file as a `#fileID` path (`"LegacyApp/SwiftCartActor.swift"`).
+    /// - Returns: The matching files relative to the root, sorted; empty when no file has that name.
+    ///
+    /// An unbroken tie keeps *every* candidate: auditing a file too many is harmless, missing the real
+    /// one is the failure this exists to avoid.
     private func matches(forFileID fileID: String) -> [String] {
         let basename = String(fileID.split(separator: "/").last ?? "")
         let candidates = pathsByBasename[basename] ?? []
@@ -139,17 +150,27 @@ private struct SourceIndex {
         return found
     }
 
-    /// `@implementation CartManager` and `@implementation CartManager (Promo)` alike — the category
-    /// form matters most, since a category is behavior living in a file the class name doesn't name.
+    /// Returns the class an Obj-C `@implementation` line implements: `@implementation CartManager` and
+    /// `@implementation CartManager (Promo)` alike. The category form matters most, since a category
+    /// is behavior living in a file the class name doesn't name.
+    ///
+    /// - Parameter line: One source line, trimmed of surrounding whitespace.
+    /// - Returns: The class name; `nil` when `line` is not an `@implementation`.
     static func objCImplementationName(in line: String) -> String? {
         let keyword = "@implementation"
         guard line.hasPrefix(keyword) else { return nil }
         return identifier(at: line.index(line.startIndex, offsetBy: keyword.count), in: line)
     }
 
-    /// A Swift type declaration, allowing the modifiers and attributes that can precede one. Only used
-    /// when a forwarder wraps a Swift `@objc` class — unusual, but abstaining there would name a blind
-    /// spot with the source sitting in the tree.
+    /// Returns the type a Swift type declaration line declares, allowing the modifiers and attributes
+    /// that can precede one.
+    ///
+    /// - Parameter line: One source line, trimmed of surrounding whitespace.
+    /// - Returns: The declared class, actor, struct, or enum name; `nil` when `line` is not such a
+    ///   declaration.
+    ///
+    /// Only used when a forwarder wraps a Swift `@objc` class — unusual, but abstaining there would
+    /// name a blind spot with the source sitting in the tree.
     static func swiftTypeName(in line: String) -> String? {
         var rest = Substring(line)
         while let token = nextToken(in: &rest) {
@@ -161,8 +182,11 @@ private struct SourceIndex {
         return nil
     }
 
-    /// The next whitespace-delimited token, advancing `rest` past it. Attributes with arguments
-    /// (`@objc(Cart)`) come back whole, which is all the modifier check needs.
+    /// Returns the next whitespace-delimited token, advancing `rest` past it. Attributes with
+    /// arguments (`@objc(Cart)`) come back whole, which is all the modifier check needs.
+    ///
+    /// - Parameter rest: The unread remainder of the line, which receives what follows the token.
+    /// - Returns: The token; `nil` when only whitespace remains.
     private static func nextToken(in rest: inout Substring) -> String? {
         rest = rest.drop { $0 == " " || $0 == "\t" }
         guard !rest.isEmpty else { return nil }
@@ -171,8 +195,13 @@ private struct SourceIndex {
         return String(token)
     }
 
-    /// The identifier beginning at or after `start`, stopping at anything that can follow a type name
-    /// (`:` inheritance, `<` generics, `(` a category, `{` the body).
+    /// Returns the identifier beginning at or after `start`, stopping at anything that can follow a
+    /// type name (`:` inheritance, `<` generics, `(` a category, `{` the body).
+    ///
+    /// - Parameters:
+    ///   - start: The position in `line` to read from.
+    ///   - line: The source line being read.
+    /// - Returns: The letters, digits, and underscores found there; `nil` when there are none.
     private static func identifier(at start: String.Index, in line: String) -> String? {
         let rest = line[start...].drop { $0 == " " || $0 == "\t" }
         let name = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" }

@@ -30,9 +30,12 @@ enum ExitCode: Int32 {
     case unobservedIntent = 6
 }
 
-/// Maps a four-tier `TraceDiff.Verdict` to the process `ExitCode`. The bare two-file `diff` path never produces
-/// `.cannotVerify` or `.unstable` (it makes no coverage or repetition claim); this is shared so the
-/// replay/MCP paths stay honest.
+/// Returns the process exit code for a four-tier ``TraceDiff/Verdict``. The bare two-file `diff`
+/// path never produces `.cannotVerify` or `.unstable` (it makes no coverage or repetition claim);
+/// this is shared so the replay/MCP paths stay honest.
+///
+/// - Parameter verdict: The verdict a diff or replay reached.
+/// - Returns: The ``ExitCode`` case of the same name, with `.equivalent` mapping to `.success`.
 func exitCode(for verdict: TraceDiff.Verdict) -> ExitCode {
     switch verdict {
     case .equivalent: .success
@@ -42,8 +45,12 @@ func exitCode(for verdict: TraceDiff.Verdict) -> ExitCode {
     }
 }
 
-/// The verdict-artifact form: an otherwise-green verdict whose intent declared something the sweep
-/// never observed fails as exit 6.
+/// Returns the process exit code for a verdict artifact: an otherwise-green verdict whose intent
+/// declared something the sweep never observed fails as exit 6.
+///
+/// - Parameter verdict: The spec verdict being reported.
+/// - Returns: `.unobservedIntent` for an equivalent verdict with unobserved intent; otherwise the
+///   code for its four-tier verdict.
 ///
 /// Behavior matched, but a standing excuse matched nothing, and merging it would let that excuse
 /// silently absorb a future divergence. A red verdict keeps its own (more primary) code; the
@@ -61,6 +68,10 @@ func fail(_ message: String, code: ExitCode) -> Never {
 }
 
 /// Pulls `--flag value` pairs out of an argument list, returning the flags and the positional rest.
+///
+/// - Parameter args: The command-line arguments to split, in order.
+/// - Returns: The flags keyed by name without the dashes, a flag with no value mapping to `""`; and
+///   every other argument, in order.
 func parse(_ args: [String]) -> (flags: [String: String], positionals: [String]) {
     var flags: [String: String] = [:]
     var positionals: [String] = []
@@ -208,6 +219,8 @@ func runCanonicalize(_ rest: [String]) -> Never {
 /// for effect channels the capture cannot see. Static, so it runs on the CI host beside `report` —
 /// the verify itself may have run somewhere with no source tree at all (a simulator, a device).
 ///
+/// - Parameter rest: The command-line arguments after `audit`.
+///
 /// Exits 4 (CANNOT-VERIFY) on any blind spot, resolved or not: a channel found and a declaration that
 /// could not be read are the same fact about the verdict — it cannot claim it saw everything.
 func runAudit(_ rest: [String]) -> Never {
@@ -229,8 +242,14 @@ func runAudit(_ rest: [String]) -> Never {
     }
 }
 
-/// The declarations to audit: a verdict's own origins, or symbols named on the command line (the
-/// form CI can use before a verdict artifact exists — and the form an Obj-C class needs anyway).
+/// Returns the declarations to audit: a verdict's own origins, or symbols named on the command line
+/// (the form CI can use before a verdict artifact exists — and the form an Obj-C class needs anyway).
+///
+/// - Parameter flags: The parsed `--flag value` pairs, keyed by flag name without the dashes.
+/// - Returns: The `--verdict` artifact's origins, else one origin per `--covering` symbol; empty when
+///   neither flag names anything.
+/// - Throws: The file-system error when the `--verdict` file cannot be read, ``SpecVerdictError``
+///   when its schema version is unsupported, or a `DecodingError` when it is not a verdict.
 func auditOrigins(_ flags: [String: String]) throws -> [TraceOrigin] {
     if let path = flags["verdict"], !path.isEmpty {
         return try SpecVerdict(contentsOf: URL(fileURLWithPath: path)).qualification.origins
@@ -280,6 +299,10 @@ func runReport(_ rest: [String]) -> Never {
 
 /// The many-verdict form of `report`: every artifact of one continuous run in one rendering,
 /// optionally scoped to a diff (`--changed` + `--root`), exiting with the worst code rendered.
+///
+/// - Parameters:
+///   - flags: The parsed `--flag value` pairs, keyed by flag name without the dashes.
+///   - positionals: The verdict artifact paths, in rendering order.
 ///
 /// An unreadable artifact renders as an infrastructure failure instead of aborting the others,
 /// so one broken replay cannot hide a verdict.

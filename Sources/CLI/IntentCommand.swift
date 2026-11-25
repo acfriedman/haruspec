@@ -8,6 +8,8 @@ import HaruspecCore
 /// Resolves a PR body's `haruspec-intent` blocks into per-spec intent files — the bridge between
 /// "intent declared where the PR is described" and the replay's `HARUSPEC_INTENT_PATH`.
 ///
+/// - Parameter rest: The command-line arguments after `intent`.
+///
 /// `--bodies <dir>` is the record-on-merge form: one file per merged PR body, each parsed alone
 /// (duplicate spec blocks within one body still refuse), then unioned per spec across bodies —
 /// sound there because each body's excuses were individually endorsed by its own merge.
@@ -46,8 +48,15 @@ func runIntent(_ rest: [String]) -> Never {
     }
 }
 
-/// The per-spec intents the flags select: one `--body` file, or every file under `--bodies`
+/// Returns the per-spec intents the flags select: one `--body` file, or every file under `--bodies`
 /// unioned per spec.
+///
+/// - Parameter flags: The parsed `--flag value` pairs, keyed by flag name without the dashes.
+/// - Returns: Each spec's intent, keyed by spec name; empty when no body declares an intent block.
+/// - Throws: The file-system error when a body file or the `--bodies` directory cannot be read, or
+///   ``IntentGrammarError`` when a body's intent blocks do not parse.
+///
+/// Exits with a usage error when neither `--body` nor `--bodies` is given.
 private func declaredIntents(_ flags: [String: String]) throws -> [String: Intent] {
     if let bodyPath = flags["body"], !bodyPath.isEmpty {
         let body = try String(contentsOf: URL(fileURLWithPath: bodyPath), encoding: .utf8)

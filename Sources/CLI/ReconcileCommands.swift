@@ -7,6 +7,8 @@ import HaruspecSpec
 // workflow acts on. The decision logic lives in `PlanSweep`; this file only feeds it the repository.
 
 /// Writes a `PlanProvenance` stamp into an existing plan artifact, in place.
+///
+/// - Parameter rest: The command-line arguments after `stamp`.
 func runStamp(_ rest: [String]) -> Never {
     let (flags, _) = parse(rest)
     guard let planPath = flags["plan"], !planPath.isEmpty else {
@@ -49,6 +51,8 @@ func runStamp(_ rest: [String]) -> Never {
 }
 
 /// Prints the record-on-merge reconciliation for a plans directory as JSON on stdout.
+///
+/// - Parameter rest: The command-line arguments after `sweep`.
 func runSweep(_ rest: [String]) -> Never {
     let (flags, _) = parse(rest)
     guard let plansPath = flags["plans"], !plansPath.isEmpty else {
@@ -94,14 +98,21 @@ func runSweep(_ rest: [String]) -> Never {
 
 /// Returns the committed plan artifacts under `directory` (the `<spec>.plan.json[.gz]` convention);
 /// anything else in the directory — a README, a result — is not a plan and is skipped.
+///
+/// - Parameter directory: The plans directory; only its top level is read.
+/// - Returns: The plan files sorted by file name; empty when the directory holds none.
+/// - Throws: The file-system error when `directory` cannot be listed.
 private func planURLs(in directory: URL) throws -> [URL] {
     try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         .filter { ContinuousRun.specName(inPlanPath: $0.path) != nil }
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
 }
 
-/// Returns the spec names a census run wrote into `path` (`<spec>.census.json` markers), or `nil`
-/// when no census directory was supplied.
+/// Returns the spec names a census run wrote into `path` (`<spec>.census.json` markers).
+///
+/// - Parameter path: The census directory; `nil` or empty when none was supplied.
+/// - Returns: The spec names, sorted; `nil` when no census directory was supplied.
+/// - Throws: The file-system error when the directory cannot be listed.
 private func censusSpecs(_ path: String?) throws -> [String]? {
     guard let path, !path.isEmpty else { return nil }
     let directory = URL(fileURLWithPath: path, isDirectory: true)
@@ -114,8 +125,14 @@ private func censusSpecs(_ path: String?) throws -> [String]? {
 
 /// Returns `git diff --name-only <sha>..HEAD` for the checkout at `root`.
 ///
-/// A failing git — an unknown commit, history too shallow to reach it — throws, which the sweep
-/// reads as "freshness cannot be proven".
+/// - Parameters:
+///   - root: The path of the repository checkout.
+///   - sha: The commit to diff from, as git accepts it.
+/// - Returns: The changed paths relative to the repository root; empty when nothing changed.
+/// - Throws: The error `Process` throws when git cannot be launched, or an error carrying git's
+///   exit status and stderr when git fails — an unknown commit, history too shallow to reach it.
+///
+/// The sweep reads a throw as "freshness cannot be proven".
 private func changedFiles(root: String, since sha: String) throws -> [String] {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/env")

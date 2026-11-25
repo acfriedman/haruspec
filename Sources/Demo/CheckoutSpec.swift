@@ -42,24 +42,33 @@ public enum CheckoutSpec {
         return recorder.trace()
     }
 
-    /// Golden baseline behavior.
+    /// Returns the golden baseline behavior.
+    ///
+    /// - Returns: The checkout scenario's trace under the original service.
     public static func baseline() -> Trace {
         capture(name: "checkout.baseline") { CartServiceV1(center: $0, issuer: $1) }
     }
 
-    /// A behavior-preserving refactor (should verify EQUIVALENT).
+    /// Returns a behavior-preserving refactor (should verify EQUIVALENT).
+    ///
+    /// - Returns: The checkout scenario's trace under the refactored service.
     public static func refactor() -> Trace {
         capture(name: "checkout.refactor") { CartServiceV2(center: $0, issuer: $1) }
     }
 
-    /// A subtly-broken change (should be caught as DIVERGED).
+    /// Returns a subtly-broken change (should be caught as DIVERGED).
+    ///
+    /// - Returns: The checkout scenario's trace under the broken service.
     public static func regression() -> Trace {
         capture(name: "checkout.regression") { CartServiceBuggy(center: $0, issuer: $1) }
     }
 
-    /// A feature change: intended new behavior (loyalty points) plus one collateral regression.
-    /// Verified in *extension mode* against `intent` — the intended deltas are absorbed, the
-    /// collateral one is caught. (See `CartServiceV3`.)
+    /// Returns a feature change: intended new behavior (loyalty points) plus one collateral regression.
+    ///
+    /// - Returns: The checkout scenario's trace under the feature service (`CartServiceV3`).
+    ///
+    /// Verified in *extension mode* against ``intent`` — the intended deltas are absorbed, the
+    /// collateral one is caught.
     public static func feature() -> Trace {
         capture(name: "checkout.feature") { CartServiceV3(center: $0, issuer: $1) }
     }

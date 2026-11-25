@@ -53,8 +53,15 @@ public final class TraceRecorder: @unchecked Sendable {
     // MARK: - Public recording API
 
     /// Registers where a traced label is declared. Emitted by the stamped forwarder and double into
-    /// every instrumented body, so a label registers exactly when it is reached under capture. Cheap when
-    /// nothing is collecting (a nil check), and idempotent — the collector is a set.
+    /// every instrumented body, so a label registers exactly when it is reached under capture.
+    ///
+    /// - Parameters:
+    ///   - label: The trace label the events carry (`"Cart"`).
+    ///   - symbol: The type that declares the behavior; `nil` when unknown.
+    ///   - source: The declaring file as a `#fileID` path; `nil` where there is no Swift source, as for
+    ///     an Obj-C class behind a forwarder.
+    ///
+    /// Cheap when nothing is collecting, and idempotent: registering the same origin twice records it once.
     public func noteOrigin(_ label: String, symbol: String? = nil, source: String? = nil) {
         origins?.note(TraceOrigin(label: label, symbol: symbol, source: source))
     }
@@ -103,6 +110,12 @@ public final class TraceRecorder: @unchecked Sendable {
 
     /// Records a posted notification / broadcast side effect — an observable product behavior, so it
     /// lands in the durable **semantic** tier (its value contract survives code-symbol renames).
+    ///
+    /// - Parameters:
+    ///   - name: The notification's name, recorded as the event label.
+    ///   - subject: The object that posted it; `nil` when there is none.
+    ///   - payload: The notification's contents, canonicalized; `nil` records none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
     public func notification(
         _ name: String,
         subject: AnyObject? = nil,
@@ -121,6 +134,12 @@ public final class TraceRecorder: @unchecked Sendable {
     }
 
     /// Records an observable state / property mutation (KVO) — a durable **semantic**-tier side effect.
+    ///
+    /// - Parameters:
+    ///   - label: The event label naming the mutated property.
+    ///   - subject: The instance whose state changed; `nil` when there is none.
+    ///   - value: The new value, canonicalized; `nil` records none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
     public func stateChange(
         _ label: String,
         subject: AnyObject? = nil,
@@ -140,6 +159,13 @@ public final class TraceRecorder: @unchecked Sendable {
 
     /// Records a property value the harness itself read back at the capture boundary — the state
     /// contract's gate (the harness did the reading, so no side's instrumentation is being trusted).
+    ///
+    /// - Parameters:
+    ///   - label: The event label naming the property read.
+    ///   - subject: The instance the property was read from; `nil` when there is none.
+    ///   - value: The value read, canonicalized; `nil` records none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
+    ///
     /// Semantic tier, like every observable product behavior.
     public func snapshot(
         _ label: String,
@@ -189,9 +215,15 @@ public final class TraceRecorder: @unchecked Sendable {
 
     /// Records a virtual timer's surviving fire — the temporal contract a deferred pipeline states
     /// in code (a debounce's quiet period, a delay's interval), carried as data because under
-    /// virtual time the requested delay is *declared at the seam*, never measured. Semantic tier:
-    /// how long a pipeline waits before answering is behavior a user feels, so a changed delay
-    /// gates like any value.
+    /// virtual time the requested delay is *declared at the seam*, never measured.
+    ///
+    /// - Parameters:
+    ///   - delay: The delay the seam requested, canonicalized.
+    ///   - subject: The instance the timer belongs to; `nil` when there is none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
+    ///
+    /// Semantic tier: how long a pipeline waits before answering is behavior a user feels, so a
+    /// changed delay gates like any value.
     public func timerFired(
         delay: CanonicalValue,
         subject: AnyObject? = nil,
@@ -209,6 +241,12 @@ public final class TraceRecorder: @unchecked Sendable {
     }
 
     /// Records an application-defined custom telemetry event (structural tier; droppable via `ignoredKinds`).
+    ///
+    /// - Parameters:
+    ///   - label: The application's name for the event.
+    ///   - subject: The instance the event belongs to; `nil` when there is none.
+    ///   - payload: The event's data, canonicalized; `nil` records none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
     public func custom(
         _ label: String,
         subject: AnyObject? = nil,
@@ -246,6 +284,14 @@ public final class TraceRecorder: @unchecked Sendable {
     }
 
     /// Times a unit of work as a signpost interval; the measured duration is a budgeted trace field.
+    ///
+    /// - Parameters:
+    ///   - label: The event label for the interval.
+    ///   - subject: The instance the work belongs to; `nil` when there is none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
+    ///   - body: The work to time.
+    /// - Returns: The value `body` returns.
+    /// - Throws: Whatever `body` throws; no interval is recorded then.
     @discardableResult
     public func interval<T>(
         _ label: String,
@@ -269,21 +315,28 @@ public final class TraceRecorder: @unchecked Sendable {
         return events.count
     }
 
-    /// A snapshot of the trace captured so far.
+    /// Returns a snapshot of the trace captured so far.
+    ///
+    /// - Returns: The trace under this recorder's name, holding every event recorded before the call.
     public func trace() -> Trace {
         lock.lock(); defer { lock.unlock() }
         return Trace(name: name, events: events)
     }
 
-    /// Advances the underlying clock when it is a `ManualClock` (used to model deterministic work cost
-    /// in tests); a no-op under a `WallClock`.
+    /// Advances the underlying clock when it is a ``ManualClock`` (used to model deterministic work cost
+    /// in tests); a no-op under a ``WallClock``.
+    ///
+    /// - Parameter ticks: The ticks to add; keep it non-negative so the clock stays monotonic.
     public func advanceClock(_ ticks: Int64) {
         (clock as? ManualClock)?.advance(ticks)
     }
 
-    /// The traced call in progress on this thread, if any — the cause a seam records when it hands
-    /// work to another queue or task. Read at the *enqueue*, which is the only moment both ends of the
-    /// edge are known.
+    /// Returns the traced call in progress on this thread, if any — the cause a seam records when it hands
+    /// work to another queue or task.
+    ///
+    /// - Returns: The innermost open call's sequence number; `nil` when no traced call is open on this thread.
+    ///
+    /// Read at the *enqueue*, which is the only moment both ends of the edge are known.
     public func enclosingCallSeq() -> Int? {
         lock.lock(); defer { lock.unlock() }
         return calls.enclosing()?.seq
@@ -296,13 +349,21 @@ public final class TraceRecorder: @unchecked Sendable {
         return seqCounter
     }
 
-    /// The current clock reading, in ticks. Used by a timed forwarder's generated timing.
+    /// Returns the current clock reading. Used by a timed forwarder's generated timing.
+    ///
+    /// - Returns: The recorder's clock reading in ticks; only differences between readings carry meaning.
     public func now() -> Int64 {
         clock.now()
     }
 
     /// Records a pre-measured signpost interval (the duration was computed by the caller). Used by a
     /// timed forwarder (`@Haruspec(_:timed:)`), which brackets the whole forwarded call itself.
+    ///
+    /// - Parameters:
+    ///   - label: The event label for the interval.
+    ///   - subject: The instance the work belongs to; `nil` when there is none.
+    ///   - durationTicks: The interval's measured length, in clock ticks.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
     public func signpost(
         _ label: String,
         subject: AnyObject? = nil,
@@ -338,8 +399,14 @@ public final class TraceRecorder: @unchecked Sendable {
         ))
     }
 
-    /// Only a `.signpost` carries a duration, so the timed path is its own entry point rather than a
-    /// `durationTicks:` every other kind has to pass `nil` to.
+    /// Appends a `.signpost` event carrying a duration. Only a signpost carries one, so the timed path
+    /// is its own entry point rather than a `durationTicks:` every other kind has to pass `nil` to.
+    ///
+    /// - Parameters:
+    ///   - isolation: The actor the caller runs on; `nil` means no actor.
+    ///   - label: The event label for the interval.
+    ///   - subject: The instance the work belongs to; `nil` when there is none.
+    ///   - durationTicks: The interval's measured length, in clock ticks.
     private func appendSignpostLocked(
         isolation: (any Actor)?,
         label: String,
@@ -360,7 +427,12 @@ public final class TraceRecorder: @unchecked Sendable {
         ))
     }
 
-    /// The domain an event is *attributed* to, which is not always the one it executed in.
+    /// Returns the domain an event is *attributed* to, which is not always the one it executed in.
+    ///
+    /// - Parameters:
+    ///   - isolation: The actor the event's caller runs on; `nil` means no actor.
+    ///   - kind: The kind of event being attributed.
+    /// - Returns: The event's own domain, or the enclosing call's domain when its own resolves to `ambient`.
     ///
     /// A notification travels through Foundation and a collaborator call through a decorator; both
     /// arrive one frame from the subject, isolated to nothing, and would resolve to `ambient` however
@@ -369,6 +441,8 @@ public final class TraceRecorder: @unchecked Sendable {
     ///
     /// Only `ambient` inherits. An event that resolved to an actor or a queue knows its own domain and
     /// is never overridden by its caller's.
+    ///
+    /// Attributing a `.call` opens a frame on this thread's call stack, and a `.ret` closes one.
     private func attributedDomainLocked(_ isolation: (any Actor)?, kind: EventKind) -> ConcurrencyDomain {
         var domain = domainLocked(isolation)
         if domain == .ambient, let enclosing = calls.enclosing()?.domain {
@@ -385,8 +459,11 @@ public final class TraceRecorder: @unchecked Sendable {
         return domain
     }
 
-    /// Resolves the domain for an event, reusing `symbolicIDLocked` so an actor that is also a traced
-    /// subject carries one identity in both places.
+    /// Returns the domain an event executed in. An actor that is also a traced subject carries one
+    /// symbolic identity in both places.
+    ///
+    /// - Parameter isolation: The actor the event's caller runs on; `nil` means no actor.
+    /// - Returns: The resolved domain, as ``DomainResolver/resolve(isolation:instanceID:)`` gives it.
     private func domainLocked(_ isolation: (any Actor)?) -> ConcurrencyDomain {
         DomainResolver.resolve(isolation: isolation, instanceID: symbolicIDLocked)
     }

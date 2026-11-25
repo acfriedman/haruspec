@@ -36,8 +36,12 @@ public struct MCPServer {
         exit(0)
     }
 
-    /// Handles one raw JSON-RPC message; `nil` means no response (a notification, per JSON-RPC).
-    /// Factored this way so tests can drive the whole protocol without a process boundary.
+    /// Handles one raw JSON-RPC message. Factored this way so tests can drive the whole protocol
+    /// without a process boundary.
+    ///
+    /// - Parameter line: One message as a line of JSON text.
+    /// - Returns: The JSON-RPC response as JSON text, an error response when `line` is not a request
+    ///   object or names an unknown method; `nil` for a notification, which gets no response.
     public func handle(_ line: String) -> String? {
         guard let data = line.data(using: .utf8),
               let message = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
@@ -232,8 +236,12 @@ public struct MCPServer {
         return try Comparison(contentsOf: URL(fileURLWithPath: path))
     }
 
-    /// A tool *execution* failure rides in the result with `isError` (so the model can read and react
-    /// to it), never as a protocol-level JSON-RPC error — per the MCP tools spec.
+    /// Returns a tool *execution* failure as a tool result. It rides in the result with `isError` (so
+    /// the model can read and react to it), never as a protocol-level JSON-RPC error — per the MCP
+    /// tools spec.
+    ///
+    /// - Parameter message: The failure, as plain text the model reads.
+    /// - Returns: A tool result whose content is `message` as text, flagged `isError`.
     private func toolError(_ message: String) -> [String: Any] {
         ["content": [textContent(message)], "isError": true]
     }

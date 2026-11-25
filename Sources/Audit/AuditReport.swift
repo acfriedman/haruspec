@@ -75,7 +75,10 @@ public struct AuditReport: Sendable, Equatable {
         return spots
     }
 
-    /// The findings as a reviewer reads them: what gates first, then what merely wants confirming.
+    /// Returns the findings as a reviewer reads them: what gates first, then what merely wants confirming.
+    ///
+    /// - Returns: The plain-text report, one finding per line; a single "no bypassed channels" line
+    ///   when nothing gates.
     public func report() -> String {
         var lines: [String] = []
         for channel in orderedUnique(bypasses.map(\.channel)) {
@@ -113,8 +116,11 @@ public struct AuditReport: Sendable, Equatable {
     }
 }
 
-/// First occurrence wins, order preserved — findings read in file order, and a channel names itself
-/// once however many lines reach it.
+/// Returns `values` with duplicates dropped, first occurrence winning and order preserved — findings
+/// read in file order, and a channel names itself once however many lines reach it.
+///
+/// - Parameter values: The strings to deduplicate, in reading order.
+/// - Returns: Each distinct string once, at its first position.
 func orderedUnique(_ values: [String]) -> [String] {
     var seen = Set<String>()
     return values.filter { seen.insert($0).inserted }

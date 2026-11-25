@@ -173,6 +173,8 @@ public enum Haruspec {
 
     /// Advances the capture's deterministic clock to model representative work cost (no-op under a
     /// wall clock or with no active capture). Used to make interval durations reproducible in tests.
+    ///
+    /// - Parameter ticks: The modeled cost in clock ticks; keep it non-negative so the clock stays monotonic.
     public static func simulateCost(_ ticks: Int64) {
         TraceContext.active?.advanceClock(ticks)
     }
@@ -183,6 +185,11 @@ public enum Haruspec {
     /// reactive). It carries no payload by design: verify *values* through production seams
     /// (notification userInfo, return values, KVO), not through instrumentation you authored — so the
     /// oracle checks real behavior, not itself.
+    ///
+    /// - Parameters:
+    ///   - label: The milestone's name.
+    ///   - subject: The instance the milestone belongs to; `nil` when there is none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
     public static func marker(_ label: String, subject: AnyObject? = nil, isolation: (any Actor)? = #isolation) {
         TraceContext.active?.marker(label, subject: subject, isolation: isolation)
     }

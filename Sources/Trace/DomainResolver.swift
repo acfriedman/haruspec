@@ -35,9 +35,13 @@ enum DomainResolver {
     /// where the caller was, not what the code is.
     private static let systemQueuePrefix = "com.apple."
 
-    /// Resolves the current domain. `instanceID` assigns the symbolic id for an actor instance, and is
-    /// the recorder's existing subject numbering — so an actor that is also a traced subject keeps one
-    /// identity across both.
+    /// Resolves the current domain by the ladder on ``DomainResolver``.
+    ///
+    /// - Parameters:
+    ///   - isolation: The actor the recording call site runs on, from its `#isolation`; `nil` means no actor.
+    ///   - instanceID: The recorder's symbolic numbering for subjects, so an actor that is also a traced
+    ///     subject keeps one identity across both.
+    /// - Returns: The first domain the ladder names; ``ConcurrencyDomain/ambient`` when it names none.
     static func resolve(isolation: (any Actor)?, instanceID: (AnyObject) -> Int) -> ConcurrencyDomain {
         if let isolation {
             if isolation === MainActor.shared {
@@ -62,7 +66,9 @@ enum DomainResolver {
         return .ambient
     }
 
-    /// The label of the queue currently executing, or empty when there is none.
+    /// Returns the label of the queue currently executing, with any QoS suffix Foundation added removed.
+    ///
+    /// - Returns: The label; empty when the running queue has none.
     ///
     /// `dispatch_get_current_queue` is deprecated and unsound to compare against other queues, but
     /// reading the *label* of the running queue is exactly the narrow use it remains valid for — this

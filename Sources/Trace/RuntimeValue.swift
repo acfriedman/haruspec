@@ -98,8 +98,15 @@ public enum RuntimeValue {
     // MARK: - Structural canonicalization
 
     /// Reflects an object into an `.object` tree: Obj-C runtime properties first, then a Swift
-    /// `Mirror`. Returns `nil` when the value exposes no keyed structure (or the depth cap is hit),
-    /// leaving the caller to fall back to `String(describing:)`.
+    /// `Mirror`.
+    ///
+    /// - Parameters:
+    ///   - any: The value to reflect.
+    ///   - depth: The current nesting depth, zero at the top-level value.
+    ///   - visited: The objects already on the path, so a reference cycle terminates.
+    /// - Returns: The keyed structure (an error as its domain, code, and user info); `nil` when the
+    ///   value exposes no keyed structure or the depth cap is hit, leaving the caller to fall back to
+    ///   `String(describing:)`.
     private static func structural(
         _ any: Any,
         depth: Int,
@@ -139,9 +146,16 @@ public enum RuntimeValue {
         return .object(result)
     }
 
-    /// Walks the Obj-C property list from the object's class up to (but not including) `NSObject`,
-    /// reading each declared property via KVC. Returns `nil` if the class declares no properties,
-    /// so a bare `NSObject` subclass falls through to `Mirror`/string.
+    /// Reflects the Obj-C properties declared from the object's class up to (but not including)
+    /// `NSObject`, each read via KVC.
+    ///
+    /// - Parameters:
+    ///   - object: The object to reflect.
+    ///   - depth: The current nesting depth, zero at the top-level value.
+    ///   - visited: The objects already on the path, so a reference cycle terminates.
+    /// - Returns: An `.object` keyed by property name, a `nil` property read as `.null`; `nil` when the
+    ///   classes declare no properties or `object` is already on the path, so a bare `NSObject`
+    ///   subclass falls through to `Mirror`/string.
     private static func objcObject(
         _ object: NSObject,
         depth: Int,
@@ -169,9 +183,15 @@ public enum RuntimeValue {
         return result.isEmpty ? nil : .object(result)
     }
 
-    /// Reflects a Swift struct/class via `Mirror`. Optionals are unwrapped transparently; a keyed
-    /// structure (all children labeled) becomes an `.object`, recursing each child. Anything else
-    /// (tuples, enums, collections already handled above, opaque values) yields `nil`.
+    /// Reflects a Swift struct/class via `Mirror`. Optionals are unwrapped transparently.
+    ///
+    /// - Parameters:
+    ///   - any: The value to reflect.
+    ///   - depth: The current nesting depth, zero at the top-level value.
+    ///   - visited: The objects already on the path, so a reference cycle terminates.
+    /// - Returns: An `.object` for a keyed structure (all children labeled), each child canonicalized;
+    ///   `.null` for an empty optional; `nil` for anything else (tuples, enums, opaque values, a
+    ///   childless struct, or a class instance already on the path).
     private static func mirrorObject(
         _ any: Any,
         depth: Int,

@@ -378,6 +378,13 @@ public final class WorkBacklog: @unchecked Sendable {
 
     /// Runs one synchronous item with the capture bound: the recorder, the op it was enqueued under,
     /// its spawn cause, and the domain it was handed to.
+    ///
+    /// - Parameters:
+    ///   - body: The item's work.
+    ///   - item: The held item being run.
+    ///   - recorder: The capture's recorder; `nil` means the ambient one.
+    ///
+    /// A delayed item records its timer fire before `body` runs.
     private func invoke(_ body: () -> Void, of item: Item, recorder: TraceRecorder?) {
         let recorder = recorder ?? TraceContext.active
         TraceContext.$current.withValue(recorder) {
@@ -432,7 +439,10 @@ extension WorkBacklog {
         return items.remove(at: earliest)
     }
 
-    /// The items on `queue` that are ready now, by enqueue number.
+    /// Returns the items on `queue` that are ready now, by enqueue number.
+    ///
+    /// - Parameter queue: The identity of the queue the items were handed to.
+    /// - Returns: The ready items' enqueue numbers; empty when none is ready.
     private func readySeqs(on queue: ObjectIdentifier) -> Set<Int> {
         lock.lock(); defer { lock.unlock() }
         releaseEmptiedGroups()

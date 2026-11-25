@@ -189,9 +189,15 @@ public struct ChannelLint: Sendable {
         self.heldStandIns = heldStandIns
     }
 
-    /// Every deny-listed reach in the resolved sources, file order preserved. Unresolved declarations
-    /// contribute nothing here on purpose — they are a *separate* and more serious finding (see
-    /// `AuditReport`), not an absence of one.
+    /// Returns every deny-listed reach in the resolved sources, file order preserved.
+    ///
+    /// - Parameter resolutions: The declarations' resolved source files; a file shared by several
+    ///   resolutions counts once.
+    /// - Returns: One finding per rule a line matches; empty when nothing reaches a channel or no
+    ///   file could be read.
+    ///
+    /// Unresolved declarations contribute nothing here on purpose — they are a *separate* and more
+    /// serious finding (see ``AuditReport``), not an absence of one.
     public func findings(in resolutions: some Sequence<SourceResolution>) -> [ChannelFinding] {
         var findings: [ChannelFinding] = []
         var audited: Set<String> = []
@@ -229,7 +235,13 @@ public struct ChannelLint: Sendable {
         return findings
     }
 
-    /// Where the channel sits in the line decides what it is.
+    /// Returns what a channel's use is, decided by where it sits in the line.
+    ///
+    /// - Parameters:
+    ///   - spelling: The channel's spelling, as a rule lists it.
+    ///   - line: The source line containing it, trimmed of surrounding whitespace.
+    /// - Returns: ``ChannelUse/injectableDefault`` when the channel is passed as an argument;
+    ///   ``ChannelUse/bypass`` otherwise, including when `spelling` does not occur in `line`.
     ///
     /// Receiver of a message (`[[… defaultCenter] post…]`, `NotificationCenter.default.post`) is an
     /// effect going out. Passed as an argument — after an Obj-C selector keyword, a comma, an open
