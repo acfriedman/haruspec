@@ -21,7 +21,7 @@ struct IntentDeclaration: Sendable {
 extension Intent {
     /// The intent exploded into its atomic declarations, each pairing a matcher with its DSL spelling.
     ///
-    /// `declares(_:evidence:)` is a fold over this list, and the unobserved-intent check is its
+    /// ``declares(_:evidence:)`` is a fold over this list, and the unobserved-intent check is its
     /// complement: a declaration no divergence matched describes a change nobody saw.
     ///
     /// `acceptedBlindSpots` is deliberately absent: it excuses a *channel* the diff could never

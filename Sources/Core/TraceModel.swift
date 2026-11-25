@@ -113,7 +113,7 @@ public enum ConcurrencyDomain: Sendable, Equatable, Hashable, CustomStringConver
     }
 
     /// The name an author refers to this domain by — a queue's bare label, anything else its
-    /// description. This is what `Intent.expectedOrderingRelaxations` matches against, so declaring
+    /// description. This is what ``Intent/expectedOrderingRelaxations`` matches against, so declaring
     /// "com.emporium.cart" doesn't require spelling the engine's `queue(serial):` prefix.
     public var declaredName: String {
         if case let .queue(label, _) = self {

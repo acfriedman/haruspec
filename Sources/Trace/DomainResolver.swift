@@ -28,7 +28,7 @@ import HaruspecCore
 /// the label first would erase it.
 ///
 /// Anything that names none of these is `.ambient` — the code declares no isolation of its own; see
-/// `ConcurrencyDomain.ambient`.
+/// ``ConcurrencyDomain/ambient``.
 enum DomainResolver {
     /// Queues Apple owns: the cooperative pool, the main queue, and the rest of the `com.apple.*`
     /// namespace. A subject never *declares* one of these as its own domain — landing on one says

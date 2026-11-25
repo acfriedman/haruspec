@@ -8,7 +8,7 @@ import Foundation
 /// reclassified `.intended`, so they don't gate the verdict. Whatever remains is `.collateral`: an
 /// undeclared change the author didn't intend — the thing an extension-mode gate fails on.
 ///
-/// **Parity mode (migrations) is simply `Intent.none`.** Extension mode (features) is a populated
+/// **Parity mode (migrations) is simply ``Intent/none``.** Extension mode (features) is a populated
 /// spec. Same engine; the only difference is how much change was declared up front.
 ///
 /// A declaration is a *standing excuse*, so each one is as narrow as its author can make it: a

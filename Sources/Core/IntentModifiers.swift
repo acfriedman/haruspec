@@ -11,7 +11,7 @@ import Foundation
 // suggested-declaration offer a red comment prints. Every modifier has exactly one spelling.
 
 /// The recorded seam inputs of the probe a divergence was observed in: seam key → the values that
-/// seam read, in order (`CassetteData.tracks`). `nil` when the caller has no probe (a bare
+/// seam read, in order (``CassetteData/tracks``). `nil` when the caller has no probe (a bare
 /// `haruspec diff` over two traces), in which case no input condition can hold.
 public typealias ProbeInputs = [String: [CanonicalValue]]
 
@@ -29,7 +29,7 @@ public struct ProbeEvidence: Sendable {
     public var baseline: [TraceEvent]
     public var candidate: [TraceEvent]
     /// Every divergence of the comparison being classified, for a cardinality modifier to count
-    /// against. `classified(against:evidence:)` fills it from the diff it classifies.
+    /// against. ``TraceDiff/classified(against:evidence:)`` fills it from the diff it classifies.
     public var divergences: [Divergence]
 
     /// Creates the evidence a modifier is checked against, canonicalizing both traces under

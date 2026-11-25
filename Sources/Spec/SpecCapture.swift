@@ -109,7 +109,7 @@ extension Spec {
     /// - Returns: The refusal naming the op, its actor, and the fix; `nil` when the op may run.
     ///
     /// A capture reads the main thread as the subject's doing, because its own frames run off main
-    /// (`TraceContext.capturesOffMain`). An op closure written in a `@MainActor` context runs on main,
+    /// (``TraceContext/capturesOffMain``). An op closure written in a `@MainActor` context runs on main,
     /// so the subject's nonisolated code under it would read `main`, and a port that drops a main hop
     /// would pass. Every op is nonisolated instead, which also keeps the rule one sentence long.
     static func isolationRefusal(_ operation: Op<S>) -> String? {

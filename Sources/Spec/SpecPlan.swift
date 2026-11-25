@@ -38,7 +38,7 @@ public struct SpecProbe: Codable, Sendable, Equatable {
 /// The serializable golden-master of one spec's explored surface — inputs *and* expected behavior,
 /// in one reproducible artifact (same JSON-bundle discipline as `Trace` / `CassetteData`).
 public struct SpecPlan: Codable, Sendable, Equatable {
-    /// The one plan schema this engine writes and replays. `init(jsonData:)` rejects anything else —
+    /// The one plan schema this engine writes and replays. ``init(jsonData:)`` rejects anything else —
     /// a stale shape whose field names happen to still decode would replay garbage with confidence.
     ///
     /// Bumped to 2 when `Scenario` became `Spec`: the plan's `scenarioName` key became `specName`,
@@ -78,7 +78,7 @@ public struct SpecPlan: Codable, Sendable, Equatable {
     public var variedSeams: [String]
     public var probes: [SpecProbe]
     /// The trace-derived coverage index: class labels the golden traces exercise, extracted from the
-    /// structural tier (`PromoCart.checkout` → `PromoCart`). Includes classes reached *transitively*,
+    /// structural tier (``PromoCart/checkout`` → `PromoCart`). Includes classes reached *transitively*,
     /// which is the payoff of recording through the forwarder — a semantic-tier-only spec can't be scoped.
     public var coveredClasses: [String]
 

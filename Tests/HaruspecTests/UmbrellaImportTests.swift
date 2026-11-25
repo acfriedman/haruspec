@@ -28,7 +28,7 @@ protocol Cart: AnyObject {
     func checkout() -> Int
 }
 
-/// Baseline. The notifications + `Haruspec.marker` (HaruspecTrace) give the durable semantic tier.
+/// Baseline. The notifications + ``Haruspec/marker`` (HaruspecTrace) give the durable semantic tier.
 final class GoodCart: Cart {
     private let center: NotificationCenter
     private var subtotal = 0
@@ -92,8 +92,8 @@ final class UmbrellaImportTests: XCTestCase {
         XCTAssertTrue(verdict.diff.divergences.isEmpty) // ← TraceDiff (HaruspecCore)
     }
 
-    /// `htmlReport()` on all three verdict carriers is reachable through the single umbrella import —
-    /// the visual companion to `report()`, self-contained enough to open over `file://`.
+    /// ``HTMLReporting/htmlReport()`` on all three verdict carriers is reachable through the single umbrella import —
+    /// the visual companion to ``SpecVerdict/report()``, self-contained enough to open over `file://`.
     func testHTMLReportIsReExported() async throws {
         let verdict = await Spec<Cart>("umbrella-html")
             .operations { Op("checkout") { _ = $0.checkout() } }
@@ -118,7 +118,7 @@ final class UmbrellaImportTests: XCTestCase {
     }
 
     /// The HaruspecTrace capture surface: recorder + interceptor + the forwarder's timed bodies +
-    /// `Haruspec.interval` / `Haruspec.marker`, all named through the umbrella.
+    /// ``Haruspec/interval`` / ``Haruspec/marker``, all named through the umbrella.
     func testCaptureSurfaceIsReExported() {
         let recorder = TraceRecorder(name: "umbrella", clock: ManualClock()) // ← TraceRecorder + ManualClock
         let center = RecordingNotificationCenter()

@@ -51,7 +51,7 @@ public final class Cassette: @unchecked Sendable {
         self.preferred = preferred
     }
 
-    /// Values a recording answers with in place of `live()`, by seam — see `init(recordingPreferring:)`.
+    /// Values a recording answers with in place of the live dependency, by seam — see ``init(recordingPreferring:)``.
     private var preferred: [String: CanonicalValue] = [:]
 
     /// A replay cassette primed with a prior recording.
@@ -136,7 +136,7 @@ public extension Cassette {
     ///   - seam: The seam id.
     ///   - qualifier: The reading call's rendered arguments; `nil` for an unqualified read.
     ///   - live: The real dependency, run on a recording or a miss.
-    /// - Returns: The integer this read is answered with; `live()` when the recorded value is another kind.
+    /// - Returns: The integer this read is answered with; `live`'s value when the recorded value is another kind.
     func int(seam: String, qualifier: String? = nil, live: () -> Int64) -> Int64 {
         if case let .int(value) = step(seam: seam, qualifier: qualifier, live: { .int(live()) }) {
             return value
@@ -150,7 +150,7 @@ public extension Cassette {
     ///   - seam: The seam id.
     ///   - qualifier: The reading call's rendered arguments; `nil` for an unqualified read.
     ///   - live: The real dependency, run on a recording or a miss.
-    /// - Returns: The number this read is answered with; `live()` when the recorded value is another kind.
+    /// - Returns: The number this read is answered with; `live`'s value when the recorded value is another kind.
     func double(seam: String, qualifier: String? = nil, live: () -> Double) -> Double {
         if case let .double(value) = step(seam: seam, qualifier: qualifier, live: { .double(live()) }) {
             return value
@@ -164,7 +164,7 @@ public extension Cassette {
     ///   - seam: The seam id.
     ///   - qualifier: The reading call's rendered arguments; `nil` for an unqualified read.
     ///   - live: The real dependency, run on a recording or a miss.
-    /// - Returns: The Boolean this read is answered with; `live()` when the recorded value is another kind.
+    /// - Returns: The Boolean this read is answered with; `live`'s value when the recorded value is another kind.
     func bool(seam: String, qualifier: String? = nil, live: () -> Bool) -> Bool {
         if case let .bool(value) = step(seam: seam, qualifier: qualifier, live: { .bool(live()) }) {
             return value

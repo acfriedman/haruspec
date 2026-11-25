@@ -10,7 +10,7 @@ import Foundation
 ///
 /// The point of the model is soundness: a false `EQUIVALENT` is the one catastrophic outcome, so a
 /// coverage gap **downgrades** an otherwise-equivalent verdict to `CANNOT-VERIFY` (see
-/// `VerificationResult.resolve`) rather than letting it pass. Coverage is *reported*, never assumed —
+/// ``VerificationResult/resolve``) rather than letting it pass. Coverage is *reported*, never assumed —
 /// `EQUIVALENT` over 20% of the surface is nearly worthless; over 95% is the product.
 public struct Coverage: Codable, Sendable, Equatable {
     /// Why a declared boundary isn't covered.
@@ -115,7 +115,7 @@ public struct Coverage: Codable, Sendable, Equatable {
 
     /// Effect channels a covered declaration reaches around the recorder, and declarations whose
     /// source could not be read — the capture-completeness audit's gating findings. Empty on a run
-    /// where the audit never ran, which is why `Qualification.blindSpots` (nil = not audited) is what
+    /// where the audit never ran, which is why ``Qualification/blindSpots`` (nil = not audited) is what
     /// the report reads: coverage says whether anything gates, the qualification says whether anyone
     /// looked.
     public var blindSpots: [Gap] {

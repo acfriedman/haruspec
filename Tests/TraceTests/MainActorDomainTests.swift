@@ -7,7 +7,7 @@ import XCTest
 /// it declares no isolation of its own.
 ///
 /// `#isolation` stops at the recording frame's nonisolated signature, so the thread is the signal. A
-/// capture vouches for it (`TraceContext.capturesOffMain`) because its own frames never run on main.
+/// capture vouches for it (``TraceContext/capturesOffMain``) because its own frames never run on main.
 final class MainActorDomainTests: XCTestCase {
     /// Stands in for a scheduling double.
     private final class Queue {}

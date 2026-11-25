@@ -14,7 +14,7 @@ import HaruspecTrace
 /// block renders (orderings, stability) live on `exploration` and `stability`; this holds the rest.
 public struct Qualification: Codable, Sendable, Equatable {
     /// Class labels the golden traces exercised (structural tier), including classes reached
-    /// transitively — the same index `SpecPlan.coveredClasses` pins, carried onto the verdict so the
+    /// transitively — the same index ``SpecPlan/coveredClasses`` pins, carried onto the verdict so the
     /// report can say *which* subject the claim scopes to.
     public let coveredClasses: [String]
     /// Operations on the interrogation surface: declared ops on the live differential, the plan's
@@ -156,7 +156,7 @@ extension SpecVerdict {
             : "\(stability.outcomes.count) distinct outcomes across \(stability.replays) replays"
     }
 
-    /// The additions to the terminal `report()` — only the lines it doesn't already print
+    /// The additions to the terminal ``report()`` — only the lines it doesn't already print
     /// (exploration and stability render there via their own lines).
     var qualificationReportLines: [String] {
         var lines = [

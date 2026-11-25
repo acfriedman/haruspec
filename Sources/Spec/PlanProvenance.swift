@@ -9,7 +9,7 @@ import Foundation
 /// Where a plan was recorded and what the recording executed — the plan's discovered dependency
 /// list, in the sense a compiler's depfile discovers headers.
 ///
-/// Stamped by the record-on-merge job after recording (`haruspec stamp`), never by `record()`
+/// Stamped by the record-on-merge job after recording (`haruspec stamp`), never by ``BaselinedSpec/record()``
 /// itself: both fields are facts about the checkout and the coverage report, which only the job
 /// running the recording can see.
 public struct PlanProvenance: Codable, Sendable, Equatable {

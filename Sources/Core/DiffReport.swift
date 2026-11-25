@@ -9,7 +9,7 @@ public extension TraceDiff {
     }
 
     /// The verdict + trace-name headline. `VerificationResult` renders its own (coverage-aware) banner
-    /// instead, but reuses `bodyLines()`.
+    /// instead, but reuses ``bodyLines()``.
     var bannerLine: String {
         "\(TraceDiff.banner(verdict))  \(baselineName) → \(candidateName)"
     }

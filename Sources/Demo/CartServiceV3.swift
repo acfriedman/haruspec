@@ -7,7 +7,7 @@ import HaruspecTrace
 /// proving the change is a **safe extension**: its intended new behavior is present, and nothing *else*
 /// regressed.
 ///
-/// Two intended additions (declared in `CheckoutSpec.intent`), both on *production seams* — real
+/// Two intended additions (declared in ``CheckoutSpec/intent``), both on *production seams* — real
 /// side effects the app emits, not hand-authored instrumentation:
 ///  1. `checkout` posts a new notification `LoyaltyPointsEarned`.
 ///  2. the `CheckoutDidComplete` notification gains a `pointsEarned` field in its userInfo.

@@ -20,7 +20,7 @@ import HaruspecSeams
 ///
 /// Two shapes. A *scalar* argument owns one domain under a synthesized op-scoped key (`add.sku`). A
 /// *generated* argument (`.generated(Product.self)`) is a whole model built by its `SeamGenerated`
-/// factory: it contributes the type-scoped field domains the factory declared (`Product.sku`), and
+/// factory: it contributes the type-scoped field domains the factory declared (``Product/sku``), and
 /// registers the factory so the read can build the value.
 public struct ArgumentDomain<T> {
     enum Kind {

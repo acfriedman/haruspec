@@ -41,7 +41,7 @@ public struct SpecVerdict: Codable, Sendable {
     public internal(set) var stability: Stability
     /// Channels the spec and check site declared acceptable as uncaptured, carried on the verdict so
     /// *every* audit path resolves the same declarations — the env-driven audit inside a verify and
-    /// an explicit `audited(against:)` afterwards must not disagree. `nil` on artifacts recorded
+    /// an explicit ``audited(against:declaring:)`` afterwards must not disagree. `nil` on artifacts recorded
     /// before the field existed; treated as none declared.
     public internal(set) var acceptedBlindSpots: [String]?
     /// Every failing case a red replay walked within its window after the first (see

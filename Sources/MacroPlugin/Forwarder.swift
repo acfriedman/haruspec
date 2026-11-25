@@ -17,7 +17,7 @@ import SwiftSyntaxMacros
 /// `static`/`class` requirements are skipped — no instance `self`.
 ///
 /// A pasted `init` requirement is the construction contract every conformer carries, and what lets
-/// the forwarder construct one from its metatype alone: `init(resolving:_:)` resolves each parameter
+/// the forwarder construct one from its metatype alone: its generated `resolving` initializer resolves each parameter
 /// (the capture's center for a `NotificationCenter`, the conformance-matched double otherwise) and
 /// wraps the result. The forwarder's own witness of that requirement traps — a forwarder wraps, it
 /// never stands in for a conformer.

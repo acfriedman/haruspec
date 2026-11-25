@@ -14,7 +14,7 @@ import HaruspecTrace
 
 /// A generated recording double's construction contract (`@Haruspec` emits the conformance on its
 /// `Double<Protocol>`): built from the capture's context, so its synthesized returns read generated
-/// seam values and `SeamContext.double(_:)` can construct-and-register in one move.
+/// seam values and ``SeamContext/double(_:)`` can construct-and-register in one move.
 public protocol SeamDouble: TraceLabeled {
     init(_ seams: SeamContext)
     /// The collaborator boundaries this double serves — the stamped protocol and the protocols it
@@ -44,7 +44,7 @@ public extension NamedQueueDouble {
 public protocol StampedForwarder: AnyObject {
     /// The existential the forwarder wraps, `(any Cart).self`.
     static var forwardedBoundary: Any.Type { get }
-    /// The op catalog the same stamp derived, `DerivedCart.self`.
+    /// The op catalog the same stamp derived, `Derived<Protocol>`.
     static var derivedCatalog: any DerivedOperations.Type { get }
     /// The stamp's label, `"Cart"` — what every role records under, and a spec's default name.
     static var stampLabel: String { get }
@@ -68,10 +68,10 @@ public extension SeamDouble {
 public struct SeamContext {
     public let notifications: NotificationCenter
     let cassette: Cassette
-    /// Per-type factories for synthesized custom-type returns, declared via `Spec.generates(_:_:)`
-    /// and consulted by generated doubles (`value(_:key:)` below). Keyed by the returned type.
+    /// Per-type factories for synthesized custom-type returns, declared via ``Spec/generates(_:_:)``
+    /// and consulted by generated doubles (``value(_:key:)`` below). Keyed by the returned type.
     var makers: [ObjectIdentifier: (SeamContext, String) -> Any] = [:]
-    /// Capture-scoped resources, declared via `Spec.provides(_:_:)` and consulted by `resolve(_:)`
+    /// Capture-scoped resources, declared via ``Spec/provides(_:_:)`` and consulted by ``resolve(_:)``
     /// for a constructor parameter no double serves — an isolated store, a scratch directory. Built
     /// fresh each capture, like `notifications` (the built-in resource this generalizes).
     var resourceMakers: [ObjectIdentifier: (SeamContext) -> Any] = [:]
@@ -79,7 +79,7 @@ public struct SeamContext {
     /// stamped scheduling protocol's double (`@Haruspec(schedules:)`) enqueues here; the capture runs
     /// it after the ops, and a derived op waiting on a completion block runs it meanwhile.
     public let backlog = WorkBacklog()
-    /// The arguments of the call a stamped double is answering, rendered by `SeamKey.qualifier(_:)`;
+    /// The arguments of the call a stamped double is answering, rendered by ``SeamKey/qualifier(_:)``;
     /// every read through this context is answered per those arguments. `nil` outside such a call.
     var qualifier: String?
 
@@ -169,7 +169,7 @@ public struct Op<S> {
     /// sequences, which is the only way a shorter run — a checkout on an empty cart — is reachable.
     var multiplicity: ClosedRange<Int>?
     /// Domains declared on this op by `Op(_:varying:)`, against the seam keys they synthesized.
-    /// `Spec.operations(_:)` merges them into the declared surface, so a typed argument is
+    /// ``Spec/operations(_:)`` merges them into the declared surface, so a typed argument is
     /// property-varied without anyone naming it in `.vary` — the string join the typed form removes.
     var argumentDomains: [(seam: String, domain: SeamDomain)] = []
     /// Field domains a `.generated(_:)` argument contributes, under the model's type-scoped keys.
@@ -264,7 +264,7 @@ public struct Op<S> {
 public struct Observed<S> {
     let label: String
     /// Async so an actor port's isolated property can witness a `{ get async }` requirement and
-    /// still be read back. A synchronous closure converts implicitly, like `Op.action`.
+    /// still be read back. A synchronous closure converts implicitly, like ``Op/action``.
     let read: (S) async -> Any
 
     public init(_ label: String, _ read: @escaping (S) async -> Any) {
@@ -348,7 +348,8 @@ public struct Spec<S> {
     }
 
     /// Constructs a conformer through the boundary's pasted `init` — set when the derivation settles
-    /// from a catalog that derives construction, and what `baselined(on:)` and `check(_:)` build by
+    /// from a catalog that derives construction, and what ``baselined(on:)`` and
+    /// ``BaselinedSpec/check(_:named:expecting:declaring:reportsIn:)`` build by
     /// type. `nil` when construction has to be authored.
     var makeConformer: ((SeamContext, Any.Type) -> S)?
     /// Wraps every build in the capture boundary before it is driven — the stamped protocol's
@@ -388,7 +389,7 @@ public struct Spec<S> {
     var maxOrderings = 100
     var orderingRepeats = 2
     /// Total differential runs this spec may spend, declared via `Budget(runs:)`. `nil` lets each axis
-    /// take its own size (`maxOrderings` × `SpecDefaults.variantCount`).
+    /// take its own size (`maxOrderings` × ``SpecDefaults/variantCount``).
     var explorationBudget: Int?
     /// Op-scoped keys whose domains the engine supplied rather than the author — set when the
     /// derivation settles, rendered on every verdict so a green from a defaulted surface
@@ -418,7 +419,7 @@ public struct Spec<S> {
     ///         Amend("checkout").last()
     ///     }
     ///
-    /// The derivation settles when the spec is bound (`baselined(on:)`), so an authored
+    /// The derivation settles when the spec is bound (``baselined(on:)``), so an authored
     /// `.operations { … }` can still replace the derived ops. Names no implementation — a test binds
     /// the baseline with ``baselined(on:)``.
     public init(

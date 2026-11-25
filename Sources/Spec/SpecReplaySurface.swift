@@ -92,7 +92,7 @@ func orderedUnion(_ sequences: [[String]]) -> [String] {
     return result
 }
 
-/// One replay pass's resolved view of a plan (see `replaySurface(of:)`).
+/// One replay pass's resolved view of a plan (see ``Spec/replaySurface(of:)``).
 struct ReplaySurface<S> {
     let opsByLabel: [String: Op<S>]
     let planOps: [String]

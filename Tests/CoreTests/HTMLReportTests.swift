@@ -107,7 +107,8 @@ final class HTMLReportTests: XCTestCase {
 
     // MARK: - Writing to disk (HTMLReporting)
 
-    /// `writeHTMLReport(to:)` renders and persists the exact bytes `htmlReport()` produces.
+    /// ``HTMLReporting/writeHTMLReport(to:)`` renders and persists the exact bytes ``HTMLReporting/htmlReport()``
+    /// produces.
     func testWriteHTMLReportToExactURL() throws {
         let divergedDiff = diff(.diverged, [valueMismatch])
         let url = FileManager.default.temporaryDirectory
@@ -118,7 +119,7 @@ final class HTMLReportTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), divergedDiff.htmlReport())
     }
 
-    /// `writeHTMLReport(named:in:)` creates the directory, writes `<name>.html`, and returns its URL.
+    /// ``HTMLReporting/writeHTMLReport(named:in:)`` creates the directory, writes `<name>.html`, and returns its URL.
     func testWriteHTMLReportNamedCreatesDirectoryAndReturnsURL() throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("haruspec-named-\(UUID().uuidString)", isDirectory: true)

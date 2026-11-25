@@ -1,7 +1,7 @@
 @testable import HaruspecCore
 import XCTest
 
-/// `CanonicalValue.shape`: how an uncontrolled seam is described without its value. The format of a
+/// ``CanonicalValue/shape``: how an uncontrolled seam is described without its value. The format of a
 /// string is part of its shape, because a reader picks the injection by it.
 final class CanonicalValueShapeTests: XCTestCase {
     func testIdentifiersAreNamedByCase() {

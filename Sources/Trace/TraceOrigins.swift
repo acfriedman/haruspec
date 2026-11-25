@@ -95,7 +95,7 @@ public final class OriginCollector: @unchecked Sendable {
 
 /// The ambient collector a `TraceRecorder` picks up when it is built.
 ///
-/// Bound once per verification rather than passed down, for the same reason `TraceContext.current` is:
+/// Bound once per verification rather than passed down, for the same reason ``TraceContext/current`` is:
 /// the capture primitive is called from half a dozen places and none of them should have to carry an
 /// audit concern. A task-local also scopes it per verification, so specs running in parallel (the
 /// default under swift-testing) cannot pool their origins into each other's verdicts.
@@ -105,7 +105,7 @@ public enum TraceOrigins {
 
 /// A type that knows the trace label its events carry. Conformance is emitted on every stamped
 /// forwarder and double, so any instrumented instance can state its own label — which is what lets an
-/// injection point (`SeamContext.inject`) register a collaborator without anyone typing the label a
+/// injection point (``SeamContext/inject``) register a collaborator without anyone typing the label a
 /// second time.
 public protocol TraceLabeled {
     var traceLabel: String { get }

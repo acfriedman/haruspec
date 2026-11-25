@@ -23,7 +23,7 @@ protocol Printer: ReceiptPrinting {
 }
 
 /// The baseline: a plain Swift class with constructor-injected collaborators and — deliberately —
-/// no `init()`. A pasted init suppresses the forwarder's `= KioskManager()` default, so nothing
+/// no no-argument `init`. A pasted init suppresses the forwarder's `= KioskManager()` default, so nothing
 /// requires the NSObject-style no-arg init a Swift baseline often lacks.
 final class KioskManager {
     private let printer: ReceiptPrinting
@@ -82,7 +82,7 @@ final class SwiftKiosk: Kiosk {
 }
 
 /// A capture resource: infrastructure the subject runs on — the engine-side stand-in for an
-/// isolated in-memory store. Not a boundary; state in it is observed through `tally()`.
+/// isolated in-memory store. Not a boundary; state in it is observed through ``Register/tally()``.
 final class TallyBook {
     var rows: [Int] = []
 }

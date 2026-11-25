@@ -80,7 +80,7 @@ extension SpecVerdict {
 
     /// The counterexample's seam values as `(key, value)` pairs, e.g. `("add.quantity", "1,20")` —
     /// one entry per reading, so a repeatedly-read seam shows which position was extreme. Shared by
-    /// `report()` and `htmlReport()` so the extraction lives in one place.
+    /// ``report()`` and ``htmlReport()`` so the extraction lives in one place.
     ///
     /// Every value type renders, not only integers: a categorical argument (`.oneOf(Catalog.all)`) is
     /// the input a counterexample most needs to name, and dropping it would leave the reader with a

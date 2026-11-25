@@ -8,7 +8,7 @@ import HaruspecTrace
 /// direct `NotificationCenter.default` post" and "I could not find the source" are different facts
 /// about the auditor, but the same fact about the verdict: it cannot claim it saw every channel.
 public struct AuditReport: Sendable, Equatable {
-    /// Declarations whose source could not be located (see `SourceResolution.isResolved`).
+    /// Declarations whose source could not be located (see ``SourceResolution/isResolved``).
     public let unresolved: [SourceResolution]
     /// Deny-listed reaches in the sources that were read, gating and non-gating alike.
     public let findings: [ChannelFinding]
@@ -66,7 +66,7 @@ public struct AuditReport: Sendable, Equatable {
         unresolved.isEmpty && bypasses.isEmpty
     }
 
-    /// The audit's line on the verdict, as `Qualification.blindSpots` carries it: named channels, each
+    /// The audit's line on the verdict, as ``Qualification/blindSpots`` carries it: named channels, each
     /// once, plus the declarations that could not be read. An empty array is a *claim* — audited and
     /// clean — which is why it is only ever produced by an audit that actually ran.
     public var blindSpots: [String] {

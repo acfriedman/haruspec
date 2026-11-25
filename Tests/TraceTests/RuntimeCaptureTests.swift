@@ -213,7 +213,7 @@ final class RecordingNotificationCenterTests: XCTestCase {
         XCTAssertEqual(events[0].payload, ["n": 1])
     }
 
-    /// The capture window *is* the lifetime — there is no `start()`/`stop()` to get wrong, because the
+    /// The capture window *is* the lifetime — there is no start or stop call to get wrong, because the
     /// center records only while a recorder is bound.
     func testPostsOutsideACaptureWindowAreNotRecorded() {
         let recorder = TraceRecorder(name: "t")

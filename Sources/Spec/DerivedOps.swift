@@ -19,7 +19,7 @@ public protocol DerivedOperations {
     associatedtype System
     static var derivedOps: [DerivedOp<System>] { get }
     /// The derived construction — emitted when the protocol carries a pasted `init` requirement
-    /// (the sibling forwarder's `init(resolving:_:)` holds the wiring):
+    /// (the sibling forwarder's generated `resolving` initializer holds the wiring):
     /// builds the given conformer through the requirement and wraps it. `nil` when construction
     /// has to be authored.
     ///
@@ -47,7 +47,7 @@ public extension DerivedOperations {
 public struct DerivedProperty<S> {
     public let name: String
     public let label: String
-    /// Async for the same reason `Observed.read` is: an actor port witnesses `{ get async }`.
+    /// Async for the same reason ``Observed/read`` is: an actor port witnesses `{ get async }`.
     public let read: (S) async -> Any
 
     public init(_ name: String, label: String, read: @escaping (S) async -> Any) {
@@ -73,7 +73,7 @@ public final class UncheckedHandOver<Value>: @unchecked Sendable {
 /// One argument of a derived op: its parameter name (the seam-key half and the amendment-matching
 /// name), its source-spelled type, and — where the type admits an honest default — a resolution.
 public struct DerivedArgument {
-    /// How a resolved argument joins a spec: everything `Op.declare(_:key:)` needs, erased so mixed
+    /// How a resolved argument joins a spec: everything ``Op/declare(_:key:)`` needs, erased so mixed
     /// argument types travel in one list. Built from a typed `ArgumentDomain` and nothing else, so a
     /// derived argument and a hand-declared one are the same machinery by construction.
     struct Resolution {
@@ -312,7 +312,7 @@ public struct DerivedOp<S> {
 
 // MARK: - Amendments (the authored residue)
 
-/// A domain supplied by a `Amend.varying(_:over:)`, held until the match — the seam key uses the
+/// A domain supplied by a ``Amend/varying(_:over:)``, held until the match — the seam key uses the
 /// *argument's* name, so erasure waits for it.
 struct SuppliedDomain {
     /// The parameter this domain fills, as named in the protocol signature.
@@ -447,7 +447,7 @@ extension Spec {
     /// - Returns: The settled spec.
     /// - Precondition: A spec with amendments is over a stamped protocol's existential.
     ///
-    /// The one place a spec is bound, `baselined(on:)`, settles it; a settled spec comes back
+    /// The one place a spec is bound, ``baselined(on:)``, settles it; a settled spec comes back
     /// unchanged, and authored ops stand in for the derived ones. Everything mechanical comes from the derivation: one
     /// op per requirement, bindings, and type-heuristic domains (marked "derived default" on the
     /// verdict). Ops keep protocol declaration order; an amendment naming no derived op traps, so a

@@ -34,7 +34,7 @@ final class UploadOperation: Operation, @unchecked Sendable {
 }
 
 /// An asynchronous operation, as network operations are: it finishes when its response lands on a
-/// scheduler, not when `start()` returns.
+/// scheduler, not when ``start()`` returns.
 final class ResponseOperation<S: Scheduler>: Operation, @unchecked Sendable {
     private let scheduler: S
     private let log: (String) -> Void

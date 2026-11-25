@@ -21,7 +21,7 @@ public struct Candidate<S> {
     /// What this candidate *should* produce. Defaults to `.equivalent` — the ordinary case, a port
     /// meant to be indistinguishable from the baseline.
     public let expected: TraceDiff.Verdict
-    /// The deltas this candidate is meant to produce (`Intent.none` = parity: it declares nothing).
+    /// The deltas this candidate is meant to produce (``Intent/none`` = parity: it declares nothing).
     public let declared: Intent
     let make: (SeamContext) -> S
 

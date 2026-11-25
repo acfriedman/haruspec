@@ -11,7 +11,7 @@ import Foundation
 //
 // HaruspecCore is Foundation-only / dependency-free; this is plain string building with no new deps.
 
-/// The shared HTML chrome: page skeleton, CSS, and the reusable section builders every `htmlReport()`
+/// The shared HTML chrome: page skeleton, CSS, and the reusable section builders every ``HTMLReporting/htmlReport()``
 /// composes. Public so the HaruspecSpec entry point can reuse the same building blocks rather than
 /// re-declaring the banner/glyph vocabulary and CSS.
 public enum HTML {

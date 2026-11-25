@@ -115,7 +115,7 @@ public struct TraceDiff: Codable, Sendable, Equatable {
     public var divergences: [Divergence]
 
     /// Declared intent that matched no divergence, by DSL spelling (`Changes("Search.query")`) —
-    /// set by `classified(against:)`, empty in parity mode.
+    /// set by ``classified(against:evidence:)``, empty in parity mode.
     ///
     /// A dead declaration is a claim about the change that the oracle never saw: a dark feature, or
     /// stale intent left over from an earlier revision — and either way a *standing excuse* that

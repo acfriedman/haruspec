@@ -141,7 +141,7 @@ final class SourceResolverTests: XCTestCase {
         XCTAssertEqual(resolve(TraceOrigin(label: "L", symbol: "Ledger")).files, ["App/Ledger.swift"])
     }
 
-    /// A use is not a declaration: `Ledger.self` in an expression must not answer for the type.
+    /// A use is not a declaration: `let type = Ledger.self` in an expression must not answer for the type.
     func testDoesNotMatchAUseOfTheTypeName() throws {
         try write("let kind = Ledger.self\n", to: "App/Uses.swift")
 
