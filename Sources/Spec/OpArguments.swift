@@ -88,10 +88,14 @@ public struct ArgumentDomain<T> {
 public extension ArgumentDomain where T: SeamGenerated, T.Generated == T {
     /// A whole generated model as an op input — the structured half the scalar domains cannot express.
     ///
+    /// - Parameter _: The model's type, as in `.generated(Product.self)`.
+    /// - Returns: A domain whose values the model's `SeamGenerated` factory builds, its fields
+    ///   discovered under the model's type-scoped keys.
+    ///
     /// The model's `SeamGenerated` factory is the single place its invariants live: a `Product`
     /// generator picks the SKU from a domain and *derives* the price from the catalogue, so a pair
     /// the real dependency could never produce is unrepresentable. Fields are discovered here, at
-    /// declaration time, under the model's type-scoped keys (`Product.sku`) — swept, reported, and
+    /// declaration time, under the model's type-scoped keys (``Product/sku``) — swept, reported, and
     /// narrowable with an explicit `Seam` exactly like a `.generates` adoption; no separate
     /// `.generates` call is needed for the argument.
     static func generated(_: T.Type) -> ArgumentDomain<T> {

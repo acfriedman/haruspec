@@ -18,9 +18,14 @@ final class LegacyDeviceManager: NSObject {
 
 extension LegacyDeviceManager {
     /// The paired swizzle target (harness code — would live behind `#if DEBUG`). After the exchange,
-    /// calling `seam_deviceToken()` reaches the *original* `deviceToken` implementation. `dynamic` is
-    /// essential: it forces the internal call through objc dispatch (the swapped selector), so it hits
-    /// the original rather than statically recursing into this body.
+    /// calling ``seam_deviceToken()`` reaches the *original* `deviceToken` implementation.
+    ///
+    /// - Returns: The device token: inside a capture, the cassette's answer, which records the original
+    ///   implementation's token or replays the recorded one and is empty when it holds no string;
+    ///   outside one, the original implementation's.
+    ///
+    /// `dynamic` is essential: it forces the internal call through objc dispatch (the swapped
+    /// selector), so it hits the original rather than statically recursing into this body.
     @objc dynamic func seam_deviceToken() -> String {
         guard let cassette = Seam.cassette else { return seam_deviceToken() }
         return cassette.string(seam: "swizzle.deviceToken", live: { self.seam_deviceToken() }) ?? ""

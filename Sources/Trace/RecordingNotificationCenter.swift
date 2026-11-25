@@ -23,8 +23,11 @@ import HaruspecCore
 /// `.ignore(notifications:)` — subtractive, applied at diff time, raw trace complete.
 public final class RecordingNotificationCenter: NotificationCenter, @unchecked Sendable {
     /// Every posting spelling funnels here — `postNotificationName:object:userInfo:` and its shorter
-    /// forms all end at `post(_:)` in Foundation, and overriding the funnel rather than each spelling
-    /// is what keeps a post from being recorded twice or missed.
+    /// forms all end at ``Foundation/NotificationCenter/post(_:)``, and overriding the funnel rather
+    /// than each spelling is what keeps a post from being recorded twice or missed.
+    ///
+    /// - Parameter notification: The notification being posted, its name, object, and user info as the
+    ///   poster gave them.
     override public func post(_ notification: Notification) {
         record(notification)
         super.post(notification)

@@ -15,7 +15,9 @@ extension SpecVerdict: HTMLReporting {}
 
 public extension SpecVerdict {
     /// A self-contained, themeable HTML rendering of the spec verdict — the visual companion to
-    /// `report()`. Leads with the shrunk counterexample, then one card per divergence (or a clean panel).
+    /// ``report()``. Leads with the shrunk counterexample, then one card per divergence (or a clean panel).
+    ///
+    /// - Returns: A complete HTML document, its styles inline, that opens on its own over `file://`.
     func htmlReport() -> String {
         let name = diff.candidateName
         // On UNSTABLE the delta panel leads regardless of run 1's own divergences — a flapping green

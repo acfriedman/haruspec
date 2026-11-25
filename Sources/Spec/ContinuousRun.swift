@@ -101,7 +101,11 @@ public enum ContinuousRun: Sendable {
     /// The spec a conventioned intent path names — `<spec>.intent.json` — or `nil` outside the
     /// convention.
     ///
-    /// Same stem discipline as `specName(inPlanPath:)`, so a plan and the intent declared against
+    /// - Parameter path: A path to an intent file, absolute or relative.
+    /// - Returns: The file name's stem before `.intent.json`; `nil` when the name lacks that suffix or
+    ///   the stem is empty.
+    ///
+    /// Same stem discipline as ``specName(inPlanPath:)``, so a plan and the intent declared against
     /// it are pairable (and a mispaired pair is refusable) by filename alone.
     public static func specName(inIntentPath path: String) -> String? {
         let file = URL(fileURLWithPath: path).lastPathComponent
@@ -225,7 +229,13 @@ public struct ContinuousOutcome: Sendable {
 
 public extension BaselinedSpec {
     /// Runs whichever side the environment selects. A run that was never selected is a failure here,
-    /// not a silent pass — gate the test on `ContinuousMode.fromEnvironment()` so it never gets called.
+    /// not a silent pass — gate the test on ``ContinuousMode/fromEnvironment(_:)`` so it never gets
+    /// called.
+    ///
+    /// - Parameter environment: The environment variables naming the mode and its destinations; this
+    ///   process's by default.
+    /// - Returns: The selected side's outcome; a failure carrying its reason in the summary when no mode
+    ///   is set or the selection is invalid.
     func runContinuous(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) async -> ContinuousOutcome {

@@ -57,7 +57,9 @@ public final class OriginCollector: @unchecked Sendable {
     }
 
     /// Records that `label` is an injected collaborator boundary in this verification — declared by
-    /// the act of injection itself (`SeamContext.inject`), not restated as data anywhere.
+    /// the act of injection itself (``SeamContext/inject``), not restated as data anywhere.
+    ///
+    /// - Parameter label: The injected boundary's traced label.
     public func noteInjected(label: String) {
         lock.lock(); defer { lock.unlock() }
         injected.insert(label)

@@ -159,10 +159,17 @@ public final class TraceRecorder: @unchecked Sendable {
     }
 
     /// Records an outbound call to a **spied collaborator** — a real side effect leaving the SUT across a
-    /// declared boundary, so it lands in the durable **semantic** tier. The label is `Class.selector`
-    /// (the collaborator's stable public API, not an internal code symbol), and `args` is the
-    /// canonicalized argument list. Unlike `call`, it does *not* nest depth: a spied effect is a leaf
-    /// observation, not a call frame the SUT's own trace descends into.
+    /// declared boundary, so it lands in the durable **semantic** tier.
+    ///
+    /// - Parameters:
+    ///   - label: The collaborator's stable public API as `<Class>.<selector>`, not an internal code
+    ///     symbol.
+    ///   - subject: The collaborator instance the call was made on; `nil` for a static or free function.
+    ///   - args: The arguments, canonicalized; `nil` records none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
+    ///
+    /// Unlike `call`, it does *not* nest depth: a spied effect is a leaf observation, not a call frame
+    /// the SUT's own trace descends into.
     public func effect(
         _ label: String,
         subject: AnyObject? = nil,
@@ -220,7 +227,12 @@ public final class TraceRecorder: @unchecked Sendable {
 
     /// Records a payload-free **temporal marker** (the semantic tier): a domain-milestone signpost used
     /// to pin ordering / temporal coupling across refactors that reshuffle the structural tier.
-    /// Deliberately carries no payload — see `Haruspec.marker` for why.
+    /// Deliberately carries no payload — see ``Haruspec/marker`` for why.
+    ///
+    /// - Parameters:
+    ///   - label: The milestone's name.
+    ///   - subject: The instance the milestone belongs to; `nil` when there is none.
+    ///   - isolation: The actor the caller runs on, defaulted at the call site; `nil` means no actor.
     public func marker(_ label: String, subject: AnyObject? = nil, isolation: (any Actor)? = #isolation) {
         lock.lock(); defer { lock.unlock() }
         appendLocked(

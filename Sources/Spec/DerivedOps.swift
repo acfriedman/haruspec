@@ -96,7 +96,10 @@ public struct DerivedArgument {
     var isDerivedDefault: Bool
 
     /// A wide integer parameter (`Int`, `Int64`, `Int32`, `Int16`, `NSInteger`), defaulted to the
-    /// magnitude ladder over `SpecDefaults.derivedIntSpan`.
+    /// magnitude ladder over ``SpecDefaults/derivedIntSpan``.
+    ///
+    /// - Parameter name: The parameter's name as the signature spells it.
+    /// - Returns: The argument, its domain the magnitude ladder over ``SpecDefaults/derivedIntSpan``.
     public static func int(_ name: String) -> DerivedArgument {
         magnitudeInt(name, over: SpecDefaults.derivedIntSpan)
     }
@@ -352,32 +355,51 @@ public struct Amend {
         return copy
     }
 
-    /// Requires this op to run last. Implies once — mirrors `Op.last()`.
+    /// Requires this op to run last. Implies once — mirrors ``Op/last()``.
+    ///
+    /// - Returns: A copy of this amendment whose op runs last, and so once per sequence.
     public func last() -> Amend {
         var copy = self; copy.structure.mustBeLast = true; return copy
     }
 
-    /// Exempts this op from ordering repetition, so it runs exactly once per sequence — mirrors `Op.once()`.
+    /// Exempts this op from ordering repetition, so it runs exactly once per sequence — mirrors
+    /// ``Op/once()``.
+    ///
+    /// - Returns: A copy of this amendment whose op runs exactly once per sequence.
     public func once() -> Amend {
         repeating(1)
     }
 
-    /// Applies exactly `count` times — mirrors `Op.repeating(_:)`.
+    /// Applies exactly `count` times — mirrors ``Op/repeating(_:)``.
+    ///
+    /// - Parameter count: How many times the op applies in every sequence.
+    /// - Returns: A copy of this amendment whose op applies exactly `count` times.
     public func repeating(_ count: Int) -> Amend {
         repeating(count ... count)
     }
 
-    /// Applies between `range` times, varying per sequence — mirrors `Op.repeating(_:)`.
+    /// Applies between `range` times, varying per sequence — mirrors ``Op/repeating(_:)``.
+    ///
+    /// - Parameter range: The fewest and the most times the op applies in one sequence.
+    /// - Returns: A copy of this amendment whose op applies a number of times within `range`, chosen
+    ///   per sequence.
     public func repeating(_ range: ClosedRange<Int>) -> Amend {
         var copy = self; copy.structure.multiplicity = range; return copy
     }
 
-    /// Soft precondition — mirrors `Op.after(_:)`.
+    /// Asks for this op to run after `label`, a soft precondition — mirrors ``Op/after(_:)``.
+    ///
+    /// - Parameter label: The label of the op this one should follow.
+    /// - Returns: A copy of this amendment whose op runs after `label` in most orderings, and before it
+    ///   in the deliberate slice that tests the defensive path.
     public func after(_ label: String) -> Amend {
         var copy = self; copy.structure.afters.append(label); return copy
     }
 
-    /// Hard ordering gate — mirrors `Op.requires(_:)`.
+    /// Forbids this op from running before `label`, a hard ordering gate — mirrors ``Op/requires(_:)``.
+    ///
+    /// - Parameter label: The label of the op that must run first.
+    /// - Returns: A copy of this amendment whose op runs before `label` in no sampled ordering.
     public func requires(_ label: String) -> Amend {
         var copy = self; copy.structure.gates.append(label); return copy
     }

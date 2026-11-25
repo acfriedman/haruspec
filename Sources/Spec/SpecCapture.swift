@@ -7,9 +7,17 @@ import HaruspecTrace
 // verify, a record and a replay all differ only in what they hand it.
 
 extension Spec {
-    /// Drives one (system, ordering, cassette) and returns its behavior trace — the recorder, interceptor,
-    /// and ambient context the developer never touches. (Internal: `record`/`verify(replaying:)` drive
-    /// the same primitive across a build boundary.)
+    /// Drives one (system, ordering, cassette) and returns its behavior trace — the recorder,
+    /// interceptor, and ambient context the developer never touches.
+    ///
+    /// - Parameters:
+    ///   - make: Builds the system for this capture.
+    ///   - order: The ordering to drive, settle steps included.
+    ///   - cassette: The seam readings to answer with.
+    /// - Returns: The behavior trace of driving `order` against the built system.
+    ///
+    /// `record` and ``verify(replaying:into:declaring:replays:)`` drive the same primitive across a
+    /// build boundary.
     func capture(make: (SeamContext) -> S, order: [Op<S>], cassette: Cassette) async -> Trace {
         await captured(make: make, order: order, cassette: cassette).trace
     }

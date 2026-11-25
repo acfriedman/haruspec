@@ -36,11 +36,14 @@ extension Spec {
     }
 
     /// The reached origins that belong to the *subject* — every traced label minus the collaborators
-    /// the run injected through `SeamContext.inject`. Filtered before the verdict ever holds them,
+    /// the run injected through ``SeamContext/inject``. Filtered before the verdict ever holds them,
     /// because the origin list IS the audit's denominator ("declared in", the files a completeness
     /// check has to read): a collaborator double's interactions are captured at its boundary, so its
     /// sources — including a wrapped singleton with no Swift source at all — are the fixture's, not
     /// the claim's.
+    ///
+    /// - Parameter collector: The origins one verification collected, with the labels it injected.
+    /// - Returns: The collected origins whose labels the run did not inject.
     private func subjectOrigins(from collector: OriginCollector) -> [TraceOrigin] {
         let injected = collector.injectedLabels
         return collector.snapshot.filter { !injected.contains($0.label) }

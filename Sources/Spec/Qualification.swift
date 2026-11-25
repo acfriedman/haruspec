@@ -29,7 +29,9 @@ public struct Qualification: Codable, Sendable, Equatable {
     public let seamPositions: [String: Int]
     /// Effect channels the capture demonstrably could not see. `nil` means the capture-completeness
     /// audit has not run — rendered as "not audited", never as an empty (clean) list, so an unaudited
-    /// verdict cannot overstate. Filled via `noting(blindSpots:)` by the audit that ran.
+    /// verdict cannot overstate.
+    ///
+    /// Filled via ``noting(blindSpots:)`` by the audit that ran.
     public let blindSpots: [String]?
     /// Where the covered labels are declared, collected from the instrumentation as it ran (see
     /// `TraceOrigin`). This is the audit's denominator made explicit: the files a completeness check
@@ -280,8 +282,13 @@ extension Spec {
     }
 }
 
-/// The trace-derived class index (`PromoCart.checkout` → `PromoCart`), shared by `record()` and the
-/// live differential so the plan's `coveredClasses` and a live verdict's are the same extraction.
+/// Returns the trace-derived class index (``PromoCart/checkout`` → `PromoCart`). ``BaselinedSpec/record()``
+/// and the live differential share it, so the plan's `coveredClasses` and a live verdict's are the same
+/// extraction.
+///
+/// - Parameter traces: The traces to index, from any number of captures.
+/// - Returns: The class names, sorted and without repeats: each structural event's label up to its
+///   first dot, skipping a label with no class before the dot.
 func structuralClasses(in traces: some Sequence<Trace>) -> [String] {
     var classes = Set<String>()
     for trace in traces {

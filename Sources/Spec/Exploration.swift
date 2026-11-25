@@ -440,12 +440,20 @@ enum ExplorationBudget {
 
 // MARK: - Linear extensions
 
-/// Enumerate the orderings the declared constraints admit when the space fits in `max`, and *sample*
+/// Enumerates the orderings the declared constraints admit when the space fits in `max`, and *samples*
 /// `max` of them when it doesn't.
+///
+/// - Parameters:
+///   - ops: The spec's ops, each carrying its declared ordering constraints and repetition.
+///   - max: The most orderings to return.
+///   - repeating: How many times an op applies when it declares no repetition of its own.
+///   - seed: The seed of the sampling walk; the same seed gives the same sample.
+/// - Returns: The orderings, each with one entry per op occurrence: all of them when the space fits in
+///   `max`, otherwise a sample of at most `max`.
 ///
 /// Only `.requires` and `.last` bound the space. `.after` is a soft precondition, so the sample is
 /// **stratified** instead of filtered: most of the budget goes to orderings that respect every
-/// declared precondition, and `SpecDefaults.outOfOrderShare` of it to orderings that break one. That
+/// declared precondition, and ``SpecDefaults/outOfOrderShare`` of it to orderings that break one. That
 /// slice is not waste — it is the only way the engine reaches remove-before-add, checkout-on-empty and
 /// the rest of the defensive surface, and a differential oracle can't produce a false positive there
 /// (there is no expected value to contradict, only "did both branches agree"). Filtering those
