@@ -11,6 +11,11 @@ public protocol EventIntention: Intention {
 
 public extension EventIntention {
     /// Only in a probe whose recorded reads of `seam` all returned `value`.
+    ///
+    /// - Parameters:
+    ///   - seam: The seam's name, as the probe's reads record it.
+    ///   - value: The value every recorded read of `seam` must have returned.
+    /// - Returns: A copy of this declaration that matches only in such a probe.
     func when(_ seam: String, is value: CanonicalValue) -> Self {
         var narrowed = self
         narrowed.declaration.conditions.append(InputCondition(seam: seam, is: value))
@@ -18,6 +23,10 @@ public extension EventIntention {
     }
 
     /// Only under the declared op `op`.
+    ///
+    /// - Parameter op: The label the spec's ordering gives the op.
+    /// - Returns: A copy of this declaration that matches only events recorded under `op`.
+    /// - Precondition: The declaration has no op scope yet; a second traps.
     func only(in op: String) -> Self {
         var narrowed = self
         narrowed.declaration.scoped(.only(in: op))
@@ -25,6 +34,10 @@ public extension EventIntention {
     }
 
     /// Under the declared op `op`, at most once per application of it.
+    ///
+    /// - Parameter op: The label the spec's ordering gives the op.
+    /// - Returns: A copy of this declaration that matches at most one event per application of `op`.
+    /// - Precondition: The declaration has no op scope yet; a second traps.
     func once(per op: String) -> Self {
         var narrowed = self
         narrowed.declaration.scoped(.once(per: op))
@@ -32,6 +45,10 @@ public extension EventIntention {
     }
 
     /// After some event labeled `anchor` in the same op (the whole trace when the event has none).
+    ///
+    /// - Parameter anchor: The label of the event this one must follow.
+    /// - Returns: A copy of this declaration that matches only an event placed after an `anchor` event.
+    /// - Precondition: The declaration has no position yet; a second traps.
     func after(_ anchor: String) -> Self {
         var narrowed = self
         narrowed.declaration.placed(.after(anchor))
@@ -39,6 +56,11 @@ public extension EventIntention {
     }
 
     /// Before some event labeled `anchor` in the same op (the whole trace when the event has none).
+    ///
+    /// - Parameter anchor: The label of the event this one must precede.
+    /// - Returns: A copy of this declaration that matches only an event placed before an `anchor`
+    ///   event.
+    /// - Precondition: The declaration has no position yet; a second traps.
     func before(_ anchor: String) -> Self {
         var narrowed = self
         narrowed.declaration.placed(.before(anchor))
@@ -48,6 +70,9 @@ public extension EventIntention {
 
 extension Intent.EventChange {
     /// Sets the one op scope; a second is a contradiction and traps.
+    ///
+    /// - Parameter scope: The op scope the declaration narrows to.
+    /// - Precondition: The declaration has no op scope yet.
     mutating func scoped(_ scope: OpScope) {
         precondition(
             self.scope == nil,
@@ -57,6 +82,9 @@ extension Intent.EventChange {
     }
 
     /// Sets the one position; a second is a contradiction and traps.
+    ///
+    /// - Parameter position: The position the declaration narrows to.
+    /// - Precondition: The declaration has no position yet.
     mutating func placed(_ position: Position) {
         precondition(
             self.position == nil,
@@ -129,27 +157,45 @@ public struct Changes: Intention {
     }
 
     /// The new value is exactly `value` — a scalar, the only shape the grammar can spell back.
+    ///
+    /// - Parameter value: The new value, a scalar.
+    /// - Returns: A copy of this declaration that matches only a change to exactly `value`.
+    /// - Precondition: `value` is a scalar, and the declaration has no value relation yet.
     public func to(_ value: CanonicalValue) -> Changes {
         precondition(value.isScalar, "Changes(…).to(_:) takes a scalar, not \(value.canonicalString)")
         return narrowed(.to(value))
     }
 
     /// The value went up.
+    ///
+    /// - Returns: A copy of this declaration that matches only a numeric value that went up.
+    /// - Precondition: The declaration has no value relation yet.
     public func increases() -> Changes {
         narrowed(.increases)
     }
 
     /// The value went down.
+    ///
+    /// - Returns: A copy of this declaration that matches only a numeric value that went down.
+    /// - Precondition: The declaration has no value relation yet.
     public func decreases() -> Changes {
         narrowed(.decreases)
     }
 
     /// The new value lies in `range`.
+    ///
+    /// - Parameter range: The bounds the new value must lie within, inclusive.
+    /// - Returns: A copy of this declaration that matches only a numeric new value within `range`.
+    /// - Precondition: The declaration has no value relation yet.
     public func within(_ range: ClosedRange<Int>) -> Changes {
         narrowed(.within(Double(range.lowerBound) ... Double(range.upperBound)))
     }
 
     /// The new value lies in `range`.
+    ///
+    /// - Parameter range: The bounds the new value must lie within, inclusive.
+    /// - Returns: A copy of this declaration that matches only a numeric new value within `range`.
+    /// - Precondition: The declaration has no value relation yet.
     public func within(_ range: ClosedRange<Double>) -> Changes {
         narrowed(.within(range))
     }
@@ -165,6 +211,11 @@ public struct Changes: Intention {
     }
 
     /// Only in a probe whose recorded reads of `seam` all returned `value`.
+    ///
+    /// - Parameters:
+    ///   - seam: The seam's name, as the probe's reads record it.
+    ///   - value: The value every recorded read of `seam` must have returned.
+    /// - Returns: A copy of this declaration that matches only in such a probe.
     public func when(_ seam: String, is value: CanonicalValue) -> Changes {
         var narrowed = self
         narrowed.conditions.append(InputCondition(seam: seam, is: value))
@@ -172,6 +223,10 @@ public struct Changes: Intention {
     }
 
     /// Only under the declared op `op`.
+    ///
+    /// - Parameter op: The label the spec's ordering gives the op.
+    /// - Returns: A copy of this declaration that matches only changes recorded under `op`.
+    /// - Precondition: The declaration has no op scope yet; a second traps.
     public func only(in op: String) -> Changes {
         precondition(
             scope == nil,

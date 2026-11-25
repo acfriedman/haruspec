@@ -29,6 +29,10 @@ public extension Divergence {
     /// The declarations that would mark every gating divergence in `divergences` intended, one per
     /// (kind, label, field), each as narrow as the whole set allows. First-seen order.
     ///
+    /// - Parameter divergences: The divergences of every failing case the sweep walked, in sweep order.
+    /// - Returns: One declaration per (kind, label, field) of a gating divergence no declaration
+    ///   rejected, in first-seen order; a kind not expressible as intent gets none.
+    ///
     /// For a value mismatch seen in several cases: every new value the same → `.to(v)`; every case
     /// numeric and moving the same way → `.increases()` / `.decreases()`; every case numeric →
     /// `.within(min ... max)` over the new values; otherwise the bare field. Other kinds have one
@@ -62,8 +66,12 @@ public extension Divergence {
         }
     }
 
-    /// `.only(in: op)` when every case in `group` was recorded under the same op; `nil` when any
-    /// case carries no op or the ops differ — the bare form is then the narrowest provable one.
+    /// Returns the op scope every case in `group` agrees on — the bare form when they don't, since it
+    /// is then the narrowest provable one.
+    ///
+    /// - Parameter group: The divergences of one (kind, label, field), from every case.
+    /// - Returns: `.only(in:)` naming the op every case was recorded under; `nil` when any case carries
+    ///   no op or the ops differ.
     private static func scope(across group: [Divergence]) -> OpScope? {
         guard let op = group.first?.op?.label, group.allSatisfy({ $0.op?.label == op }) else {
             return nil
@@ -71,8 +79,13 @@ public extension Divergence {
         return .only(in: op)
     }
 
-    /// The narrowest relation every mismatch in `group` satisfies, or `nil` when only the bare
+    /// Returns the narrowest relation every mismatch in `group` satisfies, or `nil` when only the bare
     /// field does.
+    ///
+    /// - Parameter group: The value mismatches of one (label, field), from every case.
+    /// - Returns: `.to` when every new value is the same; `.increases` or `.decreases` when every case
+    ///   is numeric and moves that way; `.within` over the new values when every case is numeric;
+    ///   otherwise `nil`.
     private static func relation(across group: [Divergence]) -> ValueRelation? {
         let candidates = group.compactMap(\.candidateValue)
         guard candidates.count == group.count, candidates.allSatisfy(\.isScalar) else {
@@ -105,6 +118,12 @@ public extension Divergence {
     }
 
     /// One declaration text for this divergence's kind and label, with the modifiers given.
+    ///
+    /// - Parameters:
+    ///   - relation: The value relation to narrow a value change with; `nil` for none.
+    ///   - scope: The op scope to narrow with, for the kinds that take one; `nil` for none.
+    /// - Returns: The declaration's DSL text; `nil` for a timing regression or a domain that did not
+    ///   resolve.
     func suggestion(relation: ValueRelation?, scope: OpScope?) -> String? {
         let scoped = scope?.dslText ?? ""
         switch kind {
@@ -139,6 +158,12 @@ public extension Intent {
     /// The DSL spellings of every declaration that absorbs `divergence` given what the probe left
     /// behind — what a report names when it says which declaration a divergence was disclosed
     /// under. Empty for a divergence nothing declares.
+    ///
+    /// - Parameters:
+    ///   - divergence: The divergence to look up.
+    ///   - evidence: What the probe left behind; `.none` lets only unmodified declarations match.
+    /// - Returns: The matching declarations' spellings, in declaration order; empty when nothing
+    ///   declares `divergence`.
     func declarationsMatching(_ divergence: Divergence, evidence: ProbeEvidence = .none) -> [String] {
         declarations.filter { $0.matches(divergence, evidence) }.map(\.text)
     }

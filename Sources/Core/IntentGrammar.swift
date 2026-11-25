@@ -25,8 +25,13 @@ public enum IntentGrammar {
     /// Extracts every ` ```haruspec-intent <spec>` fenced block from a PR body and parses each into
     /// the `Intent` declared for that spec. A body with no intent blocks is parity mode: `[:]`.
     ///
-    /// - Precondition (thrown, not trapped): every block names a spec, parses, and no spec appears
-    ///   in two blocks — a second block would silently widen the first.
+    /// - Parameter body: A PR body as Markdown; a block quoted inside another fence is content, not a
+    ///   declaration.
+    /// - Returns: Each spec's intent, keyed by the spec its block names; empty when the body has no
+    ///   intent block.
+    /// - Throws: ``IntentGrammarError`` when a block names no spec, is never closed, or holds a line
+    ///   that does not parse, or when a spec appears in two blocks — a second block would silently
+    ///   widen the first.
     public static func intents(inBody body: String) throws -> [String: Intent] {
         var intents: [String: Intent] = [:]
         var currentSpec: String?
@@ -72,6 +77,14 @@ public enum IntentGrammar {
 
     /// Parses one closed block into `intents`, refusing a spec that already has one — a second
     /// block would silently widen the first.
+    ///
+    /// - Parameters:
+    ///   - spec: The spec the block names.
+    ///   - lines: The block's lines, between its fences.
+    ///   - blockStart: The line number of the block's opening fence in the body.
+    ///   - intents: The intents parsed so far, keyed by spec, which receives this block's.
+    /// - Throws: ``IntentGrammarError`` when `spec` already has an intent block or a line does not
+    ///   parse.
     private static func close(
         _ spec: String,
         lines: [String],
@@ -92,6 +105,12 @@ public enum IntentGrammar {
 
     /// The spec a `` ```haruspec-intent <spec> `` fence names — thrown at, not defaulted, when the
     /// name is missing: an unpaired block cannot excuse anything.
+    ///
+    /// - Parameters:
+    ///   - line: The opening fence line, trimmed.
+    ///   - lineNumber: The fence's line number in the body.
+    /// - Returns: The spec name after the fence label, trimmed.
+    /// - Throws: ``IntentGrammarError`` when the fence names no spec.
     private static func specName(onFence line: String, at lineNumber: Int) throws -> String {
         let spec = line.dropFirst(3).dropFirst(fenceLabel.count).trimmingCharacters(in: .whitespaces)
         guard !spec.isEmpty else {
@@ -252,7 +271,9 @@ struct DeclarationParser {
     }
 
     /// The bare one-string declarations, by the `Intent` list each appends to. The labeled ones carry
-    /// their argument label (`Drops(synchronizationOf:)`); the bare ones `nil`. None takes a modifier.
+    /// their argument label (`Drops(synchronizationOf:)`); the bare ones `nil`.
+    ///
+    /// None takes a modifier.
     private static var stringDeclarations: [String: (label: String?, list: WritableKeyPath<Intent, [String]>)] {
         [
             "Awaits": (nil, \.expectedOrderingAdditions),

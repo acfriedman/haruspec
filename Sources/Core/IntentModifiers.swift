@@ -60,6 +60,9 @@ public struct ProbeEvidence: Sendable {
 
     /// The divergences a cardinality check counts over — the comparison's when known, else the
     /// one being matched (which then trivially counts once).
+    ///
+    /// - Parameter divergence: The divergence being matched.
+    /// - Returns: The comparison's divergences when the evidence carries them, else `divergence` alone.
     func siblings(of divergence: Divergence) -> [Divergence] {
         divergences.isEmpty ? [divergence] : divergences
     }
@@ -79,6 +82,12 @@ public enum ValueRelation: Sendable, Equatable, Codable {
 
     /// Whether the relation holds between the two observed values. A relation that needs numbers
     /// and finds none does not hold — narrowing never widens by accident.
+    ///
+    /// - Parameters:
+    ///   - baseline: The baseline's value at the field; `nil` when it has none.
+    ///   - candidate: The candidate's value at the field; `nil` when it has none.
+    /// - Returns: `true` when the relation holds; `false` when `candidate` is `nil` or a numeric relation
+    ///   finds no number on a side it needs.
     func holds(baseline: CanonicalValue?, candidate: CanonicalValue?) -> Bool {
         guard let candidate else {
             return false
@@ -145,7 +154,11 @@ public struct InputCondition: Sendable, Equatable, Codable {
 }
 
 extension [InputCondition] {
-    /// Every condition holds in these inputs; an empty list holds vacuously (the bare declaration).
+    /// Returns whether every condition holds in these inputs; an empty list holds vacuously (the bare
+    /// declaration).
+    ///
+    /// - Parameter inputs: The seam inputs the probe ran with; `nil` when none were recorded.
+    /// - Returns: `true` when every condition holds in `inputs`; `true` for an empty list.
     func allHold(in inputs: ProbeInputs?) -> Bool {
         allSatisfy { $0.holds(in: inputs) }
     }
@@ -199,6 +212,10 @@ extension OpScope? {
     /// Whether a declaration with this scope is *about* `divergence` at all: scoped to the op it
     /// was recorded under, or unscoped.
     ///
+    /// - Parameter divergence: The divergence a declaration's head matched.
+    /// - Returns: `true` when the scope names the op `divergence` was recorded under, or there is no
+    ///   scope.
+    ///
     /// The scope names where the declaration applies; only the modifiers that say what to expect
     /// there (`.once`'s count, a relation, a position, an input) can reject.
     func isAbout(_ divergence: Divergence) -> Bool {
@@ -225,7 +242,14 @@ public enum Position: Sendable, Equatable, Codable {
         }
     }
 
-    /// Whether the event at `seq` in `events` sits as declared relative to some anchor-labeled event.
+    /// Returns whether the event at `seq` in `events` sits as declared relative to some anchor-labeled
+    /// event.
+    ///
+    /// - Parameters:
+    ///   - seq: The event's position in its trace; `nil` when it has none.
+    ///   - events: The trace the event was recorded in.
+    /// - Returns: `true` when an event with the anchor's label sits on the declared side of it, within
+    ///   the same op application when the event carries one; `false` when `seq` names no event.
     func holds(at seq: Int?, in events: [TraceEvent]) -> Bool {
         guard let seq, let event = events.first(where: { $0.seq == seq }) else {
             return false
@@ -278,6 +302,9 @@ extension CanonicalValue {
     }
 
     /// Equality that treats the numeric cases as one number and everything else exactly.
+    ///
+    /// - Parameter other: The value to compare with.
+    /// - Returns: `true` when both are numbers equal as numbers, or otherwise exactly equal.
     func sameValue(as other: CanonicalValue) -> Bool {
         if let mine = numericValue, let theirs = other.numericValue {
             return mine == theirs
@@ -311,12 +338,19 @@ extension CanonicalValue {
     }
 
     /// A number as the grammar spells it: whole values without a fractional part.
+    ///
+    /// - Parameter number: The number to spell.
+    /// - Returns: The number without a fractional part when it is whole and under 10¹⁵ in magnitude,
+    ///   else as Swift prints it.
     static func dslNumber(_ number: Double) -> String {
         number == number.rounded() && abs(number) < 1e15 ? String(Int64(number)) : String(number)
     }
 }
 
 /// A string as every declaration spells one: double-quoted, verbatim.
+///
+/// - Parameter text: The text to quote; a quote inside it is not escaped.
+/// - Returns: `text` between double quotes.
 func quoted(_ text: String) -> String {
     "\"\(text)\""
 }

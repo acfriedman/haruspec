@@ -27,6 +27,9 @@ public enum DomainName: Sendable, Equatable {
     case actor(String)
 
     /// The type-safe spelling: `.actor(SwiftCartActor.self)`.
+    ///
+    /// - Parameter type: The actor's type, as in `.actor(SwiftCartActor.self)`.
+    /// - Returns: The domain naming that actor type, whatever its instance.
     public static func actor(_ type: Any.Type) -> DomainName {
         .actor(String(describing: type))
     }
@@ -69,6 +72,9 @@ public enum DomainName: Sendable, Equatable {
     /// The declaration-level name of a domain as a divergence records it —
     /// `"queue(serial):com.emporium.cart"` → `.queue("com.emporium.cart")`.
     ///
+    /// - Parameter recorded: A domain's description as a divergence records it, such as
+    ///   `"actor:SwiftCartActor#3"`; one that names no domain yields `nil`.
+    ///
     /// Discipline and instance numbering drop away, so a report can suggest the declaration that
     /// would match what it saw.
     public init?(recorded: String) {
@@ -86,6 +92,10 @@ public enum DomainName: Sendable, Equatable {
     }
 
     /// `actor:SwiftCartActor#3` → `actor:SwiftCartActor`; everything else unchanged.
+    ///
+    /// - Parameter description: A recorded domain description.
+    /// - Returns: `description` without an actor's `#<instance>` suffix; any other description
+    ///   unchanged.
     static func droppingInstance(_ description: String) -> String {
         guard description.hasPrefix("actor:"), let hash = description.lastIndex(of: "#") else {
             return description
@@ -179,6 +189,12 @@ public struct Moves: Intention {
 
     /// Moves these events — `Moves("Inventory.reserve", "CartDidChange", from: …, to: …)`. At least
     /// one label, by construction: breadth is never the default.
+    ///
+    /// - Parameters:
+    ///   - first: The first event label the move covers.
+    ///   - rest: Any further labels it covers.
+    ///   - origin: The domain the events ran on in the baseline.
+    ///   - destination: The domain they run on in the candidate.
     public init(_ first: String, _ rest: String..., from origin: DomainName, to destination: DomainName) {
         labels = [first] + rest
         self.origin = origin
@@ -187,6 +203,10 @@ public struct Moves: Intention {
 
     /// The wholesale port's spelling: every event that migrates between this pair is intended.
     /// The word is the warning — reach for the labeled form unless "everything" is literally true.
+    ///
+    /// - Parameters:
+    ///   - origin: The domain the events ran on in the baseline.
+    ///   - destination: The domain they run on in the candidate.
     public init(everythingFrom origin: DomainName, to destination: DomainName) {
         labels = []
         self.origin = origin
@@ -194,6 +214,9 @@ public struct Moves: Intention {
     }
 
     /// Only under the declared op `op` — `Moves(…).only(in: "checkout")`.
+    ///
+    /// - Parameter op: The label the spec's ordering gives the op.
+    /// - Returns: A copy of this declaration that matches only migrations recorded under `op`.
     public func only(in op: String) -> Moves {
         var narrowed = self
         narrowed.scope = .only(in: op)
@@ -261,18 +284,32 @@ public struct Reorders: Intention {
 
     /// At least one label, by construction — a blanket reorder excuse would pre-excuse every future
     /// ordering change on the subject.
+    ///
+    /// - Parameters:
+    ///   - first: The first event label the change reorders.
+    ///   - rest: Any further labels it reorders.
     public init(_ first: String, _ rest: String...) {
         labels = [first] + rest
         position = nil
     }
 
     /// The events now sit before `anchor`, having sat after it.
+    ///
+    /// - Parameters:
+    ///   - first: The first event label the change reorders.
+    ///   - rest: Any further labels it reorders.
+    ///   - anchor: The label of the event they now sit before.
     public init(_ first: String, _ rest: String..., before anchor: String) {
         labels = [first] + rest
         position = .before(anchor)
     }
 
     /// The events now sit after `anchor`, having sat before it.
+    ///
+    /// - Parameters:
+    ///   - first: The first event label the change reorders.
+    ///   - rest: Any further labels it reorders.
+    ///   - anchor: The label of the event they now sit after.
     public init(_ first: String, _ rest: String..., after anchor: String) {
         labels = [first] + rest
         position = .after(anchor)

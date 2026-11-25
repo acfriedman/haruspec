@@ -18,7 +18,9 @@ public struct Intent: Sendable, Equatable {
     /// One declared movement of work between isolation domains, named the way an author names
     /// domains (`DomainName`): a queue by label whatever its discipline, an actor by type whatever
     /// its instance. Scoped to the event labels it names — an empty list means every label, the
-    /// wholesale form. The DSL spellings are `Moves(_:from:to:)` and `Moves(everythingFrom:to:)`,
+    /// wholesale form.
+    ///
+    /// The DSL spellings are `Moves(_:from:to:)` and `Moves(everythingFrom:to:)`,
     /// narrowed to one op with `.only(in:)`.
     public struct DomainMove: Sendable, Equatable, Codable {
         public let labels: [String]
@@ -90,8 +92,16 @@ public struct Intent: Sendable, Equatable {
             conditions.dslText + (scope?.dslText ?? "") + (position?.dslText ?? "")
         }
 
-        /// Every modifier holds for `divergence`, whose event sits at `seq` on the side `events`
-        /// came from.
+        /// Returns whether every modifier holds for `divergence`, whose event sits at `seq` on the side
+        /// `events` came from.
+        ///
+        /// - Parameters:
+        ///   - divergence: The divergence the declaration's head matched.
+        ///   - seq: The position of the divergence's event on its side; `nil` when it has none.
+        ///   - events: The trace of the side the event came from.
+        ///   - evidence: What the probe left behind.
+        /// - Returns: `true` when every input condition, the op scope, and the position hold; `true`
+        ///   for a declaration with no modifiers.
         func modifiersHold(
             for divergence: Divergence,
             at seq: Int?,
@@ -173,8 +183,9 @@ public struct Intent: Sendable, Equatable {
 
     /// Ordered domains whose ordering guarantee the change deliberately drops (`orderingRelaxed`).
     /// Replacing a serial queue with a task group is the canonical case: the relaxation is the point
-    /// of the PR, so it is declarable — and gates until declared. The DSL spelling is
-    /// `Relaxes(orderingOf:)`.
+    /// of the PR, so it is declarable — and gates until declared.
+    ///
+    /// The DSL spelling is `Relaxes(orderingOf:)`.
     public var expectedOrderingRelaxations: [DomainName]
 
     /// Events (by label) whose happens-before constraint the change deliberately drops — the
@@ -187,8 +198,9 @@ public struct Intent: Sendable, Equatable {
     public var expectedOrderingAdditions: [String]
 
     /// Events (by label) the change deliberately reorders — `reordered`. A port that emits its effects
-    /// in a different order declares the labels it moves, and only those. The DSL spelling is
-    /// `Reorders(_:)`, directed with `Reorders(_:before:)` / `Reorders(_:after:)`.
+    /// in a different order declares the labels it moves, and only those.
+    ///
+    /// The DSL spelling is `Reorders(_:)`, directed with `Reorders(_:before:)` / `Reorders(_:after:)`.
     public var expectedReorders: [Reorder]
 
     /// Movements of work between isolation domains the change intends — a port's one-line summary
@@ -199,7 +211,9 @@ public struct Intent: Sendable, Equatable {
     /// Effect channels the author accepts the capture cannot see (`"Timer / RunLoop"`), by the name
     /// the capture-completeness audit gives them. The only exit from a `bypassedChannel` gap, and a
     /// deliberately weak one: it does not hide the channel, it *names* it on the verdict as a
-    /// declared blind spot. The DSL spelling is `Accepts(uncaptured:)`.
+    /// declared blind spot.
+    ///
+    /// The DSL spelling is `Accepts(uncaptured:)`.
     ///
     /// Unlike the divergence declarations above, this excuses something the diff never saw — so the
     /// audit also reports a declaration that matched nothing. An accepted blind spot that no longer
@@ -257,8 +271,14 @@ public struct Intent: Sendable, Equatable {
         declares(divergence, evidence: ProbeEvidence(inputs: inputs))
     }
 
-    /// A declared field matches the leaf that differed, or any leaf beneath it (`info` covers
-    /// `info.pointsEarned` and `info[0]`).
+    /// Returns whether a declared field matches the leaf that differed, or any leaf beneath it (`info`
+    /// covers `info.pointsEarned` and `info[0]`).
+    ///
+    /// - Parameters:
+    ///   - field: The declared field path, such as `info`.
+    ///   - path: The path of the leaf that differed; `nil` when the divergence names no field.
+    /// - Returns: `true` when `path` is `field` or lies beneath it as a member or an element; `false`
+    ///   for `nil`.
     static func fieldMatches(_ field: String, _ path: String?) -> Bool {
         guard let path else {
             return false
@@ -283,6 +303,10 @@ public extension Intent {
     }
 
     /// Returns the union of this spec and `other`: every declaration either side makes, once.
+    ///
+    /// - Parameter other: The intent to combine with this one.
+    /// - Returns: An intent holding each declaration either side makes, once and in first-seen order,
+    ///   a wholesale `Changes(label)` replacing that label's narrower forms.
     ///
     /// Sound only where the combined excuses were each individually endorsed — the record-on-merge
     /// sweep replaying one plan across several merged PRs' declarations. A union must never judge a
@@ -312,8 +336,11 @@ public extension Intent {
     }
 }
 
-/// First occurrence wins, order preserved — a merged intent renders declarations in the order the
-/// PRs merged, which is the order a reader can retrace.
+/// Returns `values` without repeats, the first occurrence kept and order preserved — a merged intent
+/// renders declarations in the order the PRs merged, which is the order a reader can retrace.
+///
+/// - Parameter values: The values, in merge order.
+/// - Returns: Each distinct value once, at its first position.
 private func uniqued<T: Equatable>(_ values: [T]) -> [T] {
     values.reduce(into: []) { result, value in
         if !result.contains(value) {

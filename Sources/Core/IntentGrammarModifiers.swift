@@ -14,8 +14,14 @@ extension DeclarationParser {
         var position: Position?
     }
 
-    /// One chained `.modifier(…)` — the `.` is already consumed. Each modifier has one spelling, and
-    /// a head accepts only the modifiers that narrow it.
+    /// Parses one chained `.modifier(…)` — the `.` is already consumed. Each modifier has one
+    /// spelling, and a head accepts only the modifiers that narrow it.
+    ///
+    /// - Parameters:
+    ///   - head: The declaration the modifier chains onto.
+    ///   - modifiers: The modifiers parsed so far for this declaration, which receives this one.
+    /// - Throws: ``IntentGrammarError`` when `head` does not take the modifier, its argument does not
+    ///   parse, or it contradicts a modifier already in `modifiers`.
     mutating func modifier(on head: Head, into modifiers: inout Modifiers) throws {
         let name = try identifier(expected: "a modifier")
         guard head.allowedModifiers.contains(name) else {
@@ -37,6 +43,14 @@ extension DeclarationParser {
 
     /// The modifiers about the value and the probe — `.to`, `.increases`, `.decreases`, `.within`,
     /// `.when`; `false` when `name` is none of them.
+    ///
+    /// - Parameters:
+    ///   - name: The modifier's name, its opening parenthesis already consumed.
+    ///   - modifiers: The modifiers parsed so far for this declaration, which receives this one.
+    /// - Returns: `true` when `name` is a value or probe modifier and was parsed; `false` when it is
+    ///   none of them, leaving the cursor where it was.
+    /// - Throws: ``IntentGrammarError`` when the argument does not parse, a range is empty, or a
+    ///   second value relation contradicts the first.
     private mutating func valueModifier(_ name: String, into modifiers: inout Modifiers) throws -> Bool {
         switch name {
         case "to":
@@ -65,6 +79,11 @@ extension DeclarationParser {
     }
 
     /// One value relation per declaration — a second is a contradiction, refused with both named.
+    ///
+    /// - Parameters:
+    ///   - relation: The relation the modifier declares.
+    ///   - modifiers: The modifiers parsed so far for this declaration, which receives `relation`.
+    /// - Throws: ``IntentGrammarError`` naming both relations when `modifiers` already holds one.
     func relate(_ relation: ValueRelation, into modifiers: inout Modifiers) throws {
         if let existing = modifiers.relation {
             throw error(
@@ -77,6 +96,14 @@ extension DeclarationParser {
 
     /// The modifiers about where the event was recorded — `.only(in:)`, `.once(per:)`, `.after`,
     /// `.before`; `false` when `name` is none of them.
+    ///
+    /// - Parameters:
+    ///   - name: The modifier's name, its opening parenthesis already consumed.
+    ///   - modifiers: The modifiers parsed so far for this declaration, which receives this one.
+    /// - Returns: `true` when `name` is a placement modifier and was parsed; `false` when it is none of
+    ///   them, leaving the cursor where it was.
+    /// - Throws: ``IntentGrammarError`` when the argument does not parse, or a second op scope or
+    ///   position contradicts the first.
     private mutating func placementModifier(_ name: String, into modifiers: inout Modifiers) throws -> Bool {
         switch name {
         case "only":
@@ -97,6 +124,11 @@ extension DeclarationParser {
 
     /// One op scope per declaration — `.once(per:)` already says which op, so a second scope
     /// either repeats it or contradicts it.
+    ///
+    /// - Parameters:
+    ///   - scope: The op scope the modifier declares.
+    ///   - modifiers: The modifiers parsed so far for this declaration, which receives `scope`.
+    /// - Throws: ``IntentGrammarError`` naming both scopes when `modifiers` already holds one.
     func scope(_ scope: OpScope, into modifiers: inout Modifiers) throws {
         if let existing = modifiers.scope {
             throw error(
@@ -107,7 +139,12 @@ extension DeclarationParser {
         modifiers.scope = scope
     }
 
-    /// One position per declaration.
+    /// One position per declaration — a second is a contradiction, refused with both named.
+    ///
+    /// - Parameters:
+    ///   - position: The position the modifier declares.
+    ///   - modifiers: The modifiers parsed so far for this declaration, which receives `position`.
+    /// - Throws: ``IntentGrammarError`` naming both positions when `modifiers` already holds one.
     func place(_ position: Position, into modifiers: inout Modifiers) throws {
         if let existing = modifiers.position {
             throw error(
@@ -164,7 +201,11 @@ extension DeclarationParser {
         return double
     }
 
-    /// The characters of a numeric literal, and whether it had no fractional part.
+    /// Reads the characters of the numeric literal at the cursor, and whether it had no fractional part.
+    ///
+    /// - Returns: The literal's characters, a leading minus included, and whether it has no fractional
+    ///   part; a dot followed by another dot ends the number, as in a range.
+    /// - Throws: ``IntentGrammarError`` when no digits are at the cursor.
     mutating func numberText() throws -> (text: String, isWhole: Bool) {
         skipSpaces()
         var text = ""
