@@ -83,8 +83,12 @@ public enum ContinuousRun: Sendable {
     /// launch keeps running.
     public static let defaultSettleSeconds = 5.0
 
-    /// The spec a conventioned plan path names — `<spec>.plan.json[.gz]` — or `nil` for a path
+    /// Returns the spec a conventioned plan path names — `<spec>.plan.json[.gz]` — or `nil` for a path
     /// outside the convention, which applies to every suite.
+    ///
+    /// - Parameter path: A path to a plan file, absolute or relative.
+    /// - Returns: The file name's stem before `.plan.json.gz` or `.plan.json`; `nil` when the name lacks
+    ///   both suffixes or the stem is empty.
     ///
     /// This is what lets one whole-target CI run carry several continuous suites: each suite
     /// compares the stem against its own spec and stands down for another's plan, instead of
@@ -353,7 +357,14 @@ public extension BaselinedSpec {
 }
 
 private extension [String: String] {
-    /// Missing and empty are the same failure: paths must be explicit, never defaulted.
+    /// Returns the path the environment stores under a key. Missing and empty are the same failure:
+    /// paths must be explicit, never defaulted.
+    ///
+    /// - Parameters:
+    ///   - key: The environment variable naming the path, such as ``ContinuousRun/planPathKey``.
+    ///   - mode: The selected mode that needs the path, named in the error.
+    /// - Returns: The variable's value, never empty.
+    /// - Throws: ``ContinuousRunError/missingPath(key:mode:)`` when the variable is unset or empty.
     func requiredPath(_ key: String, mode: ContinuousMode) throws -> String {
         guard let value = self[key], !value.isEmpty else {
             throw ContinuousRunError.missingPath(key: key, mode: mode)

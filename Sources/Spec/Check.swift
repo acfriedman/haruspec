@@ -116,8 +116,11 @@ public struct CandidateVerdict: Sendable {
         actual == expected
     }
 
-    /// `verdict.report()` prefixed with the expectation when it was *not* met — the line a failing
-    /// test prints, where "DIVERGED" alone doesn't say whether that was the point.
+    /// Returns the verdict's report, prefixed with the expectation when it was *not* met — the line a
+    /// failing test prints, where "DIVERGED" alone doesn't say whether that was the point.
+    ///
+    /// - Returns: The verdict's report text; when the expectation was not met, preceded by an
+    ///   `expected <verdict>, got <verdict>` line.
     public func report() -> String {
         guard !metExpectation else {
             return verdict.report()
@@ -127,6 +130,11 @@ public struct CandidateVerdict: Sendable {
 
     /// Prints the report under `spec/build` and throws unless the expectation was met. Shared by every
     /// check spelling, so an inline build and a declared candidate fail identically.
+    ///
+    /// - Parameter specName: The name of the spec the build was checked against; the first path
+    ///   component of the printed `spec/build` title.
+    /// - Throws: ``SpecCatalog/CheckFailure`` carrying the report's first line when the verdict differs
+    ///   from the expected one.
     func check(in specName: String) throws {
         SpecCatalog.report("\(specName)/\(name)", report(), htmlReportPath: htmlReportPath)
         guard metExpectation else {

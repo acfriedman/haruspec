@@ -44,6 +44,11 @@ public enum PlanStaleness: Equatable, Sendable {
 public extension SpecPlan {
     /// Returns this plan's staleness against `changedFiles` (repo-relative, as
     /// `git diff --name-only <recordedAt>..HEAD` reports them).
+    ///
+    /// - Parameter changedFiles: Repo-relative paths changed since the plan's `recordedAt`.
+    /// - Returns: ``PlanStaleness/unstamped`` when the plan carries no provenance;
+    ///   ``PlanStaleness/stale(overlap:)`` naming the changed files the recording executed, sorted; otherwise
+    ///   ``PlanStaleness/fresh``.
     func staleness(changedFiles: some Sequence<String>) -> PlanStaleness {
         guard let provenance else { return .unstamped }
         let covered = Set(provenance.coverageFiles)
@@ -115,16 +120,16 @@ public extension PlanSweep {
     /// names the declared specs — adds births and orphans from the catalog-vs-plans gap.
     ///
     /// - Parameters:
-    ///   - plans: Every committed plan keyed by its spec name; each lands in exactly one of the
-    ///     sweep's buckets (fresh, stale, or unreadable).
-    ///   - census: Spec names the app's catalog declares; `nil` means no census ran, so births
-    ///     and orphans cannot be judged and `censusAdvised` reports whether that matters.
-    ///   - testSources: Repo-relative prefix under which spec declarations live. Without a
-    ///     census, a changed file under it that no plan's coverage claims advises one — a new
-    ///     spec necessarily lands there, and necessarily outside every existing dependency set.
-    ///   - changedFiles: Returns `git diff --name-only <recordedAt>..HEAD` for a stamped plan.
-    ///     A throw means the range is unanswerable (unknown commit, shallow history) and the
-    ///     plan is stale fail-safe: freshness is a proof, and an unanswerable range proves nothing.
+    ///   - plans: Every committed plan, paired with its spec name.
+    ///   - census: Spec names the app's catalog declares; `nil` means no census ran.
+    ///   - testSources: Repo-relative prefix under which spec declarations live; `nil` when unknown.
+    ///   - changedFiles: Returns `git diff --name-only <recordedAt>..HEAD` for a stamped plan's
+    ///     `recordedAt`; throws when the range is unanswerable (unknown commit, shallow history).
+    /// - Returns: The decision, with each plan in exactly one of `fresh` or `stale` unless the census
+    ///   orphans it. A plan whose range is unanswerable is stale fail-safe: freshness is a proof, and an
+    ///   unanswerable range proves nothing. Births and orphans are judged only with a census; without
+    ///   one, `censusAdvised` is set when a plan is unstamped, there are no plans, or a changed file under
+    ///   `testSources` lies outside every plan's coverage — where a new spec necessarily lands.
     static func run(
         plans: [(spec: String, plan: SpecPlan)],
         census: [String]?,
@@ -151,8 +156,15 @@ public extension PlanSweep {
         return sweep
     }
 
-    /// Buckets each plan by staleness; returns the changed- and covered-file unions the
-    /// census advisement reads.
+    /// Buckets each plan by staleness into this sweep, and returns the changed- and covered-file unions
+    /// the census advisement reads.
+    ///
+    /// - Parameters:
+    ///   - plans: Every committed plan, paired with its spec name.
+    ///   - changedFiles: Returns the repo-relative files changed since a stamped plan's `recordedAt`;
+    ///     throws when that range is unanswerable.
+    /// - Returns: Every file changed since any stamped plan's `recordedAt` whose range was answerable, and
+    ///   every file any stamped plan's recording executed.
     private mutating func assess(
         _ plans: [(spec: String, plan: SpecPlan)],
         changedFiles: (String) throws -> [String]
@@ -189,6 +201,12 @@ public extension PlanSweep {
     }
 
     /// Decides births and orphans from the census, or — without one — whether a census is advised.
+    ///
+    /// - Parameters:
+    ///   - census: Spec names the app's catalog declares; `nil` means no census ran.
+    ///   - planned: Spec names with a committed plan.
+    ///   - testSources: Repo-relative prefix under which spec declarations live; `nil` when unknown.
+    ///   - uncoveredChanges: Changed repo-relative files no stamped plan's recording executed.
     private mutating func reconcileCatalog(
         census: [String]?,
         planned: Set<String>,

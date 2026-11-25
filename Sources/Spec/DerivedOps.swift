@@ -106,16 +106,26 @@ public struct DerivedArgument {
 
     /// An `Int8` parameter — the same ladder, clipped to what the width can represent (the emitted
     /// `Int8(_:)` conversion traps on overflow, so the domain must not claim more).
+    ///
+    /// - Parameter name: The parameter's name as the signature spells it.
+    /// - Returns: The argument, its domain the magnitude ladder over ``SpecDefaults/derivedTinyIntSpan``.
     public static func int8(_ name: String) -> DerivedArgument {
         magnitudeInt(name, over: SpecDefaults.derivedTinyIntSpan)
     }
 
     /// An unsigned parameter (`UInt`, `UInt64`, `UInt32`, `UInt16`) — no negative side to ladder.
+    ///
+    /// - Parameter name: The parameter's name as the signature spells it.
+    /// - Returns: The argument, its domain the magnitude ladder over ``SpecDefaults/derivedUnsignedSpan``.
     public static func uint(_ name: String) -> DerivedArgument {
         magnitudeInt(name, over: SpecDefaults.derivedUnsignedSpan)
     }
 
     /// A `UInt8` parameter — unsigned and width-clipped.
+    ///
+    /// - Parameter name: The parameter's name as the signature spells it.
+    /// - Returns: The argument, its domain the magnitude ladder over
+    ///   ``SpecDefaults/derivedUnsignedTinySpan``.
     public static func uint8(_ name: String) -> DerivedArgument {
         magnitudeInt(name, over: SpecDefaults.derivedUnsignedTinySpan)
     }
@@ -130,6 +140,9 @@ public struct DerivedArgument {
     }
 
     /// A `Double`-family parameter, defaulted to the fractional-through-thousands ladder.
+    ///
+    /// - Parameter name: The parameter's name as the signature spells it.
+    /// - Returns: The argument, its domain the magnitude ladder over ``SpecDefaults/derivedDoubleSpan``.
     public static func double(_ name: String) -> DerivedArgument {
         // Canonical golden value 0, not a span bound: the recorded path should read naturally.
         let domain = ArgumentDomain<Double>(
@@ -142,6 +155,9 @@ public struct DerivedArgument {
     }
 
     /// A `Bool` parameter. Both values are boundary values, so the default is the whole domain.
+    ///
+    /// - Parameter name: The parameter's name as the signature spells it.
+    /// - Returns: The argument, its domain `false` and `true`.
     public static func bool(_ name: String) -> DerivedArgument {
         DerivedArgument(
             name: name,
@@ -153,20 +169,34 @@ public struct DerivedArgument {
 
     /// A `String` parameter — deliberately pending. A string argument is where magic values live
     /// (a promo code, a status), and a random default would sweep only the nothing-matches branch:
-    /// EQUIVALENT over a surface that never reached the interesting one. Unresolved, it traps at
-    /// spec construction naming the declaration to write.
+    /// EQUIVALENT over a surface that never reached the interesting one.
+    ///
+    /// - Parameter name: The parameter's name as the signature spells it.
+    /// - Returns: A pending argument, with no domain until an amendment declares one.
+    ///
+    /// Unresolved, it traps at spec construction naming the declaration to write.
     public static func string(_ name: String) -> DerivedArgument {
         DerivedArgument(name: name, typeName: "String", resolution: nil, isDerivedDefault: false)
     }
 
     /// A parameter no heuristic covers (a collection, a closure) — pending, resolvable only by
     /// overriding the whole op.
+    ///
+    /// - Parameters:
+    ///   - name: The parameter's name as the signature spells it.
+    ///   - type: The parameter's type as the source spells it, named in the trap.
+    /// - Returns: A pending argument with no domain.
     public static func pending(_ name: String, type: String) -> DerivedArgument {
         DerivedArgument(name: name, typeName: type, resolution: nil, isDerivedDefault: false)
     }
 
     /// A model parameter, built by its own `SeamGenerated` factory — the factory is the authored
     /// declaration, so this is not a derived default.
+    ///
+    /// - Parameters:
+    ///   - name: The parameter's name, the seam-key half and the amendment-matching name.
+    ///   - type: The model's type.
+    /// - Returns: The argument, its values built by the model's factory under its type-scoped keys.
     public static func generated<T: SeamGenerated>(
         _ name: String,
         _ type: T.Type
@@ -198,8 +228,11 @@ extension ArgumentDomain {
         "\(T.self)"
     }
 
-    /// Erases for the derived-op pipeline. The domain must already carry the argument's final name —
-    /// the synthesized key reads it.
+    /// Returns this domain erased for the derived-op pipeline. The domain must already carry the
+    /// argument's final name — the synthesized key reads it.
+    ///
+    /// - Returns: The resolution a derived argument carries, reading and contributing exactly as this
+    ///   domain does.
     func erased() -> DerivedArgument.Resolution {
         DerivedArgument.Resolution(
             contributions: { label, position in self.contributions(for: label, at: position) },
@@ -211,7 +244,9 @@ extension ArgumentDomain {
 }
 
 extension ArgumentDomain where T == Bool {
-    /// The two-value domain a `Bool` argument defaults to. Categorical, so both values are edges.
+    /// Returns the two-value domain a `Bool` argument defaults to. Categorical, so both values are edges.
+    ///
+    /// - Returns: An unnamed domain over `false` and `true`.
     static func bool() -> ArgumentDomain<Bool> {
         ArgumentDomain(domain: .anyOf([.bool(false), .bool(true)])) { seams, seam in
             seams.bool(seam, default: false)
@@ -261,7 +296,12 @@ public struct DerivedOp<S> {
         arguments.filter(\.isDerivedDefault).map { "\(label).\($0.name)" }
     }
 
-    /// The runnable `Op`, or a trap naming the declaration a pending argument still needs.
+    /// Returns the runnable ``Op``, or traps naming the declaration a pending argument still needs.
+    ///
+    /// - Returns: The op with every argument's domain declared and this op's structure applied; with no
+    ///   repetition amended and not run last, it repeats over ``SpecDefaults/derivedRepetition``.
+    /// - Precondition: Every argument has a domain; a pending one traps with the `Amend(…).varying` or
+    ///   replacement `Op` to write.
     func resolved() -> Op<S> {
         for argument in arguments where argument.resolution == nil {
             preconditionFailure(
@@ -340,6 +380,13 @@ public struct Amend {
 
     /// Varies `parameter` over `domain` — the parameter-first form of a domain declaration: the name
     /// is the join to the signature, so it anchors the call rather than trailing the domain.
+    ///
+    /// - Parameters:
+    ///   - parameter: The argument's name as the protocol signature spells it.
+    ///   - domain: The values to vary the argument over; unnamed, or named `parameter`.
+    /// - Returns: A copy of this amendment that supplies `domain` for `parameter`.
+    /// - Precondition: `domain` carries no other name; a `.named` that disagrees with `parameter` traps,
+    ///   saying to drop the `.named`.
     public func varying(_ parameter: String, over domain: ArgumentDomain<some Any>) -> Amend {
         precondition(
             domain.name == nil || domain.name == parameter,
@@ -408,6 +455,12 @@ public struct Amend {
 extension DerivedOp {
     /// Applies one amendment: matches each supplied domain to its argument by name, checks the types
     /// agree, and folds the structure in.
+    ///
+    /// - Parameter amendment: An amendment whose label names this op.
+    /// - Returns: A copy of this op with the amendment's domains as authored (no longer derived defaults),
+    ///   its repetition replacing this op's, and its ordering constraints added.
+    /// - Precondition: Each supplied domain names an argument of this op and generates that argument's
+    ///   type; an unknown name or a type mismatch traps.
     func amended(by amendment: Amend) -> DerivedOp<S> {
         var copy = self
         for supplied in amendment.supplied {
@@ -494,6 +547,10 @@ extension Spec {
 
     /// Returns the spec adopting `D`'s ops, recovering the `D.System == S` the forwarder census
     /// cannot state statically.
+    ///
+    /// - Parameter from: The derived catalog the stamp's forwarder names.
+    /// - Returns: The spec with the catalog adopted.
+    /// - Precondition: The catalog derives this spec's system type; a mismatch traps as an engine bug.
     private func deriving<D: DerivedOperations>(from _: D.Type) -> Spec<S> {
         guard let spec = self as? Spec<D.System>, let derived = spec.adopting(D.self) as? Spec<S> else {
             preconditionFailure("\(D.self) derives \(D.System.self), not \(S.self) — file a bug")
@@ -503,6 +560,10 @@ extension Spec {
 
     /// Returns the spec adopting `D`'s construction, observed properties, and — unless the spec
     /// authored its own — ops, amended.
+    ///
+    /// - Parameter _: The derived catalog to adopt.
+    /// - Returns: The spec with the catalog's construction and its observed properties added, skipping
+    ///   any label the spec already observes; with the catalog's ops too unless the spec authored its own.
     private func adopting<D: DerivedOperations>(_: D.Type) -> Spec<S> where D.System == S {
         var copy = authorsOperations ? self : adoptingOps(of: D.self)
         copy.makeConformer = D.derivedSystem
@@ -516,6 +577,12 @@ extension Spec {
     }
 
     /// Returns the spec adopting `D`'s ops, with the amendments applied.
+    ///
+    /// - Parameter of: The derived catalog whose ops to adopt.
+    /// - Returns: The spec over one op per derived op in catalog order, each amended or replaced, exploring
+    ///   ordering and bounded by the derived defaults unless the spec set its own.
+    /// - Precondition: Every amendment and replacement names a derived op, and no op is both replaced and
+    ///   amended afterwards; either mistake traps.
     private func adoptingOps<D: DerivedOperations>(of _: D.Type) -> Spec<S> where D.System == S {
         var slots = D.derivedOps.map { Slot.derived($0) }
         let labels = D.derivedOps.map(\.label)

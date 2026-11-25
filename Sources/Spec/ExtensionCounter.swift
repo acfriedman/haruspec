@@ -67,6 +67,11 @@ struct ExtensionCounter {
 
     /// Picks one of `labels` (the frontier, by label) with probability proportional to the orderings
     /// beneath it. Falls back to an even pick when the space is too large to count.
+    ///
+    /// - Parameters:
+    ///   - labels: The labels of the ops placeable next; empty only when the walk is stuck.
+    ///   - rng: The walk's seeded generator, which advances with each pick.
+    /// - Returns: An index into `labels`; `0` when `labels` is empty.
     mutating func choose(from labels: [String], using rng: inout SplitMix64) -> Int {
         guard isWeighted, labels.count > 1 else {
             return Int(rng.next() % UInt64(Swift.max(1, labels.count)))
@@ -91,8 +96,13 @@ struct ExtensionCounter {
         return weights.count - 1 // floating-point residue only
     }
 
-    /// The exact number of orderings the whole partial order admits, or `nil` when the state space was
-    /// too large to count. Far better than the capped walk where it applies: the example spec's 15-item
+    /// Returns the exact number of orderings the whole partial order admits, or `nil` when the state
+    /// space was too large to count. This also restores the full multiset, as ``reset()`` does.
+    ///
+    /// - Returns: The ordering count, as a `Double` because real spaces overflow `Int64`; `nil` when the
+    ///   state space exceeds the counter's state limit.
+    ///
+    /// Far better than the capped walk where it applies: the example spec's 15-item
     /// multiset is 1,362,160,800 orderings over only 2,916 reachable states, which the walk would give up
     /// on at 100,000 and report as a lower bound.
     mutating func totalExtensions() -> Double? {
@@ -110,7 +120,10 @@ struct ExtensionCounter {
         remaining = declared.reduce(0, +)
     }
 
-    /// Orderings of the current remaining state.
+    /// Returns how many orderings complete the current remaining state.
+    ///
+    /// - Returns: The number of ways to place every remaining op without opening a `.requires` gate early
+    ///   or placing a must-be-last op before the end; `1` when nothing remains.
     private mutating func extensions() -> Double {
         if remaining == 0 {
             return 1
@@ -134,6 +147,8 @@ struct ExtensionCounter {
     }
 
     /// Records that the walk placed `label`, so subsequent weights are conditioned on it.
+    ///
+    /// - Parameter label: The label of the op just placed; one this counter doesn't know is ignored.
     mutating func take(_ label: String) {
         guard isWeighted, let slot = slot(of: label) else { return }
         counts[slot] -= 1

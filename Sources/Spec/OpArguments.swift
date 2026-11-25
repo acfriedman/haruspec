@@ -50,6 +50,9 @@ public struct ArgumentDomain<T> {
     /// rather than `add.0`. This is identity declared once at the use site, not the key the typed form
     /// exists to stop you typing twice; nothing has to agree with it elsewhere.
     ///
+    /// - Parameter name: The argument's name, unique among its op's arguments.
+    /// - Returns: A copy of this argument that carries `name`, keyed `<op>.<name>`.
+    ///
     /// It *is* part of the replay contract, like an op label: renaming an argument orphans the input
     /// recorded against the old key, which surfaces as a coverage gap rather than a silent pass.
     public func named(_ name: String) -> ArgumentDomain<T> {
@@ -62,8 +65,14 @@ public struct ArgumentDomain<T> {
         decode(seams, seam)
     }
 
-    /// What this argument adds to the declared surface: the synthesized-key scalar domain, or the
-    /// model's type-scoped field domains.
+    /// Returns what this argument adds to the declared surface: the synthesized-key scalar domain, or
+    /// the model's type-scoped field domains.
+    ///
+    /// - Parameters:
+    ///   - label: The label of the op that takes this argument.
+    ///   - position: The argument's zero-based position among the op's arguments.
+    /// - Returns: One pair under ``key(for:at:)`` for a scalar; for a generated argument, each declared
+    ///   field domain under its type-scoped key, sorted by key.
     func contributions(for label: String, at position: Int) -> [(seam: String, domain: SeamDomain)] {
         switch kind {
         case let .scalar(domain):
@@ -73,7 +82,13 @@ public struct ArgumentDomain<T> {
         }
     }
 
-    /// `<op>.<name-or-position>` — synthesized, so there is no second place to keep it in sync.
+    /// Returns this argument's seam key, `<op>.<name-or-position>` — synthesized, so there is no second
+    /// place to keep it in sync.
+    ///
+    /// - Parameters:
+    ///   - label: The label of the op that takes this argument.
+    ///   - position: The argument's zero-based position among the op's arguments.
+    /// - Returns: `label`, a dot, then this argument's name, or `position` when it has none.
     func key(for label: String, at position: Int) -> String {
         "\(label).\(name ?? String(position))"
     }
@@ -114,15 +129,22 @@ public extension ArgumentDomain where T: SeamGenerated, T.Generated == T {
 // MARK: - The domains an argument can take
 
 public extension ArgumentDomain where T == Int {
-    /// A range, delivered as `Int` — the type a call site actually wants, rather than the `Int64` the
-    /// cassette stores.
+    /// Returns a range, delivered as `Int` — the type a call site actually wants, rather than the `Int64`
+    /// the cassette stores.
+    ///
+    /// - Parameter range: The integers to vary over, inclusive.
+    /// - Returns: A scalar domain over `range` whose values arrive as `Int`.
     static func int(_ range: ClosedRange<Int>) -> ArgumentDomain<Int> {
         ArgumentDomain(domain: .int(Int64(range.lowerBound) ... Int64(range.upperBound))) { seams, seam in
             Int(seams.int(seam, default: Int64(range.lowerBound)))
         }
     }
 
-    /// A named set of integers — the categorical axis where the interesting values aren't a range.
+    /// Returns a named set of integers — the categorical axis where the interesting values aren't a range.
+    ///
+    /// - Parameter values: The integers to vary over; must not be empty.
+    /// - Returns: A scalar domain over `values` whose values arrive as `Int`.
+    /// - Precondition: `values` is not empty; an empty list traps.
     static func oneOf(_ values: [Int]) -> ArgumentDomain<Int> {
         precondition(!values.isEmpty, "oneOf needs at least one value to vary over")
         let fallback = Int64(values[0])
@@ -145,8 +167,12 @@ public extension ArgumentDomain where T == Double {
 }
 
 public extension ArgumentDomain where T == String {
-    /// A named set of strings — SKUs, promo codes, status values. Every declared value is a boundary
-    /// value, so each is reached by construction rather than by sampling luck.
+    /// Returns a named set of strings — SKUs, promo codes, status values. Every declared value is a
+    /// boundary value, so each is reached by construction rather than by sampling luck.
+    ///
+    /// - Parameter values: The strings to vary over; must not be empty.
+    /// - Returns: A scalar domain over `values`.
+    /// - Precondition: `values` is not empty; an empty list traps.
     static func oneOf(_ values: [String]) -> ArgumentDomain<String> {
         precondition(!values.isEmpty, "oneOf needs at least one value to vary over")
         let fallback = values[0]
@@ -166,6 +192,11 @@ public extension Op {
     /// An op whose argument is property-varied, with the domain declared where the argument is used.
     /// The string form (`Op(_:)` + `seams.int(_:default:)`) still works and is the escape hatch for a
     /// seam whose key isn't known statically.
+    ///
+    /// - Parameters:
+    ///   - label: The op's name, unique within the spec; part of the replay contract.
+    ///   - first: The argument's domain.
+    ///   - action: The op body, handed the system under test and the argument's generated value.
     init<A>(
         _ label: String,
         varying first: ArgumentDomain<A>,
@@ -178,7 +209,15 @@ public extension Op {
         declare(first, key: keys[0])
     }
 
-    /// Two arguments, delivered together.
+    /// Creates an op that takes two property-varied arguments, delivered together.
+    ///
+    /// - Parameters:
+    ///   - label: The op's name, unique within the spec; part of the replay contract.
+    ///   - first: The first argument's domain.
+    ///   - second: The second argument's domain.
+    ///   - action: The op body, handed the system under test and both arguments' generated values.
+    /// - Precondition: The two arguments resolve to different seam keys; two arguments given the same
+    ///   name trap.
     ///
     /// Scalar domains are sampled *independently* — they cannot by themselves express "a SKU and its
     /// real price"; the op body receives the sku and derives the rest, so a fabricated pair is
@@ -219,9 +258,17 @@ public extension Op {
         declare(third, key: keys[2])
     }
 
-    /// Two arguments of one op cannot share a name: they would read the same track, and the second
-    /// would consume a cursor the first advanced. (A generated argument reads no op-scoped track;
-    /// its position holds a synthesized key nothing consumes.)
+    /// Returns each argument's seam key, `<op>.<name-or-position>`. Two arguments of one op cannot share
+    /// a name: they would read the same track, and the second would consume a cursor the first advanced.
+    ///
+    /// - Parameters:
+    ///   - label: The op's label.
+    ///   - names: Each argument's name in position order; `nil` for an unnamed argument.
+    /// - Returns: One key per entry of `names`, in the same order.
+    /// - Precondition: The keys are distinct; two arguments with the same name trap.
+    ///
+    /// A generated argument reads no op-scoped track; its position holds a synthesized key nothing
+    /// consumes.
     private static func keys(_ label: String, _ names: [String?]) -> [String] {
         let keys = names.enumerated().map { position, name in
             "\(label).\(name ?? String(position))"
@@ -235,6 +282,10 @@ public extension Op {
 
     /// Folds one argument into the op's declared surface: a scalar owns its synthesized key; a
     /// generated model contributes its type-scoped field domains and the factory that builds it.
+    ///
+    /// - Parameters:
+    ///   - argument: One of this op's typed arguments.
+    ///   - key: The argument's synthesized `<op>.<name-or-position>` seam key.
     private mutating func declare(_ argument: ArgumentDomain<some Any>, key: String) {
         switch argument.kind {
         case let .scalar(domain):

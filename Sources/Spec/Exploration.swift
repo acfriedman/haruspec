@@ -118,9 +118,14 @@ public struct Exploration: Codable, Sendable, Equatable {
         return text
     }
 
-    /// Rounded, except that a non-zero share never renders as `0%` — "we covered none of it" and
-    /// "we covered a sliver" are different findings. Internal: the qualification block renders its
-    /// ordering fraction with the same rule, so the two lines can't disagree about a sliver.
+    /// Returns `fraction` as a rounded percentage, except that a non-zero share never renders as `0%` —
+    /// "we covered none of it" and "we covered a sliver" are different findings.
+    ///
+    /// - Parameter fraction: A share between `0` and `1`.
+    /// - Returns: A whole percentage such as `42%`; `<1%` when it rounds to zero.
+    ///
+    /// Internal: the qualification block renders its ordering fraction with the same rule, so the two
+    /// lines can't disagree about a sliver.
     static func percent(_ fraction: Double) -> String {
         let rounded = Int((fraction * 100).rounded())
         return rounded == 0 ? "<1%" : "\(rounded)%"
@@ -139,7 +144,9 @@ enum SpecDefaults {
     /// The share of a sampled ordering budget spent on sequences that break a declared `.after`
     /// precondition. A quarter is enough that every declared precondition is broken several times over
     /// at a typical `Ordering(max: 50)`, while the bulk of the sweep stays on the surface the author
-    /// described. Zero when a spec declares no preconditions — there is no such stratum to draw from.
+    /// described.
+    ///
+    /// Zero when a spec declares no preconditions — there is no such stratum to draw from.
     static let outOfOrderShare = 0.25
     /// How many distinct occurrence-count shapes a spec's declared `.repeating(_:)` ranges may produce
     /// before shapes are sampled rather than enumerated. Generous: the product only grows when an author
@@ -230,6 +237,10 @@ struct ExplorationPlan<S> {
     /// The seam cassettes to drive ordering `index` with — an *independent* sample per ordering, which
     /// is what makes the sweep two-dimensional. Ordering 0 keeps the base seed, so a single-ordering
     /// spec generates exactly what it always did.
+    ///
+    /// - Parameter index: The ordering's place in ``orderings``.
+    /// - Returns: The golden cassette alone when nothing is varied; otherwise ``variantsPerOrdering``
+    ///   variants of it, the same for the same `index`.
     ///
     /// Only the random tail moves: the generator's leading boundary variants are the same under every
     /// ordering, deliberately. Every edge tried under every ordering is where an order-dependent edge
@@ -330,9 +341,14 @@ extension Spec {
 }
 
 extension Spec {
-    /// The denominator: how many orderings the declared constraints admit, summed over every shape the
-    /// declared multiplicities allow. Counted exactly wherever the memoized state space allows, and
-    /// otherwise walked up to a limit and reported as a bound.
+    /// Returns the denominator: how many orderings the declared constraints admit, summed over every
+    /// shape the declared multiplicities allow.
+    ///
+    /// - Returns: The count and whether it is exact; an inexact count is a lower bound. `(1, true)` when
+    ///   the spec does not explore ordering.
+    ///
+    /// Counted exactly wherever the memoized state space allows, and otherwise walked up to a limit and
+    /// reported as a bound.
     func availableOrderings() -> (count: Int, exact: Bool) {
         guard exploreOrdering else {
             return (1, true)
@@ -405,6 +421,12 @@ enum ExplorationBudget {
     /// different bugs (ordering reaches code a second seam value cannot; a seam value is what caught
     /// the dogfood's one-cent divergence), so a budget that zeroes either axis is not a smaller sweep,
     /// it is a different one. Scaling the declared shape by `√(budget / full)` keeps its aspect ratio.
+    ///
+    /// - Parameters:
+    ///   - orderingCap: The most orderings the declaration admits.
+    ///   - variants: The seam variants each ordering would get unbounded; 1 with no seam axis.
+    ///   - budget: The declared `Budget(runs:)`; `nil`, zero, or negative means none was declared.
+    /// - Returns: Orderings, and seam variants per ordering, each at least 1.
     ///
     /// With no budget declared, both axes take their own size — `Ordering(max:)` × 64.
     static func split(orderingCap: Int, variants: Int, budget: Int?) -> (orderings: Int, variants: Int) {
@@ -483,8 +505,17 @@ func linearExtensions<S>(
     return extensions(of: single, ops: ops, max: max, seed: seed)
 }
 
-/// The sample within one fixed multiset: exhaustive when the space fits, stratified around the soft
-/// preconditions when it doesn't.
+/// Returns the sample within one fixed multiset: exhaustive when the space fits, stratified around the
+/// soft preconditions when it doesn't.
+///
+/// - Parameters:
+///   - shape: A count per op, aligned with `ops`.
+///   - ops: The spec's ops, each carrying its declared ordering constraints.
+///   - max: The most orderings to return.
+///   - seed: The seed of the sampling walk; the same seed gives the same sample.
+/// - Returns: Every ordering of the shape when there are at most `max`; otherwise up to `max` distinct
+///   sampled orderings, about ``SpecDefaults/outOfOrderShare`` of them breaking a declared precondition
+///   when the ops declare any.
 private func extensions<S>(of shape: OrderingShape, ops: [Op<S>], max: Int, seed: UInt64) -> [[Op<S>]] {
     let admitted = multiset(ops, shape: shape)
     // One past the cap, so a full enumeration is distinguishable from a truncated one. An exhaustive
@@ -514,7 +545,14 @@ private func extensions<S>(of shape: OrderingShape, ops: [Op<S>], max: Int, seed
     return sample
 }
 
-/// Depth-first enumeration, stopping at `limit`. Exhaustive when it returns fewer than `limit`.
+/// Returns the orderings of `multiset` the hard constraints admit, stopping at `limit`. The result is
+/// exhaustive when it holds fewer than `limit`.
+///
+/// - Parameters:
+///   - multiset: The op occurrences to order.
+///   - limit: The most orderings to return.
+/// - Returns: Distinct orderings by label sequence, at most `limit`; empty when the constraints admit
+///   none.
 private func enumerateExtensions<S>(_ multiset: [Op<S>], limit: Int) -> [[Op<S>]] {
     var result: [[Op<S>]] = []
     func recurse(_ placed: [Op<S>], _ remaining: [Op<S>]) {
@@ -545,6 +583,12 @@ private func enumerateExtensions<S>(_ multiset: [Op<S>], limit: Int) -> [[Op<S>]
 /// The ops as one exploration stratum enforces them. `strict` folds the soft `.after` preconditions
 /// into the hard gates, which is how the in-order stratum is built; the out-of-order stratum walks the
 /// declared gates alone and filters for violations afterwards.
+///
+/// - Parameters:
+///   - ops: The spec's ops.
+///   - strict: Whether the soft `.after` preconditions count as hard gates.
+/// - Returns: `ops` unchanged when not `strict`; otherwise copies whose hard gates include their
+///   `.after` labels.
 func gated<S>(_ ops: [Op<S>], strict: Bool) -> [Op<S>] {
     guard strict else {
         return ops
@@ -554,10 +598,20 @@ func gated<S>(_ ops: [Op<S>], strict: Bool) -> [Op<S>] {
     }
 }
 
-/// `count` distinct extensions built by random walks, skipping anything already in `excluding` or
-/// rejected by `keeping` (how the out-of-order stratum is drawn). Attempts are bounded: dedup can
-/// starve near the end of a space barely larger than the budget — and a rejection filter can starve
-/// outright — and returning slightly fewer orderings beats spinning.
+/// Returns up to `count` distinct extensions built by random walks, skipping anything already in
+/// `excluding` or rejected by `keeping` (how the out-of-order stratum is drawn). Attempts are bounded:
+/// dedup can starve near the end of a space barely larger than the budget — and a rejection filter can
+/// starve outright — and returning slightly fewer orderings beats spinning.
+///
+/// - Parameters:
+///   - multiset: The op occurrences to order.
+///   - count: How many orderings are wanted; zero or less yields none.
+///   - seed: The seed of the random walks; the same seed gives the same sample.
+///   - taken: The ``orderingKey(_:)`` of each ordering already drawn; empty by default.
+///   - include: Whether an ordering belongs to the stratum being drawn; accepts every ordering by
+///     default.
+/// - Returns: At most `count` distinct orderings that `include` accepts and `taken` does not hold;
+///   fewer when attempts run out, and empty when the constraints admit no ordering.
 func sampleExtensions<S>(
     _ multiset: [Op<S>],
     count: Int,
@@ -584,8 +638,14 @@ func sampleExtensions<S>(
     return result
 }
 
-/// One random linear extension: repeatedly pick among the ops whose constraints are already satisfied,
-/// in proportion to how many complete orderings lie beneath each choice.
+/// Returns one random linear extension, picking each step among the ops whose constraints are already
+/// satisfied, in proportion to how many complete orderings lie beneath each choice.
+///
+/// - Parameters:
+///   - multiset: The op occurrences to order.
+///   - rng: The sample's seeded generator, which advances with each step.
+///   - counter: The extension counter built over `multiset`, shared across walks.
+/// - Returns: An ordering of every occurrence in `multiset`; `nil` when the constraints admit none.
 private func randomExtension<S>(
     _ multiset: [Op<S>],
     using rng: inout SplitMix64,
@@ -617,7 +677,11 @@ private func randomExtension<S>(
     return placed
 }
 
-/// Orderings are identified by their label sequence: two occurrences of one label are interchangeable.
+/// Returns the key that identifies an ordering. Orderings are identified by their label sequence: two
+/// occurrences of one label are interchangeable.
+///
+/// - Parameter order: An ordering of op occurrences.
+/// - Returns: The labels in order, joined by `>`.
 func orderingKey(_ order: [Op<some Any>]) -> String {
     order.map(\.label).joined(separator: ">")
 }
@@ -625,6 +689,13 @@ func orderingKey(_ order: [Op<some Any>]) -> String {
 /// How many valid orderings the declared partial order admits, counted without materializing any of
 /// them and stopped at `limit` — the space grows factorially, and "≥100000" is as useful a denominator
 /// as the true number.
+///
+/// - Parameters:
+///   - ops: The spec's ops, each carrying its declared ordering constraints and repetition.
+///   - repeating: How many times an op applies when it declares no repetition of its own.
+///   - limit: The count to stop at.
+/// - Returns: The count, at most `limit`, and whether it is exact; not exact once it reaches `limit` or
+///   when the shapes were sampled.
 func countLinearExtensions(_ ops: [Op<some Any>], repeating: Int, limit: Int) -> (count: Int, exact: Bool) {
     let shapes = orderingShapes(ops, repeating: repeating, limit: SpecDefaults.shapeLimit)
     var total = 0
@@ -640,7 +711,13 @@ func countLinearExtensions(_ ops: [Op<some Any>], repeating: Int, limit: Int) ->
     return (total, exact)
 }
 
-/// The walk for one shape, stopped at `limit`.
+/// Returns how many orderings one shape admits, stopped at `limit`.
+///
+/// - Parameters:
+///   - ops: The spec's ops, each carrying its declared ordering constraints.
+///   - shape: A count per op, aligned with `ops`.
+///   - limit: The count to stop at; positive.
+/// - Returns: The count, at most `limit`, and whether it is exact; not exact once it reaches `limit`.
 private func countExtensions(_ ops: [Op<some Any>], shape: OrderingShape, limit: Int) -> (count: Int, exact: Bool) {
     var counts = shape
     let labels = ops.map(\.label)

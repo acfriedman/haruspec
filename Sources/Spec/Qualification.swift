@@ -39,8 +39,9 @@ public struct Qualification: Codable, Sendable, Equatable {
     public let origins: [TraceOrigin]
     /// Seams whose domains the engine defaulted (a derived op's argument) rather than the author
     /// declared. Rendered per seam, so a green over a defaulted surface says so — the honesty line
-    /// that makes derived specs safe to offer. `nil` on verdicts serialized before the field existed;
-    /// rendering treats that as none.
+    /// that makes derived specs safe to offer.
+    ///
+    /// `nil` on verdicts serialized before the field existed; rendering treats that as none.
     public let derivedDefaults: [String]?
     /// The observed-property line: which properties were snapshot at the end of every capture, whose
     /// end-state values gate. `nil` when the spec observes no properties.
@@ -95,8 +96,12 @@ public struct Qualification: Codable, Sendable, Equatable {
         )
     }
 
-    /// The same qualification with what the capture-completeness audit found. Only an audit that ran
-    /// calls this — the nil placeholder is how a verdict says nobody looked.
+    /// Returns the same qualification with what the capture-completeness audit found. Only an audit
+    /// that ran calls this — the nil placeholder is how a verdict says nobody looked.
+    ///
+    /// - Parameter blindSpots: The effect channels the audit found the capture could not see; empty
+    ///   means the audit found none.
+    /// - Returns: A copy of this qualification whose blind spots are `blindSpots`.
     func noting(blindSpots: [String]) -> Qualification {
         Qualification(
             coveredClasses: coveredClasses,
@@ -237,8 +242,16 @@ extension SpecVerdict {
 // MARK: - Assembly (the two verify paths)
 
 extension Spec {
-    /// The live differential's qualification, measured off the golden template this run just recorded.
-    /// Packaged sweeps the golden earned count as varied — and as derived, since the engine supplied them.
+    /// Returns the live differential's qualification, measured off the golden template this run just
+    /// recorded. Packaged sweeps the golden earned count as varied — and as derived, since the engine
+    /// supplied them.
+    ///
+    /// - Parameters:
+    ///   - goldenTrace: The trace of the golden capture.
+    ///   - golden: The golden capture's recorded seam tracks — the template every probe varies.
+    ///   - exploration: What this run explored.
+    /// - Returns: A qualification over this spec's declared ops and the exploration's runs, not yet
+    ///   audited (no blind spots) and with no origins.
     func liveQualification(goldenTrace: Trace, golden: CassetteData, exploration: Exploration) -> Qualification {
         let sweeps = resourceSweeps(reaching: golden.tracks.keys)
         return Qualification(
@@ -252,8 +265,16 @@ extension Spec {
         )
     }
 
-    /// The replay qualification: the plan already pins the surface — classes, varied seams, and the
-    /// golden template all come from it, so the block describes what was recorded, not a re-derivation.
+    /// Returns the replay qualification: the plan already pins the surface — classes, varied seams, and
+    /// the golden template all come from it, so the block describes what was recorded, not a re-derivation.
+    ///
+    /// - Parameters:
+    ///   - plan: The recorded plan being replayed.
+    ///   - operations: How many ops the plan recorded.
+    ///   - probes: How many of the plan's recorded probes are replayable.
+    /// - Returns: A qualification over the plan's surface, not yet audited (no blind spots) and with no
+    ///   origins; a plan with no probes reports every varied seam at zero positions.
+    ///
     /// Derived-ness comes from the spec value itself — specs are code, present at replay, so nothing
     /// is stored to drift.
     func replayQualification(of plan: SpecPlan, operations: Int, probes: Int) -> Qualification {
@@ -301,8 +322,14 @@ func structuralClasses(in traces: some Sequence<Trace>) -> [String] {
     return classes.sorted()
 }
 
-/// Track length per varied seam. A declared seam nothing recorded keeps its entry at zero — absence
-/// would hide the unmatched domain from the one block whose job is saying what never moved.
+/// Returns the track length per varied seam. A declared seam nothing recorded keeps its entry at zero —
+/// absence would hide the unmatched domain from the one block whose job is saying what never moved.
+///
+/// - Parameters:
+///   - tracks: The golden template's recorded readings, keyed by seam.
+///   - varied: The seams the spec varies.
+/// - Returns: Each varied seam mapped to its reading count; `0` for a seam with no track. Seams not in
+///   `varied` are absent.
 private func seamPositions(in tracks: [String: [CanonicalValue]], varied: some Sequence<String>) -> [String: Int] {
     var positions: [String: Int] = [:]
     for seam in varied {

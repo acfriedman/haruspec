@@ -20,7 +20,12 @@ import HaruspecSeams
 typealias OrderingShape = [Int]
 
 extension Op {
-    /// The occurrence range this op admits, resolving an undeclared one against `Ordering(repeating:)`.
+    /// Returns the occurrence range this op admits, resolving an undeclared one against
+    /// `Ordering(repeating:)`.
+    ///
+    /// - Parameter repeats: The spec-wide repeat count from `Ordering(repeating:)`; values below `1`
+    ///   count as `1`.
+    /// - Returns: The op's declared `.repeating` range, or `repeats ... repeats` when it declares none.
     func occurrences(default repeats: Int) -> ClosedRange<Int> {
         guard let multiplicity else {
             let exact = Swift.max(1, repeats)
@@ -33,6 +38,14 @@ extension Op {
 /// Every shape the declared ranges admit, or `limit` of them sampled when the product is larger than
 /// that. `exact` is false in the sampled case, which is what stops a denominator built from these from
 /// claiming to be the whole space.
+///
+/// - Parameters:
+///   - ops: The spec's operations, in declaration order.
+///   - repeating: The spec-wide repeat count for ops that declare no range.
+///   - limit: The most shapes to return; past it, shapes are sampled.
+///   - seed: The seed that makes a sampled set reproducible.
+/// - Returns: The shapes, each aligned with `ops` and placing at least one op, and whether they are the
+///   whole space. A sampled set holds at most `limit` distinct shapes and may hold fewer.
 ///
 /// Shapes that place no ops at all are dropped: an empty sequence produces an empty trace on both
 /// branches, so it is a run that cannot say anything.
@@ -71,7 +84,14 @@ func orderingShapes(
     return (drawn, false)
 }
 
-/// Spread the budget *across* shapes rather than over the union of their orderings.
+/// Returns orderings spread *across* shapes rather than over the union of their orderings.
+///
+/// - Parameters:
+///   - shapes: The shapes to draw from, each aligned with `ops`; empty yields no orderings.
+///   - ops: The spec's operations, in declaration order.
+///   - max: The most orderings to return.
+///   - seed: The seed that makes the sample reproducible.
+/// - Returns: Up to `max` distinct orderings, each a full sequence of one shape's multiset.
 ///
 /// Uniform-over-orderings would hand the largest shape nearly the whole sample — on the cart spec's
 /// numbers the maximal multiset alone holds about a third of the 110,251 orderings, and the long tail
@@ -136,7 +156,12 @@ private struct ShapeSampler<S> {
     }
 }
 
-/// The multiset one shape describes: `shape[i]` copies of `ops[i]`.
+/// Returns the multiset one shape describes: `shape[i]` copies of `ops[i]`.
+///
+/// - Parameters:
+///   - ops: The spec's operations, in declaration order.
+///   - shape: A count per op, aligned with `ops`.
+/// - Returns: Each op repeated its count, in `ops` order; ops past the shorter of the two are dropped.
 func multiset<S>(_ ops: [Op<S>], shape: OrderingShape) -> [Op<S>] {
     zip(ops, shape).flatMap { operation, count in Array(repeating: operation, count: count) }
 }
