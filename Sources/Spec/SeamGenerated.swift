@@ -100,9 +100,18 @@ final class DomainCollector {
 }
 
 public extension SeamContext {
-    /// A synthesized custom-type return — the declared factory for `type`, applied to this context.
+    /// Returns a synthesized custom-type return — the declared factory for `type`, applied to this context.
     /// There is no universal zero for a custom type, so an undeclared one **traps, fail-fast**, naming
-    /// the declaration to write. The factory reads its fields through seams, which is what makes the
+    /// the declaration to write.
+    ///
+    /// - Parameters:
+    ///   - type: The custom type the synthesized return produces.
+    ///   - key: The return's seam key, the namespace its fields' seams are read under.
+    /// - Returns: The value the factory declared for `type` builds from this context.
+    /// - Precondition: A factory is declared for `type`; without one it traps naming the
+    ///   ``SeamGenerated`` conformance or ``Spec/generates(_:_:)`` declaration to write.
+    ///
+    /// The factory reads its fields through seams, which is what makes the
     /// value recorded, domain-sweepable, and identical on replay.
     func value<T>(_ type: T.Type, key: String) -> T {
         guard let made = valueIfDeclared(type, key: key) else {
@@ -150,9 +159,17 @@ public extension SeamContext {
         return failure
     }
 
-    /// The optional-return path: a declared factory if there is one, else `nil` — which IS the
-    /// sensible zero for an optional, so `-> Receipt?` needs no declaration until a spec wants the
+    /// Returns the optional-return path: a declared factory's value if there is one, else `nil` — which
+    /// IS the sensible zero for an optional, so `-> Receipt?` needs no declaration until a spec wants the
     /// non-nil branch explored.
+    ///
+    /// - Parameters:
+    ///   - type: The type the synthesized return produces.
+    ///   - key: The return's seam key, the namespace its fields' seams are read under.
+    /// - Returns: The value the factory declared for `type` builds from this context, or `nil` when no
+    ///   factory is declared for `type`.
+    /// - Precondition: The factory registered for `type` produces a `type`; a hand-assembled context
+    ///   that registers a mismatched one traps.
     func valueIfDeclared<T>(_ type: T.Type, key: String) -> T? {
         guard let make = makers[ObjectIdentifier(type)] else { return nil }
         guard let made = make(self, key) as? T else {

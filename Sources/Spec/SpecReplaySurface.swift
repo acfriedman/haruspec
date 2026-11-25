@@ -9,9 +9,12 @@ import HaruspecTrace
 // rather than trusted from the artifact. Same rule the qualification block follows.
 
 extension Spec {
-    /// The plan read through the current build: which recorded probes can replay at all, and the
+    /// Returns the plan read through the current build: which recorded probes can replay at all, and the
     /// exploration/qualification the verdict will carry either way — resolved once per pass, shared
     /// by both exits so a divergence and a hold describe the same surface.
+    ///
+    /// - Parameter plan: A plan recorded on the base build.
+    /// - Returns: The plan's resolved view under this spec's current declarations.
     func replaySurface(of plan: SpecPlan) -> ReplaySurface<S> {
         // Settle steps are the engine's, so every build can replay them; they are not ops, so they
         // stay out of the op surface coverage reports.
@@ -31,10 +34,16 @@ extension Spec {
         )
     }
 
-    /// What the recorded plan covered, read through the surface the *current* build declares: the plan
-    /// pins the orderings that were explored, but the denominator — and whether an ordering counts as
-    /// out-of-order — comes from this build's constraints, so a replay reports the same fraction a live
-    /// verify would, and a spec that softened an `.after` since recording says so.
+    /// Returns what the recorded plan covered, read through the surface the *current* build declares.
+    /// The plan pins the orderings that were explored, but the denominator — and whether an ordering
+    /// counts as out-of-order — comes from this build's constraints.
+    ///
+    /// - Parameter plan: A plan recorded on the base build.
+    /// - Returns: The exploration the plan's probes amount to, measured against this spec's current
+    ///   orderings and seam domains.
+    ///
+    /// A replay reports the same fraction a live verify would, and a spec that softened an `.after`
+    /// since recording says so.
     private func exploration(recordedIn plan: SpecPlan) -> Exploration {
         let settledOrderings = Set(plan.probes.map(\.ordering))
         let orderings = Set(settledOrderings.map(operationLabels))
@@ -69,8 +78,11 @@ extension Spec {
         )
     }
 
-    /// When *no* probe was replayable there is nothing to diff; an empty comparison stands in so the
-    /// coverage gaps (every op unrecorded) can carry the CANNOT-VERIFY.
+    /// Returns the comparison of two empty traces. When *no* probe was replayable there is nothing to
+    /// diff; this stands in so the coverage gaps (every op unrecorded) can carry the CANNOT-VERIFY.
+    ///
+    /// - Parameter golden: The name of the spec the plan was recorded for.
+    /// - Returns: An empty diff under this spec's comparison, with no divergences.
     func emptyDiff(golden: String) -> TraceDiff {
         BehavioralDiff.compare(
             baseline: Trace(name: "\(golden).golden", events: []),
@@ -80,7 +92,10 @@ extension Spec {
     }
 }
 
-/// The union of several label sequences, keeping first-seen order (deterministic gap reporting).
+/// Returns the union of several label sequences, keeping first-seen order (deterministic gap reporting).
+///
+/// - Parameter sequences: The label sequences, in priority order.
+/// - Returns: Each distinct label once, in the order it first appears; empty when every sequence is.
 func orderedUnion(_ sequences: [[String]]) -> [String] {
     var seen = Set<String>()
     var result: [String] = []

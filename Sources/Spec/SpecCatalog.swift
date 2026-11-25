@@ -27,7 +27,11 @@ public protocol SpecProviding {
 }
 
 public extension BaselinedSpec {
-    /// The continuous side to run, or empty — which is what keeps an ordinary test run untouched.
+    /// Returns the continuous side to run, or empty — which is what keeps an ordinary test run untouched.
+    ///
+    /// - Parameter environment: The process environment; the current process's by default.
+    /// - Returns: The mode the environment selects, alone; empty when it selects none or its plan path
+    ///   names another spec.
     ///
     /// A plan path following the `<spec>.plan.json[.gz]` convention also scopes the mode to the
     /// spec it names: CI runs the whole target (the parameterized case ignores function-level
@@ -172,8 +176,12 @@ public struct SpecCatalog {
     /// Runs one `spec/candidate` case. `nil` when either half is no longer declared — a rename
     /// fails the lookup rather than silently verifying nothing.
     ///
-    /// - Parameter directory: Where the HTML report lands; `nil` means Haruspec's temp
-    ///   `HaruspecReports` folder.
+    /// - Parameters:
+    ///   - migrationCase: The case, `spec/candidate`, as ``migrationCases`` lists it.
+    ///   - directory: Where the HTML report lands; `nil` means Haruspec's temp
+    ///     `HaruspecReports` folder.
+    /// - Returns: The candidate's verdict, or `nil` when `migrationCase` is not `spec/candidate` or
+    ///   names a spec or candidate no longer declared.
     public func verify(migrationCase: String, reportsIn directory: URL? = nil) async -> CandidateVerdict? {
         guard let separator = migrationCase.firstIndex(of: "/") else {
             return nil
@@ -186,8 +194,13 @@ public struct SpecCatalog {
 
     // MARK: Continuous
 
-    /// The specs a continuous run should drive: empty unless a mode is selected, which is what
+    /// Returns the specs a continuous run should drive: empty unless a mode is selected, which is what
     /// keeps an ordinary test run untouched.
+    ///
+    /// - Parameter environment: The process environment; the current process's by default.
+    /// - Returns: The names of the specs to drive — every spec for a census, else the one ``specKey``
+    ///   selects, or the only declared spec when the selection is unset. Empty when no mode is selected,
+    ///   or the selection is unset with several specs declared or names none of them.
     public func continuousSpecs(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> [String] {
@@ -229,8 +242,12 @@ public struct SpecCatalog {
     /// its candidate declared. The whole body of a migration test case — a test target calls this
     /// and asserts nothing itself, because there is nothing left to decide.
     ///
-    /// - Parameter directory: Where the HTML report lands; `nil` means Haruspec's temp
-    ///   `HaruspecReports` folder.
+    /// - Parameters:
+    ///   - migrationCase: The case, `spec/candidate`, as ``migrationCases`` lists it.
+    ///   - directory: Where the HTML report lands; `nil` means Haruspec's temp
+    ///     `HaruspecReports` folder.
+    /// - Throws: ``SpecCatalog/CheckFailure`` when `migrationCase` is no longer declared, or carrying the
+    ///   report's first line when the verdict differs from the one the candidate declared.
     public func check(migrationCase: String, reportsIn directory: URL? = nil) async throws {
         guard let verdict = await verify(migrationCase: migrationCase, reportsIn: directory) else {
             throw CheckFailure(description: "\(migrationCase) is no longer declared")
@@ -284,8 +301,13 @@ public struct SpecCatalog {
         }
     }
 
-    /// The console rendering every check shares: a titled banner, the verdict, and a `file://` line
-    /// for the rendered report — ⌘-click it in Xcode's console, or `open` it.
+    /// Prints the console rendering every check shares: a titled banner, the verdict, and a `file://`
+    /// line for the rendered report — ⌘-click it in Xcode's console, or `open` it.
+    ///
+    /// - Parameters:
+    ///   - title: The banner's text, plain.
+    ///   - body: The verdict's summary, plain text.
+    ///   - htmlReportPath: The rendered HTML report's file path; `nil` when none was written.
     static func report(_ title: String, _ body: String, htmlReportPath: String?) {
         print("\n─── \(title) ───\n\(body)\n\(reportLink(htmlReportPath))\n")
     }

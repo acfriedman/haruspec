@@ -7,7 +7,9 @@ import HaruspecCore
 // console cannot drift apart.
 
 extension SpecVerdict {
-    /// A compact rendering built from the diff's public surface (a caller / LLM would print this).
+    /// Returns a compact rendering built from the diff's public surface (a caller / LLM would print this).
+    ///
+    /// - Returns: The verdict as multi-line plain text, headed by its banner.
     public func report() -> String {
         var lines = ["\(TraceDiff.banner(verdict))  \(diff.baselineName) → \(diff.candidateName)",
                      "  explored: \(exploration.summary)"]

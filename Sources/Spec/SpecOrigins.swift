@@ -11,8 +11,12 @@ import HaruspecTrace
 extension Spec {
     /// Runs one verification with an origin collector bound, and carries what it reached onto its verdict.
     ///
-    /// - Parameter intent: The check site's declaration — only its acceptances are read here, merged
-    ///   with the spec's own (`mergingAcceptances`) and carried on the verdict.
+    /// - Parameters:
+    ///   - intent: The check site's declaration; `.none` when it declares nothing.
+    ///   - verification: The verification to run.
+    /// - Returns: The verdict `verification` produced, carrying the subject origins it reached and the
+    ///   spec's and `intent`'s accepted blind spots, audited when ``AuditRoot/environmentKey`` names a
+    ///   checkout.
     ///
     /// Bound around the *whole* verification rather than per capture: the origins of interest span the
     /// baseline and the candidate (a PR audit cares most about the sources the candidate introduced),
@@ -49,9 +53,12 @@ extension Spec {
         return collector.snapshot.filter { !injected.contains($0.label) }
     }
 
-    /// The subject's own accepted channels joined onto a port's declaration: spec-level facts about
-    /// the baseline's sources, check-site facts about this candidate, one set for the audit to
+    /// Returns the subject's own accepted channels joined onto a port's declaration: spec-level facts
+    /// about the baseline's sources, check-site facts about this candidate, one set for the audit to
     /// resolve.
+    ///
+    /// - Parameter intent: The port's check-site declaration.
+    /// - Returns: A copy of `intent` whose accepted blind spots also include the spec's.
     func mergingAcceptances(into intent: Intent) -> Intent {
         var declared = intent
         declared.acceptedBlindSpots += acceptedBlindSpots
@@ -73,7 +80,11 @@ extension SpecVerdict {
         return verdict
     }
 
-    /// The same verdict carrying the declared-acceptable channels — spec-level and check-site merged.
+    /// Returns the same verdict carrying the declared-acceptable channels — spec-level and check-site
+    /// merged.
+    ///
+    /// - Parameter accepted: The channels accepted as uncaptured; empty accepts none.
+    /// - Returns: A copy of this verdict carrying `accepted`, any earlier list replaced.
     func declaring(accepted: [String]) -> SpecVerdict {
         var verdict = self
         verdict.acceptedBlindSpots = accepted

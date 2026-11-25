@@ -111,6 +111,11 @@ public protocol SeamResource: AnyObject {
     /// The resource types this provider constructs when nothing else serves them.
     static var providedResources: [Any.Type] { get }
     /// Returns a fresh resource for one capture — built per resolve, like a `.provides` maker.
+    ///
+    /// - Parameters:
+    ///   - resource: The type to build, one of ``providedResources``.
+    ///   - seams: The capture's seam context, to read any varying reading through.
+    /// - Returns: A new instance of `resource` for this capture.
     static func makeResource(_ resource: Any.Type, _ seams: SeamContext) -> Any
     /// Seam domains the resource reads, swept by default once the golden run reaches them — the
     /// packaged judgment that a resource's failure modes are behavioral surface.
@@ -133,8 +138,14 @@ enum SeamResourceRegistry {
 }
 
 public extension SeamContext {
-    /// The synthesized double serving `boundary`, constructed and registered as an injected
+    /// Returns the synthesized double serving `boundary`, constructed and registered as an injected
     /// collaborator — exactly `context.double(TracedX.self)` with the X looked up by conformance.
+    ///
+    /// - Parameter boundary: The collaborator type a derived system's constructor parameter declares.
+    /// - Returns: A declared `.provides` resource, the capture's center for `NotificationCenter`, the one
+    ///   double serving `boundary` (registered as injected), or a packaged ``SeamResource`` default.
+    /// - Precondition: When the capture provides nothing for `boundary`, exactly one double or packaged
+    ///   default serves it; zero or several trap naming the fix.
     ///
     /// Derived system factories call this per collaborator parameter. Resolution order: a declared
     /// `.provides` resource, the capture's center for `NotificationCenter`, then the one conforming
@@ -231,6 +242,9 @@ extension Spec {
     /// The packaged sweeps this run earns: every linked `SeamResource`'s declared seams, filtered
     /// to keys the golden actually read and nothing authored.
     ///
+    /// - Parameter reached: The seam keys the golden run read.
+    /// - Returns: Each linked provider's swept seams among `reached` that the spec does not declare,
+    ///   keyed by seam; empty when none apply.
     /// - Precondition: Two providers must not declare the same seam key; packaged keys are
     ///   type-scoped, so a collision is two packages claiming one identity.
     ///

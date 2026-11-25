@@ -47,8 +47,10 @@ public struct ContinuousReport {
         entries.map { $0.verdict?.verdict }
     }
 
-    /// GitHub-flavored markdown for the sticky PR comment: outside-the-diff reds lead, in-scope
+    /// Returns GitHub-flavored markdown for the sticky PR comment: outside-the-diff reds lead, in-scope
     /// verdicts render in full, untouched greens collapse to one rollup line each.
+    ///
+    /// - Returns: The rendered markdown; empty when the report holds no entries.
     public func markdown() -> String {
         var sections: [String] = []
         let outside = entries.filter { placement(of: $0) == .redOutsideDiff }
@@ -70,7 +72,9 @@ public struct ContinuousReport {
         return sections.joined(separator: "\n\n")
     }
 
-    /// The terminal sibling of ``markdown()`` — same partition, plain-text headers.
+    /// Returns the terminal sibling of ``markdown()`` — same partition, plain-text headers.
+    ///
+    /// - Returns: The rendered plain text; empty when the report holds no entries.
     public func text() -> String {
         var sections: [String] = []
         let outside = entries.filter { placement(of: $0) == .redOutsideDiff }
@@ -97,8 +101,13 @@ public struct ContinuousReport {
         case greenOutsideDiff
     }
 
-    /// Where one entry renders. Unreadable artifacts and unscopable verdicts are always primary —
+    /// Returns where one entry renders. Unreadable artifacts and unscopable verdicts are always primary —
     /// hiding either behind a diff no one measured them against would be a silent claim.
+    ///
+    /// - Parameter entry: One verdict artifact of this report.
+    /// - Returns: `.primary` when the report is unscoped, `entry` is unreadable or unscopable, or the diff
+    ///   touches its subject; otherwise `.greenOutsideDiff` for an equivalent verdict and
+    ///   `.redOutsideDiff` for any other.
     private func placement(of entry: Entry) -> Placement {
         guard let changed,
               let files = entry.subjectFiles,
@@ -157,6 +166,8 @@ public extension SpecVerdict {
     /// `nil` when the verdict cannot honestly be scoped to files.
     ///
     /// - Parameter root: The checkout the origins resolve against, as in `haruspec audit --root`.
+    /// - Returns: The subject's source files, repo-relative and sorted, or `nil` on either honesty
+    ///   failure below.
     ///
     /// `nil` on either honesty failure: no origins were collected (the run predates collection, or
     /// nothing traced was reached), or a declaration resolved to no file (a binary framework, a

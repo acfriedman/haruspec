@@ -87,7 +87,13 @@ public struct SeamContext {
     /// the declaration: the double states its own trace label (`TraceLabeled`, emitted on every
     /// stamped forwarder and double), and that label leaves the completeness audit's denominator — the
     /// interaction is captured at this boundary, so the double's sources are the fixture's, not the
-    /// subject's. A traced collaborator constructed *around* this call is not registered, and its
+    /// subject's.
+    ///
+    /// - Parameter double: The collaborator to hand in, a double or forwarder that states its own trace
+    ///   label.
+    /// - Returns: `double` itself, registered as an injected collaborator.
+    ///
+    /// A traced collaborator constructed *around* this call is not registered, and its
     /// sources gate: over-reporting stays the safe direction.
     public func inject<D: TraceLabeled>(_ double: D) -> D {
         TraceOrigins.collector?.noteInjected(label: double.traceLabel)
@@ -97,6 +103,9 @@ public struct SeamContext {
     /// Constructs a generated recording double (a stamp's `Double<Protocol>`) and hands it in, in one move — the
     /// double reads its synthesized returns through this context, and constructing it here is what
     /// registers it as an injected collaborator.
+    ///
+    /// - Parameter type: The stamp's recording double, `Double<Protocol>`.
+    /// - Returns: A new double reading this context, registered as an injected collaborator.
     public func double<D: SeamDouble>(_ type: D.Type) -> D {
         inject(type.init(self))
     }
@@ -141,6 +150,11 @@ public struct SeamContext {
 
     /// The categorical read, paired with `.oneOf(…)`: an input whose interesting values are named
     /// rather than ranged reads as itself, instead of an int the op has to decode.
+    ///
+    /// - Parameters:
+    ///   - seam: The seam's key.
+    ///   - value: The live default, the reading when no swept or replayed value is set.
+    /// - Returns: The swept or replayed value at `seam` for this context's call, else `value`.
     public func string(_ seam: String, default value: String) -> String {
         cassette.string(seam: seam, qualifier: qualifier, live: { value }) ?? value
     }
@@ -161,12 +175,16 @@ public struct Op<S> {
     /// Exploration deliberately breaks them in part of its sample rather than filtering them out.
     var afters: [String] = []
     /// Hard ordering gates: labels that must have run before this op, declared with `.requires(_:)`.
-    /// Enforced while an ordering is built, so no sampled ordering ever violates one. The in-order
-    /// stratum folds `afters` in here temporarily (see `gated`); the declared arrays stay untouched.
+    /// Enforced while an ordering is built, so no sampled ordering ever violates one.
+    ///
+    /// The in-order stratum folds `afters` in here temporarily (see `gated`); the declared arrays stay
+    /// untouched.
     var gates: [String] = []
     /// How many times ordering exploration may apply this op, declared with `.repeating(_:)`. `nil`
-    /// defers to the spec-wide `Ordering(repeating:)`. A *range* means the count itself varies between
-    /// sequences, which is the only way a shorter run — a checkout on an empty cart — is reachable.
+    /// defers to the spec-wide `Ordering(repeating:)`.
+    ///
+    /// A *range* means the count itself varies between sequences, which is the only way a shorter
+    /// run — a checkout on an empty cart — is reachable.
     var multiplicity: ClosedRange<Int>?
     /// Domains declared on this op by `Op(_:varying:)`, against the seam keys they synthesized.
     /// ``Spec/operations(_:)`` merges them into the declared surface, so a typed argument is
@@ -181,7 +199,11 @@ public struct Op<S> {
     /// declared ops: the capture lets held work land here instead of running an action.
     var settle: Settle?
 
-    /// A simple op.
+    /// Creates a simple op.
+    ///
+    /// - Parameters:
+    ///   - label: The op's name, the label ordering constraints and reports refer to it by.
+    ///   - action: The interaction, given the system under test.
     public init(_ label: String, _ action: @escaping @isolated(any) (S) async -> Void) {
         self.label = label
         isolation = action.isolation
@@ -191,6 +213,11 @@ public struct Op<S> {
 
     /// A *parameterized* op: reads generated values from the seam context, so arguments become
     /// property-varied surface (e.g. `qty: Int(seams.int("coffeeQty", default: 10))`).
+    ///
+    /// - Parameters:
+    ///   - label: The op's name, the label ordering constraints and reports refer to it by.
+    ///   - action: The interaction, given the system under test and the capture's seam context to read
+    ///     generated arguments from.
     public init(_ label: String, _ action: @escaping @isolated(any) (S, SeamContext) async -> Void) {
         self.label = label
         isolation = action.isolation
@@ -198,17 +225,25 @@ public struct Op<S> {
     }
 
     /// Requires this op to run last (e.g. `checkout`). Implies `.once()`.
+    ///
+    /// - Returns: A copy of this op that runs last, exactly once per sequence.
     public func last() -> Op<S> {
         var copy = self; copy.mustBeLast = true; return copy.repeating(1)
     }
 
     /// Exempts this op from ordering repetition — it runs exactly once per sequence. For an op whose
     /// second application is meaningless or destructive rather than interesting.
+    ///
+    /// - Returns: A copy of this op that runs exactly once per sequence.
     public func once() -> Op<S> {
         repeating(1)
     }
 
     /// Applies this op exactly `count` times in every sequence, overriding `Ordering(repeating:)`.
+    ///
+    /// - Parameter count: How many times the op runs in each sequence.
+    /// - Returns: A copy of this op that runs `count` times per sequence.
+    /// - Precondition: `count` is at least 1; zero or a negative count traps.
     ///
     /// The spec-wide number is one dial for every op, which stops fitting as soon as ops are collapsed:
     /// one `add` wants applying six times where one `applyPromo` wants two, and raising the global
@@ -220,6 +255,11 @@ public struct Op<S> {
 
     /// Applies this op *between* `range.lowerBound` and `range.upperBound` times — the count varies from
     /// sequence to sequence rather than being fixed.
+    ///
+    /// - Parameter range: The fewest and most times the op runs in one sequence.
+    /// - Returns: A copy of this op whose count per sequence varies over `range`.
+    /// - Precondition: `range.lowerBound` is non-negative and `range.upperBound` is at least 1; either
+    ///   violation traps.
     ///
     /// Exact multiplicity means every sequence runs every op the same number of times, so states that
     /// need an op to be *absent* or *scarce* — checkout on an empty cart, a single-line cart, a run
@@ -236,22 +276,28 @@ public struct Op<S> {
 
     /// Declares this op *expected* to run after `label` — a soft precondition, not a filter.
     ///
+    /// - Parameter label: The label of the op this one is expected to follow.
+    /// - Returns: A copy of this op that also expects to follow `label`.
+    ///
     /// Exploration spends most of its ordering budget on sequences that respect the declaration and a
     /// deliberate slice on sequences that break it, tagging the latter in the verdict. A differential
     /// oracle has no expected value to contradict: `removeSku("MUG")` on an empty cart is simply
     /// another input both branches must agree on, and code that isn't defensive about it is the
     /// finding. Filtering those orderings out is how a false negative hides.
     ///
-    /// Use `.requires(_:)` for the rare op that *traps* out of order.
+    /// Use ``Op/requires(_:)`` for the rare op that *traps* out of order.
     public func after(_ label: String) -> Op<S> {
         var copy = self; copy.afters.append(label); return copy
     }
 
     /// Forbids this op from running before `label` — a hard gate no sampled ordering will ever violate.
     ///
+    /// - Parameter label: The label of the op that must run before this one.
+    /// - Returns: A copy of this op that is also gated on `label`.
+    ///
     /// For the op that would *trap* out of order (a force-unwrap on legacy state), where a violation
     /// aborts the process and costs the whole run its verdict rather than producing a finding. Prefer
-    /// `.after(_:)`: it says the same thing about intent while leaving the defensive path reachable.
+    /// ``Op/after(_:)``: it says the same thing about intent while leaving the defensive path reachable.
     public func requires(_ label: String) -> Op<S> {
         var copy = self; copy.gates.append(label); return copy
     }
@@ -280,12 +326,24 @@ public enum Variation {
     case budget(runs: Int)
 }
 
-/// Varies a seam over a domain (property-based breadth). Composes with `Ordering`.
+/// Returns a variation that varies a seam over a domain (property-based breadth). Composes with `Ordering`.
+///
+/// - Parameters:
+///   - name: The seam's key.
+///   - domain: The values the seam may take.
+/// - Returns: The seam variation, for a ``Spec/vary(_:)`` block.
 public func Seam(_ name: String, _ domain: SeamDomain) -> Variation {
     .seam(name, domain)
 }
 
-/// Explore valid call orderings (linear extensions of the declared partial order).
+/// Returns a variation that explores valid call orderings (linear extensions of the declared partial
+/// order).
+///
+/// - Parameters:
+///   - max: The most orderings exploration may run.
+///   - repeating: How many times an op may appear in one ordering.
+/// - Returns: The ordering variation, for a ``Spec/vary(_:)`` block.
+/// - Precondition: `repeating` is at least 1; a smaller value traps.
 ///
 /// `repeating` is how many times an op may appear in one ordering — 2 by default, because applying
 /// an operation twice is where a surprising amount of legacy behavior lives (merge-into-existing
@@ -299,6 +357,10 @@ public func Ordering(max: Int = 100, repeating: Int = 2) -> Variation {
 /// How many differential runs this spec may spend, in total, across *both* axes — the one number that
 /// bounds its cost. Each run drives the baseline and the candidate once over one (ordering, seam
 /// cassette) pair, so cost is roughly `runs × 2 ×` whatever one pass through the ops costs.
+///
+/// - Parameter runs: The total differential runs the spec may spend.
+/// - Returns: The budget variation, for a ``Spec/vary(_:)`` block.
+/// - Precondition: `runs` is at least 1; a smaller value traps.
 ///
 /// Orderings are bought first (up to `Ordering(max:)`) and the remainder becomes seam breadth: a second
 /// call ordering reaches code that a second value for the same seam cannot. Undeclared, the axes take
@@ -433,6 +495,8 @@ public struct Spec<S> {
     /// The interactions to drive, as labeled ops with optional ordering constraints — authored in
     /// place of the derived ops, while construction and observed properties still derive.
     ///
+    /// - Parameter build: The ops to drive, in declaration order.
+    /// - Returns: A copy of this spec that drives the ops `build` lists.
     /// - Precondition: The spec declares no amendments; amending derived ops and authoring the list
     ///   are exclusive.
     ///
@@ -450,9 +514,14 @@ public struct Spec<S> {
         return copy
     }
 
-    /// The one merge for an op list, authored or derived: fold each op's declared argument domains,
-    /// generated-model fields, and factories into the spec, with the collision rules that keep a key
-    /// from being defined twice.
+    /// Returns this spec driving an op list, authored or derived, with each op's declared argument
+    /// domains, generated-model fields, and factories folded in. The collision rules keep a key from
+    /// being defined twice.
+    ///
+    /// - Parameter ops: The op list, authored or derived.
+    /// - Returns: A copy of this spec that drives `ops` and declares their argument surface.
+    /// - Precondition: No op takes a label the engine reserves for its settle steps, and no typed
+    ///   argument's key is already declared; either traps.
     func adopting(_ ops: [Op<S>]) -> Spec<S> {
         var copy = self
         copy.operations = ops
@@ -484,10 +553,15 @@ public struct Spec<S> {
         return copy
     }
 
-    /// Opt a noisy notification channel *out* of the diff while still capturing everything else. The
+    /// Opts a noisy notification channel *out* of the diff while still capturing everything else. The
     /// raw trace stays faithful (reports show every post); the named channels are dropped from both
     /// sides at diff time, so a channel whose count varies run-to-run stops causing spurious
-    /// divergences. The only notification knob a spec has, and it is subtractive by design: an
+    /// divergences.
+    ///
+    /// - Parameter names: The raw names of the notifications to drop from the diff; empty drops none.
+    /// - Returns: A copy of this spec that also ignores `names`.
+    ///
+    /// The only notification knob a spec has, and it is subtractive by design: an
     /// allowlist would hide a channel the subject *starts* posting, which is the failure a behavioral
     /// oracle exists to catch. Writes into the comparison, so the raw trace stays complete.
     public func ignore(notifications names: [String]) -> Spec<S> {
@@ -515,8 +589,12 @@ public struct Spec<S> {
 
     /// Observes boundary properties: snapshots each at the end of every capture, and the end-state
     /// values gate unconditionally. The label is the fully qualified one the forwarder records
-    /// (`"Cart.itemCount"`). Derived specs get this from the protocol's `var` requirements; this is
-    /// the authored spelling.
+    /// (`"Cart.itemCount"`).
+    ///
+    /// - Parameter properties: The boundary properties to observe, each with its label and read-back.
+    /// - Returns: A copy of this spec that also observes `properties`.
+    ///
+    /// Derived specs get this from the protocol's `var` requirements; this is the authored spelling.
     public func observes(_ properties: Observed<S>...) -> Spec<S> {
         var copy = self
         copy.observedProperties += properties
@@ -526,6 +604,10 @@ public struct Spec<S> {
     /// Accepts that the *subject* reaches an effect channel the capture cannot see — the spec-level
     /// home of `Accepts(uncaptured:)`, for a blind spot every candidate shares because it lives in
     /// the baseline's own sources (a legacy singleton fanning out through the global center).
+    ///
+    /// - Parameter channels: The effect channels to accept, by the name the capture-completeness audit
+    ///   gives them (`"Timer / RunLoop"`).
+    /// - Returns: A copy of this spec that accepts `channels` as uncaptured for every candidate.
     ///
     /// Spec-level deliberately, where port intent deliberately is not: an intent declared on the spec
     /// would leak one port's excuses to every candidate, but an uncaptured channel in covered baseline
@@ -537,9 +619,14 @@ public struct Spec<S> {
         return copy
     }
 
-    /// How to build a `T` when a synthesized double must return one (a stamped double's custom-type
+    /// Declares how to build a `T` when a synthesized double must return one (a stamped double's custom-type
     /// requirement). One declaration per type, on the spec — both sides of every differential build
     /// their values through the same factory.
+    ///
+    /// - Parameters:
+    ///   - type: The custom type a synthesized double returns.
+    ///   - make: The factory for a `T`, given the capture's seam context and the synthesized seam key.
+    /// - Returns: A copy of this spec that builds every synthesized `T` through `make`.
     ///
     /// `key` is the synthesized seam key (`"<label>.<method>"`); **read every varying field through
     /// `seams`, namespaced under it** — `seams.int("\(key).cents", default: 0)` — so the value is
@@ -552,10 +639,15 @@ public struct Spec<S> {
         return copy
     }
 
-    /// Provide a capture-scoped resource: how to build a `T` when a derived system's constructor
+    /// Provides a capture-scoped resource: how to build a `T` when a derived system's constructor
     /// parameter wants one and no stamped double serves it — an isolated in-memory store, a scratch
     /// directory. The maker runs once per capture, so every probe gets a fresh, isolated instance:
     /// this is `notifications` (the built-in resource) generalized to types the engine cannot know.
+    ///
+    /// - Parameters:
+    ///   - type: The resource's type, as the constructor parameter declares it.
+    ///   - make: The resource's factory, given the capture's seam context.
+    /// - Returns: A copy of this spec that builds a fresh `T` for each capture.
     ///
     /// A resource is infrastructure the subject runs *on*, not a boundary the diff observes — nothing
     /// is recorded at it. State it holds becomes comparable through the subject's own read surface,
@@ -571,6 +663,10 @@ public struct Spec<S> {
     /// so they join the declared surface exactly like `.vary` seams: swept by the variant budget,
     /// scheduled for boundary edges, reported in `seamPositions` — and known to a replay, whose
     /// schedule recomputes from this same spec value.
+    ///
+    /// - Parameter type: The model type, which generates itself from its fields' seams.
+    /// - Returns: A copy of this spec that builds every synthesized `T` with `T`'s own generator and
+    ///   declares its field domains.
     ///
     /// A field key already declared explicitly (a `Seam("Membership.tier", …)` in `.vary`, before or
     /// after this call) keeps its explicit domain: the model states how it *can* mutate, the spec may
@@ -588,7 +684,11 @@ public struct Spec<S> {
         return copy
     }
 
-    /// What to vary — seam domains and/or call ordering.
+    /// Declares what to vary — seam domains, call ordering, and how many runs to spend.
+    ///
+    /// - Parameter build: The variations to declare.
+    /// - Returns: A copy of this spec with `build`'s seam domains, ordering, and budget declared.
+    /// - Precondition: No seam in `build` is already a typed op argument's domain; one that is traps.
     public func vary(@VariationsBuilder _ build: () -> [Variation]) -> Spec<S> {
         var copy = self
         for variation in build() {

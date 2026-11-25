@@ -153,8 +153,11 @@ extension SpecVerdict {
             + seams.map { "    \($0.summary)" }
     }
 
-    /// The same verdict, carrying what repetition showed. Everything else is run 1's — the
+    /// Returns the same verdict, carrying what repetition showed. Everything else is run 1's — the
     /// representative pass whose diff, coverage, and counterexample the artifact keeps.
+    ///
+    /// - Parameter stability: How the replay passes agreed.
+    /// - Returns: A copy of this verdict carrying `stability`, any earlier stability replaced.
     func qualified(by stability: Stability) -> SpecVerdict {
         var verdict = self
         verdict.stability = stability

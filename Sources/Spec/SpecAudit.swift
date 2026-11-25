@@ -21,8 +21,14 @@ import HaruspecTrace
 public enum AuditRoot {
     public static let environmentKey = "HARUSPEC_SOURCE_ROOT"
 
-    /// `nil` disables the audit rather than failing the run: an adopter who has not wired the root yet
-    /// gets "not audited" on every verdict, which is the truth, and is visibly different from clean.
+    /// Returns the checkout root the environment names under ``environmentKey``. `nil` disables the
+    /// audit rather than failing the run.
+    ///
+    /// - Parameter environment: The process environment; the current process's by default.
+    /// - Returns: The named directory, or `nil` when the key is absent or empty.
+    ///
+    /// An adopter who has not wired the root yet gets "not audited" on every verdict, which is the
+    /// truth, and is visibly different from clean.
     public static func fromEnvironment(
         _ environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> URL? {
@@ -36,8 +42,12 @@ public extension SpecVerdict {
     /// qualification block, undeclared ones onto the coverage as gaps, and the verdict re-resolved
     /// over that coverage.
     ///
-    /// - Parameter intent: The check site's declaration — only its `acceptedBlindSpots` are read,
-    ///   joined onto the ones the verdict already carries.
+    /// - Parameters:
+    ///   - root: The checkout the verdict's sources live in.
+    ///   - intent: The check site's declaration; only its accepted blind spots count, alongside the ones
+    ///     the verdict already carries.
+    /// - Returns: The verdict with the audit folded in; this verdict unchanged when it already carries
+    ///   blind spots or records no origins to audit.
     ///
     /// Applied after the whole verification rather than inside it because the origin set is only
     /// complete once every capture has run — and because the finding is a property of the *sources*,
@@ -62,8 +72,12 @@ public extension SpecVerdict {
         return noting(report.outcome(accepting: intent.acceptedBlindSpots + (acceptedBlindSpots ?? [])))
     }
 
-    /// The same verdict with an audit's outcome applied. Split out so a caller holding its own
+    /// Returns the same verdict with an audit's outcome applied. Split out so a caller holding its own
     /// `AuditReport` (the CLI, a host tool auditing a recorded `result.json`) folds it in identically.
+    ///
+    /// - Parameter outcome: The audit's resolved findings, declared blind spots already set apart.
+    /// - Returns: A copy of this verdict carrying `outcome`'s blind spots, its gating findings as coverage
+    ///   gaps, and its result re-resolved over that coverage.
     internal func noting(_ outcome: AuditOutcome) -> SpecVerdict {
         var verdict = self
         verdict.result = VerificationResult(diff: result.diff, coverage: coverage.noting(outcome))
@@ -108,9 +122,13 @@ public extension SpecVerdict {
 }
 
 extension Coverage {
-    /// The audit's gating findings as coverage gaps. Rebuilt through the initializer so the gap list
-    /// re-sorts — a verdict is compared char for char across machines, and the audit's contribution
-    /// must not depend on the order the filesystem walk happened to return.
+    /// Returns this coverage with the audit's gating findings added as gaps. The gap list stays sorted —
+    /// a verdict is compared char for char across machines, and the audit's contribution must not depend
+    /// on the order the filesystem walk happened to return.
+    ///
+    /// - Parameter outcome: The audit's resolved findings.
+    /// - Returns: A copy of this coverage with a gap for each bypassed channel and each unreadable source
+    ///   in `outcome`.
     func noting(_ outcome: AuditOutcome) -> Coverage {
         Coverage(
             declared: declared,

@@ -166,8 +166,12 @@ public extension SpecVerdict {
             + (others.isEmpty ? [] : [(["**Also in other failing cases:**", ""] + others).joined(separator: "\n")])
     }
 
-    /// The author's own tripwires that fired: each declaration that named a gating divergence's
+    /// Returns the author's own tripwires that fired: each declaration that named a gating divergence's
     /// kind and label but rejected it, with how many divergences it rejected and the first one.
+    ///
+    /// - Parameter gating: The verdict's gating divergences.
+    /// - Returns: The section as one markdown block, or empty when no declaration rejected any of
+    ///   `gating`.
     ///
     /// Rendered before the offer, which leaves these divergences out — the only line that would
     /// absorb them is wider than the one the author wrote, so the choice is theirs, not the report's.
@@ -343,12 +347,18 @@ public extension SpecVerdict {
         return lines.joined(separator: "\n")
     }
 
-    /// ` in checkout (op 7)` after a Where cell's label, or nothing for an event under no op.
+    /// Returns the ` in checkout (op 7)` suffix after a Where cell's label.
+    ///
+    /// - Parameter divergence: The divergence the row reports.
+    /// - Returns: The suffix as table-safe markdown, or empty for an event under no op.
     private func opCell(_ divergence: Divergence) -> String {
         divergence.op.map { " in \(tableCell($0.description))" } ?? ""
     }
 
-    /// Keeps engine-produced text from breaking the table grammar: pipes escape, newlines flatten.
+    /// Returns engine-produced text made safe for a markdown table cell: pipes escape, newlines flatten.
+    ///
+    /// - Parameter text: The cell's content, plain text.
+    /// - Returns: `text` on one line with every `|` escaped.
     func tableCell(_ text: String) -> String {
         text
             .replacingOccurrences(of: "|", with: "\\|")

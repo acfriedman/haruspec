@@ -170,14 +170,33 @@ extension Spec {
 
     // MARK: - Hidden machinery
 
-    /// One replay's coverage against the plan's varied surface — the plan's domains, not the
+    /// Returns one replay's coverage against the plan's varied surface — the plan's domains, not the
     /// declaration's, so packaged resource sweeps earn the same credit an authored `Seam` does.
+    ///
+    /// - Parameters:
+    ///   - replay: The cassette one run consumed.
+    ///   - domainHeld: Whether the property held over the whole explored surface.
+    ///   - plan: The explored surface the run belongs to.
+    /// - Returns: The coverage of every declared op and `replay`'s seams, crediting `plan`'s varied seams
+    ///   with domain coverage when `domainHeld` is `true`.
     private func plannedCoverage(replay: Cassette, domainHeld: Bool, plan: ExplorationPlan<S>) -> Coverage {
         coverage(replays: [replay], domainHeld: domainHeld, sweptSeams: Array(plan.domains.keys))
     }
 
-    /// Assembles the spec's coverage: the declared surface is the *interrogation* surface — every op
-    /// (as an `op:<label>` boundary) plus every seam the replays declared. Ops all ran by construction
+    /// Returns the spec's coverage: the declared surface is the *interrogation* surface — every op
+    /// (as an `op:<label>` boundary) plus every seam the replays declared.
+    ///
+    /// - Parameters:
+    ///   - replays: The cassettes the covered runs consumed.
+    ///   - domainHeld: Whether the property held over the whole explored surface.
+    ///   - declaredOps: The labels of the ops the surface declares; `nil` means this spec's ops.
+    ///   - missingOps: The labels among the declared ops that went unrecorded; empty when every op ran.
+    ///   - sweptSeams: The seam keys the surface varies; `nil` means this spec's declared seam domains.
+    /// - Returns: The coverage over every declared op and seam, with gaps for unrecorded ops and seams,
+    ///   unexercised seams, and swept keys nothing read; swept seams that were read earn domain credit
+    ///   only when `domainHeld` is `true`.
+    ///
+    /// Ops all ran by construction
     /// here (the replay path is where an op can go unrecorded); seams merge across the given replays,
     /// and a seam missed anywhere is never counted exercised. `domainHeld` awards the swept seams
     /// domain-coverage credit — additive evidence, only when the property held over the surface.
@@ -250,8 +269,13 @@ extension Spec {
         return GoldenSurface(baseline: baseline, golden: golden, plan: plan, qualification: qualification)
     }
 
-    /// The longest call sequence exploration can produce: the declared ops, each repeated as far as
-    /// `Ordering(repeating:)` allows. The golden cassette is recorded over *this* rather than the
+    /// Returns the longest call sequence exploration can produce: the declared ops, each repeated as far
+    /// as `Ordering(repeating:)` allows.
+    ///
+    /// - Returns: Each declared op repeated up to its most occurrences, in declaration order; the
+    ///   declared ops alone when the spec does not explore orderings.
+    ///
+    /// The golden cassette is recorded over *this* rather than the
     /// declared order, so every explored ordering has enough recorded seam readings — a shorter one
     /// just consumes a prefix of each track. Recording over the declared order instead would leave a
     /// repeated op's second read with nothing to replay, which surfaces as an `.unrecorded` gap and
@@ -324,8 +348,18 @@ extension Spec {
         return diff.isEquivalent ? nil : diff
     }
 
-    /// One differential run. The diff is already intent-classified: with a declared intent the loop
-    /// must not stop on an intended-only divergence set, so classification lives here, not at exits.
+    /// Returns one differential run. The diff is already intent-classified: with a declared intent the
+    /// loop must not stop on an intended-only divergence set, so classification lives here, not at exits.
+    ///
+    /// - Parameters:
+    ///   - make: Builds a fresh baseline per capture.
+    ///   - candidate: Builds a fresh candidate per capture.
+    ///   - order: The op sequence to drive.
+    ///   - cassette: The seam readings to replay into the baseline.
+    ///   - intent: The deltas the candidate is meant to produce.
+    /// - Returns: The baseline-versus-candidate diff, classified against `intent`, with the cassette the
+    ///   candidate consumed and the run's evidence. The candidate is answered call by call as the
+    ///   baseline was.
     func compare(
         make: (SeamContext) -> S,
         candidate: (SeamContext) -> S,

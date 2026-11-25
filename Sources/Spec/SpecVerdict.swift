@@ -23,10 +23,11 @@ public struct SpecVerdict: Codable, Sendable {
     public internal(set) var result: VerificationResult
     public internal(set) var orderingsExplored: Int
     public internal(set) var failingOrder: [String]?
-    /// Declared `.after` preconditions the failing order broke, as `"removeMug after addMug"`. That
-    /// stratum is explored on purpose, so a divergence here is a finding about a defensive path — worth
-    /// separating from one on the surface the author described. Empty on an in-order failure, `nil`
-    /// where no order was reported at all.
+    /// Declared `.after` preconditions the failing order broke, as `"removeMug after addMug"`. Empty on
+    /// an in-order failure, `nil` where no order was reported at all.
+    ///
+    /// That stratum is explored on purpose, so a divergence here is a finding about a defensive path —
+    /// worth separating from one on the surface the author described.
     public internal(set) var violatedPreconditions: [String]?
     /// The generated input that triggered a divergence (its varied seam values are the counterexample).
     public internal(set) var counterexample: CassetteData?
@@ -45,8 +46,10 @@ public struct SpecVerdict: Codable, Sendable {
     /// before the field existed; treated as none declared.
     public internal(set) var acceptedBlindSpots: [String]?
     /// Every failing case a red replay walked within its window after the first (see
-    /// `FailingCases`). `result.diff`, `failingOrder` and `counterexample` are the richest of them.
-    /// `nil` on a green verdict and on the live differential, which shrinks one case instead.
+    /// `FailingCases`). `nil` on a green verdict and on the live differential, which shrinks one case
+    /// instead.
+    ///
+    /// `result.diff`, `failingOrder` and `counterexample` are the richest of them.
     public internal(set) var failingCases: FailingCases?
     /// Where each declared change was first observed, one entry per declaration the sweep saw hold
     /// — the disclosure a green-by-declaration verdict owes. Empty in parity mode.

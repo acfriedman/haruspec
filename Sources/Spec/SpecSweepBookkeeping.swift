@@ -82,6 +82,14 @@ extension Spec {
             self.intent = intent
         }
 
+        /// Notes one compared probe's intent facts: which declarations it left unobserved and where each
+        /// declaration first absorbed a divergence.
+        ///
+        /// - Parameters:
+        ///   - run: The probe's classified diff and the evidence it was classified on.
+        ///   - ordering: The probe's op labels in execution order.
+        ///   - inputs: The seam values replayed into the probe.
+        ///
         /// The run's evidence is what the declarations re-match against, so the observation names the
         /// declaration that actually absorbed each divergence.
         mutating func observe(_ run: ProbeComparison, ordering: [String], inputs: CassetteData) {
@@ -106,8 +114,12 @@ extension Spec {
             }
         }
 
-        /// The diff the verdict should carry: the first absorbing diff when one exists (else
+        /// Returns the diff the verdict should carry: the first absorbing diff when one exists (else
         /// `fallback`), its unobserved list corrected to the sweep-wide intersection.
+        ///
+        /// - Parameter fallback: The diff to carry when no observed probe absorbed a divergence.
+        /// - Returns: The first observed diff with an intended divergence, else `fallback`, listing as
+        ///   unobserved only the declarations no observed probe matched.
         func settle(_ fallback: TraceDiff) -> TraceDiff {
             var diff = intendedRepresentative ?? fallback
             if let unobservedAcross {

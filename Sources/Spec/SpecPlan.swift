@@ -20,6 +20,7 @@ import HaruspecTrace
 public struct SpecProbe: Codable, Sendable, Equatable {
     /// Op labels in execution order — the replay contract. Labels are the cross-build identity of an
     /// operation (the analog of a stamp's stable labels), so renaming an op orphans recorded input.
+    ///
     /// The probe's settle schedule rides here too, as the engine's reserved settle steps
     /// (`settle:elapsed`) between the ops whose gap they settle.
     public var ordering: [String]
@@ -140,8 +141,12 @@ public extension SpecPlan {
         try Self.canonicalEncoder().encode(self)
     }
 
-    /// A `.gz` destination opts into deterministic gzip (canonical pretty JSON inside), turning the
-    /// multi-megabyte plan into a few hundred committed kilobytes. Anything else writes plain JSON.
+    /// Writes the plan to `url` as canonical JSON, gzipped when `url` ends in `.gz`. Deterministic gzip
+    /// turns the multi-megabyte plan into a few hundred committed kilobytes.
+    ///
+    /// - Parameter url: The destination file; a `gz` path extension means a gzipped plan.
+    /// - Throws: The error `JSONEncoder` throws when the plan cannot be encoded, a gzip error when
+    ///   compression produces no output, or the file-system error when the file cannot be written.
     func write(to url: URL) throws {
         if url.pathExtension == "gz" {
             try Gzip.compress(jsonData()).write(to: url)
@@ -165,6 +170,12 @@ public extension SpecPlan {
 
     /// Reads plain or gzipped plans alike — detection is by content (the gzip magic), not filename,
     /// so a renamed artifact still replays.
+    ///
+    /// - Parameter url: The plan file, plain or gzipped JSON.
+    /// - Throws: The file-system error when `url` cannot be read, a gzip error when gzipped content
+    ///   is truncated or corrupt, ``SpecPlanError/unsupportedSchemaVersion(found:supported:)`` when the
+    ///   plan's schema is not the one this engine replays, or the error `JSONDecoder` throws when the
+    ///   content does not decode.
     init(contentsOf url: URL) throws {
         let raw = try Data(contentsOf: url)
         try self.init(jsonData: Gzip.isGzip(raw) ? Gzip.decompress(raw) : raw)
@@ -174,9 +185,13 @@ public extension SpecPlan {
 // MARK: - Scope selection
 
 public extension SpecPlan {
-    /// The scope predicate: does this plan's golden surface touch any of the changed classes?
-    /// CI selects the plans worth re-running on a PR by filtering a plan catalog with this — rebuilding
-    /// and replaying only specs whose recorded reach intersects the diff.
+    /// Returns whether this plan's golden surface touches any of the changed classes — the scope
+    /// predicate. CI selects the plans worth re-running on a PR by filtering a plan catalog with this —
+    /// rebuilding and replaying only specs whose recorded reach intersects the diff.
+    ///
+    /// - Parameter changedClasses: The labels of the classes a diff changed.
+    /// - Returns: Whether any of `changedClasses` is among the plan's covered classes; `false` when
+    ///   `changedClasses` is empty.
     func covers(anyOf changedClasses: some Sequence<String>) -> Bool {
         let changed = Set(changedClasses)
         return coveredClasses.contains(where: changed.contains)
@@ -308,7 +323,16 @@ extension Spec {
         )
     }
 
-    /// The red exit: pins the reported failing case — the richest of the sweep — and carries the rest.
+    /// Returns the red exit's verdict: pins the reported failing case — the richest of the sweep — and
+    /// carries the rest.
+    ///
+    /// - Parameters:
+    ///   - reported: The failing case the verdict reports, the richest of the sweep.
+    ///   - surface: The plan's resolved view for this replay pass.
+    ///   - failingCases: Every failing case the sweep walked.
+    ///   - observations: Where each declared change was first seen to hold.
+    /// - Returns: The verdict carrying `reported`'s diff and `failingCases`, with coverage over
+    ///   `reported`'s replay alone.
     ///
     /// Makes no unobserved-intent claim: the reported diff is one case's, and a declaration it did
     /// not match may have held in another.
@@ -342,9 +366,19 @@ extension Spec {
         )
     }
 
-    /// The green exit: every replayable probe held. Coverage decides whether that EQUIVALENT can be
-    /// trusted — unreplayable ops or seam misses anywhere downgrade it to CANNOT-VERIFY. Zero
-    /// replayable probes observed nothing, so the classified empty diff reads back the whole
+    /// Returns the green exit's verdict: every replayable probe held. Coverage decides whether that
+    /// EQUIVALENT can be trusted — unreplayable ops or seam misses anywhere downgrade it to CANNOT-VERIFY.
+    ///
+    /// - Parameters:
+    ///   - diff: The sweep's settled diff, classified against the check site's intent.
+    ///   - replays: The cassettes every replayed probe consumed; empty when no probe was replayable.
+    ///   - surface: The plan's resolved view for this replay pass.
+    ///   - plan: The plan replayed.
+    ///   - observations: Where each declared change was first seen to hold.
+    /// - Returns: The verdict carrying `diff` and the coverage over `replays`, with no failing order or
+    ///   counterexample.
+    ///
+    /// Zero replayable probes observed nothing, so the classified empty diff reads back the whole
     /// declaration list as unobserved.
     private func heldReplayVerdict(
         diff: TraceDiff,
