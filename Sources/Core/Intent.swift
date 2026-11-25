@@ -324,20 +324,22 @@ private func uniqued<T: Equatable>(_ values: [T]) -> [T] {
 
 public extension TraceDiff {
     /// Extension mode: reclassify divergences the intent spec declared as `.intended`, then re-derive
-    /// the verdict from the residual (gating, collateral) divergences. `Intent.none` is a no-op
+    /// the verdict from the residual (gating, collateral) divergences. ``Intent/none`` is a no-op
     /// (parity mode) — every divergence stays collateral and the verdict is unchanged.
     ///
-    /// `evidence` is what the probe left behind — its seam reads for `.when(_:is:)`, both aligned
-    /// traces for `.after` / `.before`; without it no such declaration can match. The comparison's
-    /// own divergences are supplied here, for `.once(per:)` to count against.
+    /// - Parameters:
+    ///   - intent: The changes the candidate is meant to make; ``Intent/none`` declares none.
+    ///   - evidence: What the probe left behind, its seam inputs and both aligned event streams;
+    ///     `.none` when the caller has no probe context, which lets only unmodified declarations
+    ///     match. Divergences it already carries are replaced by this diff's own.
+    /// - Returns: A copy whose matched divergences are `.intended`, whose other divergences name in
+    ///   `rejectedBy` each declaration that was about them but turned them down, whose
+    ///   `unobservedIntent` lists the declarations that matched nothing *in this comparison*, and
+    ///   whose verdict is `.diverged` exactly when a gating divergence remains.
     ///
-    /// A collateral divergence some declaration was about but rejected keeps that declaration's
-    /// spelling in `rejectedBy`.
-    ///
-    /// Also records `unobservedIntent`: the declarations that matched nothing *in this comparison*.
-    /// For a single diff that is the finished fact; a sweep that compares many probes intersects the
-    /// per-probe sets (a declaration is observed if any probe matched it) and overwrites the
-    /// reported diff's copy — see `Spec.verify`.
+    /// For a single diff `unobservedIntent` is the finished fact; a sweep that compares many probes
+    /// intersects the per-probe sets (a declaration is observed if any probe matched it) and
+    /// overwrites the reported diff's copy — see ``Spec/verify``.
     func classified(against intent: Intent, evidence: ProbeEvidence = .none) -> TraceDiff {
         var result = self
         var evidence = evidence
@@ -366,7 +368,14 @@ public extension TraceDiff {
         return result
     }
 
-    /// `classified(against:evidence:)` with only the probe's seam inputs in hand.
+    /// ``classified(against:evidence:)`` with only the probe's seam inputs in hand.
+    ///
+    /// - Parameters:
+    ///   - intent: The changes the candidate is meant to make; ``Intent/none`` declares none.
+    ///   - inputs: The seam inputs the probe ran with; `nil` means none were recorded, so
+    ///     `.when(_:is:)` conditions cannot hold.
+    /// - Returns: The reclassified copy ``classified(against:evidence:)`` returns, judged without the
+    ///   aligned event streams, so `.after` and `.before` cannot hold either.
     func classified(against intent: Intent, inputs: ProbeInputs?) -> TraceDiff {
         classified(against: intent, evidence: ProbeEvidence(inputs: inputs))
     }

@@ -9,8 +9,15 @@ public enum CheckoutSpec {
     /// Runs the canonical spec, capturing a trace under a deterministic clock and a fixed
     /// ``ReceiptIssuer``.
     ///
+    /// - Parameters:
+    ///   - name: The trace's name, carried into every report about it.
+    ///   - makeService: Builds the implementation under test from the notification center it posts to
+    ///     and the receipt issuer it uses.
+    /// - Returns: The trace of the canonical checkout: two adds, a promo, a removal, and a checkout,
+    ///   so identical code gives an identical trace.
+    ///
     /// Capture is fully ambient and zero-code on the service side: the stamped protocol's forwarder
-    /// records call/args/return against `TraceContext.current` (bound here), and an injected
+    /// records call/args/return against ``TraceContext/current`` (bound here), and an injected
     /// `RecordingNotificationCenter` records a dedicated `NotificationCenter` (isolated, so parallel
     /// runs and system noise can't leak in). The service is a plain business object with no knowledge
     /// of the oracle.
@@ -57,10 +64,12 @@ public enum CheckoutSpec {
         capture(name: "checkout.feature") { CartServiceV3(center: $0, issuer: $1) }
     }
 
-    /// The declared intent for the `feature()` change: the loyalty additions were *meant* to happen,
-    /// so they must not fail the gate. Both are declared on production seams (the notifications the app
-    /// actually posts), not on marker payloads. Anything else the change altered is collateral. A
-    /// migration would use `Intent.none` instead — parity mode is just the empty intent.
+    /// The declared intent for the ``feature()`` change: the loyalty additions were *meant* to happen,
+    /// so they must not fail the gate. Anything else the change altered is collateral.
+    ///
+    /// Both declarations sit on production seams (the notifications the app actually posts), not on
+    /// marker payloads. A migration would use ``Intent/none`` instead — parity mode is just the empty
+    /// intent.
     public static var intent: Intent {
         Intent {
             Emits("LoyaltyPointsEarned")

@@ -113,10 +113,19 @@ public struct DomainSeamGenerator: SeamValueGenerator {
         case random
     }
 
-    /// `golden` is the template's own tracks — the convenience `generatedVariants(count:varying:seed:)`
-    /// supplies them. They give the schedule two things it cannot otherwise know: how many readings each
-    /// seam has, and what each already holds. Omitted, every seam is assumed to be read once and the
-    /// edge schedule is exactly the whole-track pass it always was.
+    /// Creates a generator over `domains` whose random draws `seed` fixes. The edge schedule is laid out
+    /// over the template's own tracks, so an edge can pin a single reading as well as a whole track.
+    ///
+    /// - Parameters:
+    ///   - domains: The value domain declared for each seam, keyed by seam.
+    ///   - seed: The seed of the random tail; with the same domains and tracks, the same seed gives the
+    ///     same variants.
+    ///   - golden: The template cassette's tracks, each seam's readings in reading order, as
+    ///     ``CassetteData/generatedVariants(count:varying:seed:)`` supplies them; empty assumes every
+    ///     seam is read once, so each edge pins a whole track.
+    ///
+    /// The tracks give the schedule two things it cannot otherwise know: how many readings each seam
+    /// has, and what each already holds.
     public init(domains: [String: SeamDomain], seed: UInt64, golden: [String: [CanonicalValue]] = [:]) {
         self.domains = domains
         rng = SplitMix64(seed: seed)

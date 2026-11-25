@@ -28,7 +28,9 @@ public struct SeamClock {
         cassette.double(seam: seam, live: live)
     }
 
-    /// A `Date` view of `now()`, for code that wants the Foundation type.
+    /// A `Date` view of ``now()``, for code that wants the Foundation type.
+    ///
+    /// - Returns: The instant ``now()`` returns, as a `Date`.
     public func date() -> Date {
         Date(timeIntervalSince1970: now())
     }

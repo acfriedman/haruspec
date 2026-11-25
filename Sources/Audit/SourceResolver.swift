@@ -119,7 +119,14 @@ private struct SourceIndex {
     // MARK: - Declaration scanning
 
     /// Which of `wanted` this file declares. Line-oriented and anchored at the start of a declaration,
-    /// so a mention inside a comment, a string, or an expression (`MyClass.self`) doesn't count.
+    /// so a mention inside a comment, a string, or an expression (`let type = MyClass.self`) doesn't
+    /// count.
+    ///
+    /// - Parameters:
+    ///   - text: The full source of one Swift or Objective-C file.
+    ///   - wanted: The type names to look for; empty finds nothing.
+    /// - Returns: The names in `wanted` that `text` declares as a Swift type or an Objective-C
+    ///   `@implementation`, a category's included; empty when it declares none.
     static func declaredSymbols(in text: String, wanted: Set<String>) -> Set<String> {
         var found: Set<String> = []
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {

@@ -38,8 +38,11 @@ public extension TraceDiff {
         return lines
     }
 
-    /// The divergence summary + per-divergence lines (no banner), so `VerificationResult.report()` can
+    /// The divergence summary + per-divergence lines (no banner), so ``VerificationResult/report()`` can
     /// prepend a coverage-aware headline and reuse this body verbatim.
+    ///
+    /// - Returns: The indented lines below the banner: one clean line when there are no divergences,
+    ///   otherwise a count line and two lines per divergence, then any unobserved intent.
     func bodyLines() -> [String] {
         guard !divergences.isEmpty else {
             return ["  behavior trace matches within declared comparison (0 divergences)"]

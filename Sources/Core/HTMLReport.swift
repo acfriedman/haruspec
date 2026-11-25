@@ -454,8 +454,10 @@ public extension HTML {
 // MARK: - Entry points
 
 public extension TraceDiff {
-    /// A self-contained, themeable HTML rendering of this diff — the visual companion to `report()`.
+    /// A self-contained, themeable HTML rendering of this diff — the visual companion to ``report()``.
     /// Leads with the verdict hero and a small stat row, then one card per divergence (or a clean panel).
+    ///
+    /// - Returns: A complete HTML document, its styles inline, that opens on its own over `file://`.
     func htmlReport() -> String {
         HTML.page(title: "Haruspec · \(candidateName)", sections: [
             HTML.hero(verdict, title: candidateName, baseline: baselineName, candidate: candidateName),
@@ -558,13 +560,17 @@ public extension VerificationResult {
 
 // MARK: - Writing the report to disk
 
-/// A verdict carrier that can render itself to a self-contained HTML report page. Conformed by every
-/// carrier that has an `htmlReport()` — `TraceDiff`, `VerificationResult`, and (in HaruspecSpec)
-/// `SpecVerdict` — so the persistence step below is written once instead of hand-rolled at each call
-/// site. Rendering is the package's job (`htmlReport()`); *writing the string to a file* lives here
-/// too, so no consumer (the CLI, the dogfood app) re-implements it with `FileManager`.
+/// A verdict carrier that can render itself to a self-contained HTML report page. Every carrier with an
+/// ``htmlReport()`` conforms, so writing the page to a file is written once, not at each call site.
+///
+/// The conformers are `TraceDiff`, `VerificationResult`, and (in HaruspecSpec) `SpecVerdict`.
+/// Rendering is the package's job; *writing the string to a file* lives here too, so no consumer (the
+/// CLI, the dogfood app) re-implements it with `FileManager`.
 public protocol HTMLReporting {
-    /// A self-contained, themeable HTML rendering of this verdict — the visual companion to `report()`.
+    /// Returns a self-contained, themeable HTML rendering of this verdict, the visual companion to its
+    /// terminal report, such as ``TraceDiff/report()``.
+    ///
+    /// - Returns: A complete HTML document, its styles inline, that opens on its own over `file://`.
     func htmlReport() -> String
 }
 

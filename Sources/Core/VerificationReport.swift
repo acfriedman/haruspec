@@ -2,8 +2,11 @@ import Foundation
 
 public extension VerificationResult {
     /// A compact, human-readable rendering of the resolved verdict + coverage — what the CLI and CI
-    /// logs print for a replay-driven verification. Reuses `TraceDiff.bodyLines()` for the divergence
+    /// logs print for a replay-driven verification. Reuses ``TraceDiff/bodyLines()`` for the divergence
     /// list so the two report paths stay consistent.
+    ///
+    /// - Returns: The banner line, the coverage lines, the abstention lines when the verdict is
+    ///   `.cannotVerify`, then the diff's body lines, newline-joined with no trailing newline.
     func report() -> String {
         var lines = ["\(TraceDiff.banner(verdict))  \(diff.baselineName) → \(diff.candidateName)"]
         lines += coverageLines()

@@ -10,17 +10,36 @@ func originArguments(label: String, symbol: String?, sourceExpression: String?) 
     originArguments(label: label, symbolExpression: symbol.map(literalString), sourceExpression: sourceExpression)
 }
 
-/// The `noteOrigin` argument list an instrumented body registers itself with. `symbolExpression` and
-/// `sourceExpression` are already Swift expressions — a string literal, a `#fileID` literal from the
-/// expansion context, a runtime `type(of:)` read — or nil where there is nothing to point at.
+/// Returns the `noteOrigin` argument list an instrumented body registers itself with.
+///
+/// - Parameters:
+///   - label: The traced label as plain text, unquoted.
+///   - symbolExpression: A Swift expression naming the symbol, such as a string literal or a runtime
+///     ``Swift/type(of:)`` read; `nil` where there is nothing to point at.
+///   - sourceExpression: A Swift expression naming the source, such as a `#fileID` literal from the
+///     expansion context; `nil` where there is nothing to point at.
+/// - Returns: The arguments as Swift source, the quoted label first, with `nil` written out for a
+///   missing expression.
 func originArguments(label: String, symbolExpression: String?, sourceExpression: String?) -> String {
     "\(literalString(label)), symbol: \(symbolExpression ?? "nil"), source: \(sourceExpression ?? "nil")"
 }
 
 /// Builds the `call`/`ret` instrumented body shared by the forwarder and the double.
 ///
+/// - Parameters:
+///   - function: The method declaration being instrumented.
+///   - rawLabel: The traced label as plain text, unquoted.
+///   - innerBody: Swift statements for the method's own work: a forwarding call for a forwarder, a
+///     no-op or a generated read for a double.
+///   - timed: Whether the method's duration is recorded as a signpost interval.
+///   - origin: The `noteOrigin` argument list, as
+///     ``originArguments(label:symbolExpression:sourceExpression:)`` returns it.
+///   - isolationExpression: A Swift expression for the isolation every record names, such as the
+///     isolation a forwarder forwards into; `nil` names the call site's own `#isolation`.
+/// - Returns: The instrumented body as Swift source, one statement per line, without its braces.
+///
 /// The result records `call` (with arguments keyed by internal parameter name) on entry, runs
-/// `innerBody` inside a nested `__oracleBody()` shim that mirrors the signature's effect specifiers
+/// `innerBody` inside a nested `__oracleBody` shim that mirrors the signature's effect specifiers
 /// and return type — so `return`, `guard … else { return }`, `throws` and `async` keep their meaning
 /// — then records `ret` (with the canonicalized return value, or a `__threw` marker) on exit. When
 /// `timed`, it also records the method's duration as a signpost interval.
@@ -28,9 +47,6 @@ func originArguments(label: String, symbolExpression: String?, sourceExpression:
 /// The forwarder (`innerBody` = a `__wrapped.<method>(…)` forwarding call) and the double
 /// (`innerBody` = a no-op or a generated read) run this one emitter, so a boundary records the same
 /// events whichever role it plays.
-///
-/// `isolationExpression`, when given, is passed as each record's `isolation:` in place of the
-/// call site's own `#isolation` — how a forwarder records as the isolation it forwards into.
 func tracedBody(
     function: FunctionDeclSyntax,
     label rawLabel: String,

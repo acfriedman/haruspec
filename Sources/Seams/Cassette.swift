@@ -42,10 +42,15 @@ public final class Cassette: @unchecked Sendable {
     }
 
     /// A recording cassette that answers the listed seams with `preferred` values instead of the
-    /// op's own fallback, recording them as it goes. The golden template is recorded this way, from
-    /// each declared domain's first interior value, so the template sits inside the declared surface
-    /// — a cart with items in it — rather than at the degenerate default every edge is then measured
-    /// against. Seams not listed read live, exactly as `init()` records them.
+    /// op's own fallback, recording them as it goes. Seams not listed read live, exactly as ``init()``
+    /// records them.
+    ///
+    /// - Parameter preferred: The value to answer each listed seam with, keyed by seam; empty records
+    ///   exactly as ``init()`` does.
+    ///
+    /// The golden template is recorded this way, from each declared domain's first interior value, so
+    /// the template sits inside the declared surface — a cart with items in it — rather than at the
+    /// degenerate default every edge is then measured against.
     public init(recordingPreferring preferred: [String: CanonicalValue]) {
         mode = .record
         self.preferred = preferred

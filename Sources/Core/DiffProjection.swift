@@ -84,7 +84,13 @@ extension BehavioralDiff {
     }
 
     /// The per-event advisory rule, shared by every matcher: a structural-tier event under
-    /// `StructuralComparison.advisory` is reported without gating.
+    /// ``StructuralComparison/advisory`` is reported without gating.
+    ///
+    /// - Parameters:
+    ///   - event: An event from either side of the comparison.
+    ///   - comparison: The comparison the diff runs under.
+    /// - Returns: `true` when `comparison` makes structural events advisory and `event` is in the
+    ///   structural tier.
     static func isAdvisory(_ event: TraceEvent, under comparison: Comparison) -> Bool {
         comparison.structuralComparison == .advisory && event.tier == .structural
     }

@@ -57,13 +57,15 @@ public final class SeamedManagedObjectContext: NSManagedObjectContext, @unchecke
         try super.save()
     }
 
-    /// Returns a fresh in-memory stack behind a seamed context — the `Spec.provides` resource for a
+    /// Returns a fresh in-memory stack behind a seamed context — the ``Spec/provides`` resource for a
     /// persistence-bearing subject, so probes are isolated and nothing durable leaks between runs.
     ///
     /// - Parameters:
     ///   - model: The subject's own managed-object model. Load it once and reuse it across
     ///     captures — models are process-wide, and re-merging per capture is waste.
     ///   - seams: The capture's context, handed through by the `provides` maker.
+    /// - Returns: A seamed context over a new, empty in-memory store for `model`, shared with no other
+    ///   call.
     /// - Precondition: The in-memory store must load; a model that cannot back a store is a broken
     ///   fixture, not a verdict.
     public static func inMemory(model: NSManagedObjectModel, seams: SeamContext) -> NSManagedObjectContext {

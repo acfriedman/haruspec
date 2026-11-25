@@ -63,8 +63,11 @@ public extension AuditReport {
     /// partition a verdict reads — see `AuditOutcome`.
     ///
     /// - Parameter accepted: Channel names the spec declared as accepted blind spots
-    ///   (`Spec.accepts(uncaptured:)`). A found bypass under a declared name resolves
-    ///   `accepted`; a declared name found nowhere resolves `unmatched`.
+    ///   (``Spec/accepts(uncaptured:)``); a name declared twice counts once.
+    /// - Returns: The partition, each list in first-seen order: a bypass found under a declared name is
+    ///   `accepted` and one under no declared name `bypassed`, a declared name found nowhere is
+    ///   `unmatched`, a held channel no bypass reached is `held`, and a source the audit could not
+    ///   read is `unreadable`.
     func outcome(accepting accepted: [String]) -> AuditOutcome {
         let found = orderedUnique(bypasses.map(\.channel))
         let declared = orderedUnique(accepted)

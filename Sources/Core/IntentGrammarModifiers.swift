@@ -120,8 +120,13 @@ extension DeclarationParser {
 
     // MARK: - Literals
 
-    /// A scalar literal — `"text"`, `11363`, `1.5`, `-2`, `true`, `false`, `null` — exactly the
-    /// spellings `CanonicalValue.dslText` renders.
+    /// Parses the scalar literal at the cursor — `"text"`, `11363`, `1.5`, `-2`, `true`, `false`,
+    /// `null` — in exactly the spellings ``CanonicalValue/dslText`` renders.
+    ///
+    /// - Returns: The literal's value; a whole number that fits `Int64` is `.int`, any other number
+    ///   `.double`.
+    /// - Throws: ``IntentGrammarError`` when the cursor holds no literal: an unterminated string, a
+    ///   malformed number, or a bare word other than `true`, `false`, and `null`.
     mutating func value() throws -> CanonicalValue {
         skipSpaces()
         switch peek() {

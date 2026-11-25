@@ -31,7 +31,12 @@ public enum DomainName: Sendable, Equatable {
         .actor(String(describing: type))
     }
 
-    /// Whether this name matches a recorded domain's description (`Divergence.fromDomain`/`toDomain`).
+    /// Returns whether this name matches a recorded domain's description.
+    ///
+    /// - Parameter description: A recorded domain's description, as a divergence's
+    ///   ``Divergence/fromDomain`` or `toDomain` carries it; `nil` when the divergence has none.
+    /// - Returns: `true` when `description` names this domain, a queue under either ordering
+    ///   discipline and an actor under any instance; `false` for `nil`.
     func matches(_ description: String?) -> Bool {
         guard let description else {
             return false
