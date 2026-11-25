@@ -17,7 +17,9 @@ public struct Coverage: Codable, Sendable, Equatable {
     public enum GapReason: String, Codable, Sendable {
         /// Replay reached the boundary but the recording was exhausted / had no entry, so it fell back
         /// to a *live* read. Isolation broke: the environment was not held identical, so an EQUIVALENT
-        /// here can't be trusted. This is the hard `CANNOT-VERIFY` trigger.
+        /// here can't be trusted.
+        ///
+        /// This is the hard `CANNOT-VERIFY` trigger.
         case unrecorded
         /// A declared boundary the replay never reached this run. Lowers the exercised fraction but is
         /// not a hard trigger — we simply didn't test that path (v1 policy; a fraction threshold is
@@ -44,7 +46,9 @@ public struct Coverage: Codable, Sendable, Equatable {
         /// A covered declaration whose source the audit could not read at all: no file found for the
         /// stamped `#fileID` or the wrapped class. Different fact about the auditor than
         /// `bypassedChannel`, same fact about the verdict — it cannot claim it saw every channel — so
-        /// it fails the same way. The `boundary` names the declaration.
+        /// it fails the same way.
+        ///
+        /// The `boundary` names the declaration.
         case unauditableSource
     }
 
@@ -76,10 +80,19 @@ public struct Coverage: Codable, Sendable, Equatable {
     /// Declared boundaries exercised over a *generated value domain* (property-based breadth), not just
     /// at their single recorded value. **Additive and report-only**: it never relaxes `trustsEquivalent`
     /// (a sampled domain isn't a proof), so it can't manufacture a false `EQUIVALENT` — it strengthens
-    /// the *reported* evidence behind one. Empty for a single-cassette replay (point coverage).
+    /// the *reported* evidence behind one.
+    ///
+    /// Empty for a single-cassette replay (point coverage).
     public var domainExercised: [String]
 
     /// Sorts its inputs so the value is deterministic regardless of how the adapter assembled it.
+    ///
+    /// - Parameters:
+    ///   - declared: The boundaries the harness knew about; empty when the surface is unknown.
+    ///   - exercised: The declared boundaries the replay exercised cleanly.
+    ///   - gaps: The boundaries that aren't covered, each with its reason.
+    ///   - domainExercised: The declared boundaries exercised over a generated value domain; empty for
+    ///     a single-cassette replay.
     public init(declared: [String], exercised: [String], gaps: [Gap], domainExercised: [String] = []) {
         self.declared = declared.sorted()
         self.exercised = exercised.sorted()

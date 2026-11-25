@@ -99,6 +99,14 @@ extension BehavioralDiff {
 
     /// The sequence comparison, scoped to one ordered domain: LCS-align, compare aligned pairs, and
     /// classify equal-signature leftovers as `reordered` — within this bucket order IS the contract.
+    ///
+    /// - Parameters:
+    ///   - baseline: The baseline's events in this domain, in recorded order.
+    ///   - candidate: The candidate's events in this domain, in recorded order.
+    ///   - comparison: The comparison the diff runs under.
+    ///   - scratch: The diff in progress, which receives this domain's divergences.
+    ///   - leftovers: The events no domain paired, which receives this domain's unpaired events for
+    ///     cross-domain reconciliation.
     private static func compareOrderedBucket(
         _ baseline: [TraceEvent],
         _ candidate: [TraceEvent],
@@ -160,6 +168,14 @@ extension BehavioralDiff {
     /// entirely, keep counts exact. Content-identical pairs match first; whatever is left pairs in
     /// recorded order so a genuine value change reads as `valueMismatch` rather than dissolving into
     /// a missing/unexpected pair; a count imbalance spills over for cross-domain reconciliation.
+    ///
+    /// - Parameters:
+    ///   - baseline: The baseline's events in this domain, in recorded order.
+    ///   - candidate: The candidate's events in this domain, in recorded order.
+    ///   - comparison: The comparison the diff runs under.
+    ///   - scratch: The diff in progress, which receives this domain's divergences.
+    ///   - leftovers: The events no domain paired, which receives this domain's unpaired events for
+    ///     cross-domain reconciliation.
     private static func compareUnorderedBucket(
         _ baseline: [TraceEvent],
         _ candidate: [TraceEvent],
@@ -215,9 +231,14 @@ extension BehavioralDiff {
 
     // MARK: - Across domains
 
-    /// Pair bucket leftovers by signature-minus-domain (`domainMigration`, values still the
-    /// contract), classify the rest as missing/unexpected, and report each migration out of an
+    /// Pairs bucket leftovers by signature-minus-domain (`domainMigration`, values still the
+    /// contract), classifies the rest as missing/unexpected, and reports each migration out of an
     /// ordered domain into an unordered one as a single `orderingRelaxed` per domain pair.
+    ///
+    /// - Parameters:
+    ///   - leftovers: The events no domain bucket paired, from both sides.
+    ///   - comparison: The comparison the diff runs under.
+    ///   - scratch: The diff in progress, which receives the divergences found here.
     private static func reconcileAcrossDomains(
         _ leftovers: Leftovers,
         comparison: Comparison,
@@ -284,6 +305,13 @@ extension BehavioralDiff {
 
     /// Whether two events' payloads are indistinguishable under the comparison — the multiset
     /// matching predicate, with numbers within its epsilon counting as equal.
+    ///
+    /// - Parameters:
+    ///   - baseline: The baseline-side event.
+    ///   - candidate: The candidate-side event.
+    ///   - comparison: The comparison the diff runs under.
+    /// - Returns: `true` when the payloads differ nowhere beyond the comparison's tolerances, a missing
+    ///   payload reading as null.
     static func payloadsMatch(_ baseline: TraceEvent, _ candidate: TraceEvent, comparison: Comparison) -> Bool {
         valueDivergences(baseline.payload ?? .null, candidate.payload ?? .null, path: "", comparison: comparison)
             .isEmpty
@@ -291,6 +319,13 @@ extension BehavioralDiff {
 
     /// One migrated pair: the move disclosed once, the values still compared — and when the move left
     /// an ordered domain for an unordered one, tallied toward that pair's `orderingRelaxed`.
+    ///
+    /// - Parameters:
+    ///   - event: The baseline event that moved.
+    ///   - counterpart: The candidate event it moved to, in another domain.
+    ///   - comparison: The comparison the diff runs under.
+    ///   - scratch: The diff in progress, which receives the migration and any value divergences.
+    ///   - relaxations: The ordered-to-unordered migrations tallied so far, by domain pair.
     private static func recordMigration(
         _ event: TraceEvent,
         _ counterpart: TraceEvent,

@@ -19,6 +19,11 @@ public enum HTML {
 
     /// Wraps pre-built section strings in the full self-contained document (doctype, head, inline CSS,
     /// `<main>`, footer). This is the only place the skeleton and stylesheet live.
+    ///
+    /// - Parameters:
+    ///   - title: The page title, as plain text rather than HTML.
+    ///   - sections: Rendered HTML sections, in page order; an empty string adds nothing.
+    /// - Returns: A complete HTML document, its styles inline, that opens on its own over `file://`.
     public static func page(title: String, sections: [String]) -> String {
         """
         <!doctype html>
@@ -47,6 +52,13 @@ public enum HTML {
     // MARK: - Hero
 
     /// The verdict banner hero: four-tier banner, colored left border, and `baseline → candidate` chips.
+    ///
+    /// - Parameters:
+    ///   - verdict: The verdict the hero announces.
+    ///   - title: The heading, such as the spec or candidate name, as plain text.
+    ///   - baseline: The baseline's name, as plain text.
+    ///   - candidate: The candidate's name, as plain text.
+    /// - Returns: The hero's HTML.
     public static func hero(
         _ verdict: TraceDiff.Verdict,
         title: String,
@@ -67,15 +79,24 @@ public enum HTML {
 
     // MARK: - Stat tiles
 
-    /// A responsive row of stat tiles. Pass tiles built with `tile(...)`.
+    /// A responsive row of stat tiles.
+    ///
+    /// - Parameter tiles: Tile HTML as ``tile(label:value:accent:mono:)`` returns it, in display order.
+    /// - Returns: The row's HTML.
     public static func statSection(_ tiles: [String]) -> String {
         let kept = tiles.filter { !$0.isEmpty }
         guard !kept.isEmpty else { return "" }
         return "<section class=\"stats\">\(kept.joined())</section>"
     }
 
-    /// One stat tile. `accent` is `"ok"` / `"bad"` / `"warn"` (or `nil` for neutral); `mono` for values
-    /// that read better in a monospaced font (e.g. seam values).
+    /// One stat tile.
+    ///
+    /// - Parameters:
+    ///   - label: The tile's caption, as plain text.
+    ///   - value: The tile's value, as plain text.
+    ///   - accent: The color class, `"ok"`, `"bad"`, or `"warn"`; `nil` for neutral.
+    ///   - mono: Whether the value reads better in a monospaced font, as seam values do.
+    /// - Returns: The tile's HTML.
     public static func tile(label: String, value: String, accent: String? = nil, mono: Bool = false) -> String {
         let cls = ["tile", accent.map { "t-\($0)" } ?? ""].filter { !$0.isEmpty }.joined(separator: " ")
         let vcls = mono ? "tv mono" : "tv"
@@ -87,6 +108,12 @@ public enum HTML {
 
     /// The headline artifact for a shrunk divergence: the minimal failing seam values + call order, called
     /// out up top. Empty when there is nothing to show (no varied seams and no explored ordering).
+    ///
+    /// - Parameters:
+    ///   - seams: The varied seams' minimal failing values, each key with its rendered value, in display
+    ///     order.
+    ///   - order: The minimal failing call order as op labels; `nil` when no ordering was explored.
+    /// - Returns: The section's HTML; empty when `seams` and `order` are both empty.
     public static func counterexampleSection(seams: [(key: String, value: String)], order: [String]?) -> String {
         let hasSeams = !seams.isEmpty
         let hasOrder = !(order ?? []).isEmpty
@@ -139,6 +166,11 @@ public enum HTML {
     }
 
     /// The clean "matched across everything explored" panel for an EQUIVALENT verdict.
+    ///
+    /// - Parameters:
+    ///   - summary: The panel's headline, as plain text.
+    ///   - detail: The sentence beneath it, as plain text.
+    /// - Returns: The panel's HTML.
     public static func cleanSection(summary: String, detail: String) -> String {
         """
         <section class="clean">
@@ -152,6 +184,9 @@ public enum HTML {
     /// The qualification block — what the verdict rests on, one labelled row per axis. The HTML twin
     /// of the markdown block: both render the same entries, so the sticky comment and the artifact
     /// can't drift apart.
+    ///
+    /// - Parameter entries: One row per axis, its label and value as plain text, in display order.
+    /// - Returns: The section's HTML.
     public static func qualificationSection(_ entries: [(label: String, value: String)]) -> String {
         let rows = entries.map { entry in
             "<div class=\"qual-row\"><span class=\"qual-label\">\(esc(entry.label))</span>"
@@ -162,6 +197,9 @@ public enum HTML {
     }
 
     /// The CANNOT-VERIFY abstention panel — the oracle refusing to certify a parity it couldn't isolate.
+    ///
+    /// - Parameter reason: Why the oracle could not isolate the change, as a plain-text sentence.
+    /// - Returns: The panel's HTML.
     public static func abstentionSection(reason: String) -> String {
         """
         <section class="abstain">
@@ -201,6 +239,12 @@ public enum HTML {
     }
 
     /// A baseline-vs-candidate value panel, with a numeric delta when both sides parse as numbers.
+    ///
+    /// - Parameters:
+    ///   - field: The path of the value that changed, as plain text.
+    ///   - baseline: The baseline's value, as rendered text.
+    ///   - candidate: The candidate's value, as rendered text.
+    /// - Returns: The panel's HTML, with a signed delta when both values parse as numbers.
     private static func valueDiff(field: String, baseline: String, candidate: String) -> String {
         var delta = ""
         if let baseNumber = Double(baseline), let candidateNumber = Double(candidate) {
@@ -254,6 +298,9 @@ public enum HTML {
     // MARK: - Verdict vocabulary (the single HTML copy of it)
 
     /// The four-tier banner glyph + label.
+    ///
+    /// - Parameter verdict: The verdict to name.
+    /// - Returns: The verdict's glyph and upper-case label, such as `✅ EQUIVALENT`.
     public static func banner(_ verdict: TraceDiff.Verdict) -> String {
         switch verdict {
         case .equivalent: "✅ EQUIVALENT"
@@ -264,6 +311,9 @@ public enum HTML {
     }
 
     /// The short human verdict for a stat tile.
+    ///
+    /// - Parameter verdict: The verdict to name.
+    /// - Returns: The verdict in sentence case, such as `Cannot verify`.
     public static func shortVerdict(_ verdict: TraceDiff.Verdict) -> String {
         switch verdict {
         case .equivalent: "Equivalent"
@@ -274,6 +324,9 @@ public enum HTML {
     }
 
     /// The CSS accent class (`ok` / `bad` / `warn`) for a verdict.
+    ///
+    /// - Parameter verdict: The verdict to color.
+    /// - Returns: `ok` for equivalent, `bad` for diverged, and `warn` for cannot-verify and unstable.
     public static func accent(_ verdict: TraceDiff.Verdict) -> String {
         switch verdict {
         case .equivalent: "ok"
@@ -431,6 +484,9 @@ public enum HTML {
 public extension HTML {
     /// The dead-declaration panel: declared intent the whole sweep never observed.
     ///
+    /// - Parameter declarations: The dead declarations, by DSL spelling.
+    /// - Returns: The panel's HTML; empty when `declarations` is.
+    ///
     /// Styled like the abstention panel deliberately — it is the same species of fact: the gate
     /// does not pass, for a reason no divergence card shows.
     static func unobservedIntentSection(_ declarations: [String]) -> String {
@@ -494,6 +550,8 @@ public extension TraceDiff {
 public extension VerificationResult {
     /// A self-contained, themeable HTML rendering of the replay-driven verification — the diff page plus a
     /// coverage panel, since an EQUIVALENT verdict is only as strong as the surface it was measured over.
+    ///
+    /// - Returns: A complete HTML document, its styles inline, that opens on its own over `file://`.
     func htmlReport() -> String {
         var tiles = diff.statTiles
         if let fraction = coverage.fraction {
@@ -577,13 +635,21 @@ public protocol HTMLReporting {
 public extension HTMLReporting {
     /// Renders and writes the report to an exact URL, throwing on failure. For callers that own the
     /// destination (e.g. the CLI's `--html <path>`).
+    ///
+    /// - Parameter url: The file URL to write; a file already there is replaced.
+    /// - Throws: The file-system error when the file cannot be written.
     func writeHTMLReport(to url: URL) throws {
         try htmlReport().write(to: url, atomically: true, encoding: .utf8)
     }
 
-    /// Renders and writes the report to `directory/<name>.html`, creating the directory if needed. Defaults
-    /// to a `HaruspecReports` folder under the system temp dir. Returns the written file's URL, or `nil` on
-    /// failure — the "just give me a path I can open" convenience for tests and dev tooling.
+    /// Renders and writes the report to `directory/<name>.html`, creating the directory if needed. It is
+    /// the "just give me a path I can open" convenience for tests and dev tooling.
+    ///
+    /// - Parameters:
+    ///   - name: The file name, without the `.html` extension.
+    ///   - directory: The folder to write into; `nil` uses a `HaruspecReports` folder under the system
+    ///     temporary directory.
+    /// - Returns: The written file's URL, or `nil` when the folder or the file could not be written.
     @discardableResult
     func writeHTMLReport(named name: String, in directory: URL? = nil) -> URL? {
         let dir = directory

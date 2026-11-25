@@ -15,6 +15,9 @@ public extension TraceDiff {
     }
 
     /// The four-tier banner glyph + label.
+    ///
+    /// - Parameter verdict: The verdict to name.
+    /// - Returns: The verdict's glyph and upper-case label, such as `✅ EQUIVALENT`.
     static func banner(_ verdict: Verdict) -> String {
         switch verdict {
         case .equivalent: "✅ EQUIVALENT"
@@ -27,7 +30,8 @@ public extension TraceDiff {
     /// The `⚠︎ declared but not observed` block — rendered by every textual surface, so a dead
     /// declaration is named wherever the verdict is read.
     ///
-    /// Empty in parity mode or when every declaration matched.
+    /// - Returns: The block's lines, a header and then one indented line per dead declaration; empty in
+    ///   parity mode or when every declaration matched.
     func unobservedIntentLines() -> [String] {
         guard !unobservedIntent.isEmpty else {
             return []
@@ -101,7 +105,12 @@ public extension TraceDiff {
 
     /// A prompt-injected relay guide for a consuming agent (printed behind `--agent`). When the CLI
     /// is the agent's interface, the output itself teaches the agent how to communicate this
-    /// ground-truth verdict to a human. Not meant for human eyes.
+    /// ground-truth verdict to a human.
+    ///
+    /// - Returns: The guide as plain text: the gate, the intended and collateral counts and how to relay
+    ///   each, and a merge guard while collateral changes or dead declarations remain.
+    ///
+    /// Not meant for human eyes.
     func agentBrief() -> String {
         let gate = verdict == .equivalent && unobservedIntent.isEmpty ? "PASS" : "FAIL"
         var mergeGuard = collateralCount > 0
@@ -128,6 +137,9 @@ public extension TraceDiff {
     }
 
     /// Machine-readable form for tooling / MCP callers.
+    ///
+    /// - Returns: The diff as pretty-printed JSON with sorted keys.
+    /// - Throws: The `EncodingError` the encoder throws when the diff cannot be encoded as JSON.
     func jsonData() throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]

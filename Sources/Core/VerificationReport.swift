@@ -20,6 +20,10 @@ public extension VerificationResult {
     /// A prompt-injected relay guide for a consuming agent (printed behind `--agent`). Teaches the agent
     /// to relay `CANNOT-VERIFY` as an *abstention* — never a pass — which is the whole point of the
     /// third tier: the oracle refuses to confirm parity it couldn't isolate.
+    ///
+    /// - Returns: The guide as plain text: the gate and the coverage, then either how to relay an
+    ///   abstention or the intended and collateral counts, with a merge guard while collateral changes
+    ///   remain.
     func agentBrief() -> String {
         let gate = switch verdict {
         case .equivalent: "PASS"
@@ -62,6 +66,9 @@ public extension VerificationResult {
     }
 
     /// Machine-readable form for tooling / MCP callers: the diff, the coverage, and the resolved verdict.
+    ///
+    /// - Returns: The result as pretty-printed JSON with sorted keys.
+    /// - Throws: The `EncodingError` the encoder throws when the result cannot be encoded as JSON.
     func jsonData() throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]

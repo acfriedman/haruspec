@@ -47,7 +47,9 @@ public struct Divergence: Codable, Sendable, Equatable {
     /// under `structuralComparison == .advisory`).
     public var isAdvisory: Bool
     /// Whether the change *declared* this divergence. Defaults to `.collateral`; the intent classifier
-    /// promotes declared ones to `.intended`. Parity mode leaves everything `.collateral`.
+    /// promotes declared ones to `.intended`.
+    ///
+    /// Parity mode leaves everything `.collateral`.
     public var classification: DivergenceClass
     /// The declarations (by DSL spelling) that named this divergence's kind and label but whose
     /// modifier rejected it — a `.once(per:)` that saw two, an `.increases()` that saw a drop.
@@ -225,6 +227,13 @@ public enum BehavioralDiff {
 
     /// The `.totalOrder` comparison: one LCS over the whole interleaving, then reconciliation of
     /// whatever failed to align — steps 2–4 of the pipeline documented on `BehavioralDiff`.
+    ///
+    /// - Parameters:
+    ///   - baseline: The baseline's events, in recorded order.
+    ///   - candidate: The candidate's events, in recorded order.
+    ///   - comparison: The comparison the diff runs under.
+    ///   - advisory: The predicate that says whether an event is reported without gating.
+    ///   - scratch: The diff in progress, which receives this comparison's divergences.
     private static func compareTotalOrder(
         baseline: [TraceEvent],
         candidate: [TraceEvent],

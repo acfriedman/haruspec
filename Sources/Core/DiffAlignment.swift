@@ -33,6 +33,12 @@ extension BehavioralDiff {
     /// Everything the LCS could not align: an event that moved, one that changed isolation domain, and
     /// the genuine absences left over. Split out of `compare` so that pipeline stays readable — the
     /// classification rules here are the fiddly part and deserve their own frame.
+    ///
+    /// - Parameters:
+    ///   - alignment: Both sides' events, their signatures, and the indices the LCS aligned.
+    ///   - comparison: The comparison the diff runs under.
+    ///   - advisory: The predicate that says whether an event is reported without gating.
+    ///   - scratch: The diff in progress, which receives the divergences found here.
     static func reconcileUnmatched(
         _ alignment: Alignment,
         comparison: Comparison,
@@ -199,6 +205,12 @@ extension BehavioralDiff {
     }
 
     /// Classic O(n·m) LCS, returning the aligned index pairs in increasing order.
+    ///
+    /// - Parameters:
+    ///   - first: The sequence whose indices come first in each pair.
+    ///   - second: The sequence whose indices come second in each pair.
+    /// - Returns: The index pairs of one longest common subsequence, increasing in both indices; empty
+    ///   when either sequence is.
     static func longestCommonSubsequence<T: Equatable>(_ first: [T], _ second: [T]) -> [(Int, Int)] {
         let firstCount = first.count, secondCount = second.count
         guard firstCount > 0, secondCount > 0 else { return [] }

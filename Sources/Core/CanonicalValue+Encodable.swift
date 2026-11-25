@@ -9,6 +9,10 @@ import Foundation
 public extension CanonicalValue {
     /// Encodes through JSON and re-reads as a `CanonicalValue`.
     ///
+    /// - Parameter value: Any encodable value, a bare scalar included.
+    /// - Throws: The error `JSONEncoder` throws when `value` cannot be encoded as JSON, such as a
+    ///   non-finite floating-point number or an ``Swift/Encodable/encode(to:)`` that throws.
+    ///
     /// The value is wrapped in a single-element array before encoding so top-level scalars (e.g. a
     /// bare `Int`) are always valid JSON, then unwrapped — `CanonicalValue`'s own `Decodable` does
     /// the structural conversion.
@@ -20,6 +24,9 @@ public extension CanonicalValue {
 
     /// Non-throwing convenience: returns `nil` if the value can't be encoded, so call sites can fall
     /// back without a `do/catch`.
+    ///
+    /// - Parameter value: The value to encode; `nil` encodes to `nil`.
+    /// - Returns: The canonical value; `nil` when `value` is `nil` or cannot be encoded.
     static func encoding(_ value: (some Encodable)?) -> CanonicalValue? {
         guard let value else { return nil }
         return try? CanonicalValue(encoding: value)

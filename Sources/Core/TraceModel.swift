@@ -102,8 +102,10 @@ public enum ConcurrencyDomain: Sendable, Equatable, Hashable, CustomStringConver
     }
 
     /// Whether events in this domain have a meaningful relative order. `main`, an actor, and a serial
-    /// queue give mutual exclusion, so their order is a runtime guarantee. A concurrent queue's order
-    /// is whichever block finished first, and `ambient` has no single context to be ordered within.
+    /// queue give mutual exclusion, so their order is a runtime guarantee.
+    ///
+    /// A concurrent queue's order is whichever block finished first, and `ambient` has no single
+    /// context to be ordered within.
     public var isOrdered: Bool {
         switch self {
         case .main, .actor: true
@@ -280,6 +282,8 @@ extension Trace: Codable {}
 
 public extension Trace {
     /// Deterministic on-disk form: sorted keys + stable formatting so golden files diff cleanly in git.
+    ///
+    /// - Returns: A new JSON encoder with sorted keys, pretty printing, and unescaped slashes.
     static func canonicalEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted, .withoutEscapingSlashes]
