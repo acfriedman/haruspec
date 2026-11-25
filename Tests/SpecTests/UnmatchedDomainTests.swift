@@ -7,8 +7,10 @@ import XCTest
 /// but a seam the SUT reaches rather than the spec passes — a clock, an RNG, a `UserDefaults` key, a
 /// file path — is still named by a string, and the name is one the author didn't define: `SeamClock`
 /// defaults to `"clock"` inside its own initializer, `SeamFileSystem` composes `"fs.read:<path>"` at
-/// runtime. Getting it wrong produced a green banner over a spec that swept nothing, and claimed the
-/// full seam-variant count while generating identical cassettes.
+/// runtime.
+///
+/// Getting it wrong produced a green banner over a spec that swept nothing, and claimed the full
+/// seam-variant count while generating identical cassettes.
 final class UnmatchedDomainTests: XCTestCase {
     func testADomainNothingReadsCannotBeVerifiedOver() async {
         let verdict = await spec("unmatched.typo", varying: "qtyy").verify(candidate: makeRefactor)

@@ -46,7 +46,11 @@ final class SeamReplayTests: XCTestCase {
         )
     }
 
-    /// Same seams and inputs, *different logic* (doubles each random draw) — a code change.
+    /// Returns the output of the same seams and inputs under *different logic* (doubles each random
+    /// draw) — a code change.
+    ///
+    /// - Parameter cassette: The cassette the seams replay from or record to.
+    /// - Returns: The clock reading, three doubled random draws, and the `region` default, in that order.
     private func fingerprintChanged(_ cassette: Cassette) -> [CanonicalValue] {
         let clock = SeamClock(cassette: cassette)
         var rng = SeamRNG(cassette: cassette)
@@ -68,7 +72,11 @@ final class SeamReplayTests: XCTestCase {
         XCTAssertEqual(fingerprint(Cassette(replaying: reloaded)), golden)
     }
 
-    /// A stand-in for production code that reads three seams and produces an observable output.
+    /// Returns the observable output of a stand-in for production code that reads three seams.
+    ///
+    /// - Parameter cassette: The cassette the seams replay from or record to.
+    /// - Returns: The clock reading, three random draws in `0 ..< 1_000_000`, and the `region` default,
+    ///   in that order.
     private func fingerprint(_ cassette: Cassette) -> [CanonicalValue] {
         let clock = SeamClock(cassette: cassette)
         var rng = SeamRNG(cassette: cassette)

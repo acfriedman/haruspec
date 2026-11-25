@@ -35,7 +35,13 @@ private final class TopOfRangeBugCart: PromoCart {
 }
 
 final class ExplorationTests: XCTestCase {
-    /// Five ops, four of them repeatable — a space far larger than any cap, so sampling is in play.
+    /// Returns a spec of five ops, four of them repeatable — a space far larger than any cap, so sampling
+    /// is in play.
+    ///
+    /// - Parameters:
+    ///   - budget: The most runs the spec may spend; `nil` for no declared budget.
+    ///   - orderingMax: The most orderings the spec may explore.
+    /// - Returns: The spec, varying `coffeeQty` over `1 ... 20`.
     private func wideSpec(budget: Int? = nil, orderingMax: Int = 100) -> Spec<PromoCart> {
         var spec = Spec<PromoCart>("promo-cart.exploration")
             .operations {

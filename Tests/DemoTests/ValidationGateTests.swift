@@ -8,7 +8,9 @@ import XCTest
 final class ValidationGateTests: XCTestCase {
     /// Determinism, the hard research question: two independent captures of the *same* code are
     /// identical under strict diffing. The receipt's order ID and timestamp are injected and held
-    /// still, so nothing is left to set aside. If this fails, the whole thesis wobbles.
+    /// still, so nothing is left to set aside.
+    ///
+    /// If this fails, the whole thesis wobbles.
     func testCaptureIsDeterministicUnderStrictComparison() {
         let strict = BehavioralDiff.compare(baseline: CheckoutSpec.baseline(), candidate: CheckoutSpec.baseline())
         XCTAssertTrue(strict.isEquivalent, "two captures of the same code must agree exactly\n\(strict.report())")

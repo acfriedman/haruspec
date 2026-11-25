@@ -103,7 +103,10 @@ final class ResourceDefaultTests: XCTestCase {
             }
     }
 
-    /// Builds the baseline, handing `resolved` each pad the capture resolves.
+    /// Returns the baseline factory, handing `resolved` each pad the capture resolves.
+    ///
+    /// - Parameter resolved: The sink for each resolved pad.
+    /// - Returns: A factory that builds a `PadUser` on the seam context's resolved `ScratchPad`.
     private func padUser(collecting resolved: @escaping (ScratchPad) -> Void) -> (SeamContext) -> PadUser {
         { seams in
             let user = PadUser(pad: seams.resolve(ScratchPad.self))

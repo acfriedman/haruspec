@@ -96,8 +96,11 @@ final class StabilityTests: XCTestCase {
         await spec { SteadySubject(center: $0.notifications) }.record()
     }
 
-    /// One probe, no exploration: each replay pass is exactly one capture, so the drift counter maps
-    /// 1:1 onto passes and the expected outcome grouping is exact.
+    /// Returns a spec of one probe and no exploration: each replay pass is exactly one capture, so the
+    /// drift counter maps 1:1 onto passes and the expected outcome grouping is exact.
+    ///
+    /// - Parameter system: Builds the baseline subject from a seam context.
+    /// - Returns: The `stability.subject` spec, baselined on `system`.
     private func spec(system: @escaping (SeamContext) -> Totaling) -> BaselinedSpec<Totaling> {
         Spec<Totaling>("stability.subject")
             .operations {

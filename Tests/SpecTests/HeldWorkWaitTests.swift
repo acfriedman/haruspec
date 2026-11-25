@@ -50,7 +50,9 @@ final class WaitingCatalog: Catalog, @unchecked Sendable {
         }
     }
 
-    /// The everyday async bridge over a queue.
+    /// Returns a count through the everyday async bridge over a queue.
+    ///
+    /// - Returns: 42, once the queue has run the work.
     func fetch() async -> Int {
         await withCheckedContinuation { continuation in
             queue.async { continuation.resume(returning: 42) }
@@ -62,7 +64,9 @@ final class WaitingCatalog: Catalog, @unchecked Sendable {
         queue.async { [center] in center.post(name: .init("CatalogPrefetched"), object: nil) }
     }
 
-    /// A semaphore waiting for queued work to signal it.
+    /// Returns a count through a semaphore waiting for queued work to signal it.
+    ///
+    /// - Returns: 42, set by the queued work before it signals.
     func load() -> Int {
         let loaded = DispatchSemaphore(value: 0)
         nonisolated(unsafe) var count = 0
@@ -137,6 +141,11 @@ final class HeldWorkWaitTests: XCTestCase {
     }
 
     /// Runs one capture of `operation`, returning each stall message the watchdog reported.
+    ///
+    /// - Parameters:
+    ///   - label: The label the op is declared under.
+    ///   - operation: The op's body, given the catalog under capture.
+    /// - Returns: The stall messages the watchdog reported; empty when nothing stalled.
     private func stalls(_ label: String, _ operation: @escaping (any Catalog) async -> Void) async -> [String] {
         let box = Box()
         let spec = Spec<any Catalog>("catalog.waits").operations { Op(label) { await operation($0) } }

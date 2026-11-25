@@ -31,6 +31,9 @@ private final class NoteStore {
     }
 
     /// Returns whether the save reached the store.
+    ///
+    /// - Parameter text: The note text the new row carries.
+    /// - Returns: `true` when the context saved the row, `false` when the save threw.
     @discardableResult
     func cache(_ text: String) -> Bool {
         let context = context
@@ -47,6 +50,8 @@ private final class NoteStore {
     }
 
     /// Returns the number of saved rows a fetch sees.
+    ///
+    /// - Returns: The count of `Note` rows; `-1` when the count fetch throws.
     func count() -> Int {
         let context = context
         return context.performAndWait {

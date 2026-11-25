@@ -177,7 +177,14 @@ final class DiffTests: XCTestCase {
         Trace(name: name, events: events)
     }
 
-    /// Small builders for readability.
+    /// Returns a call event, a small builder for readability.
+    ///
+    /// - Parameters:
+    ///   - seq: The event's position in the trace.
+    ///   - label: The called member's label.
+    ///   - payload: The call's arguments; `nil` for none.
+    ///   - subject: The instance the call was made on; `nil` for a static or free function.
+    /// - Returns: A `.call` event carrying these fields.
     private func call(
         _ seq: Int,
         _ label: String,

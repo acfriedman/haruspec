@@ -8,9 +8,11 @@ import XCTest
 /// implementations, with the cart quantity sourced from a seam — the realistic case where an input
 /// arrives from a nondeterministic boundary (user entry / remote config). The Buggy variant's
 /// `discount = subtotal / 10` (integer truncation) vs the baseline's rounded 10% is a *value-dependent*
-/// off-by-one: benign when the subtotal is a multiple of 10, wrong otherwise. A single recorded cassette
-/// whose quantity yields a clean subtotal calls it EQUIVALENT; property gen over the quantity domain
-/// finds the value that bites. Prints the reports an LLM / CLI caller would surface.
+/// off-by-one: benign when the subtotal is a multiple of 10, wrong otherwise.
+///
+/// A single recorded cassette whose quantity yields a clean subtotal calls it EQUIVALENT; property gen
+/// over the quantity domain finds the value that bites. Prints the reports an LLM / CLI caller would
+/// surface.
 final class PropertyShowcaseTests: XCTestCase {
     func testPropertyGenerationOnRealCartServices() throws {
         let buggy = property(candidateName: "cartservice.buggy") { CartServiceBuggy(center: $0, issuer: .fixed()) }
@@ -46,8 +48,13 @@ final class PropertyShowcaseTests: XCTestCase {
         print("=== SHOWCASE END ===")
     }
 
-    /// A differential property: baseline = V1, candidate = `makeCandidate`. Golden records coffeeQty = 10
-    /// → subtotal 9990 (a multiple of 10), where the truncation bug is benign.
+    /// Returns a differential property: baseline = V1, candidate = `makeCandidate`. Golden records
+    /// coffeeQty = 10 → subtotal 9990 (a multiple of 10), where the truncation bug is benign.
+    ///
+    /// - Parameters:
+    ///   - candidateName: The name of the candidate's traces.
+    ///   - makeCandidate: Builds the candidate `CartService`, given the notification center it posts to.
+    /// - Returns: A property whose golden cassette is one V1 capture.
     private func property(
         candidateName: String,
         _ makeCandidate: @escaping (NotificationCenter) -> CartService
@@ -64,7 +71,14 @@ final class PropertyShowcaseTests: XCTestCase {
         }
     }
 
-    /// Drive a real `CartService`: unit price 999¢, quantity from the `coffeeQty` seam, promo applied.
+    /// Drives a real `CartService`: unit price 999¢, quantity from the `coffeeQty` seam, promo applied.
+    ///
+    /// - Parameters:
+    ///   - name: The trace's name.
+    ///   - cassette: The cassette the `coffeeQty` seam replays from or records to.
+    ///   - make: Builds the `CartService` under test, given the notification center it posts to.
+    /// - Returns: The trace of the add, promo, and checkout.
+    ///
     /// (No `removeItem`, so the isolated signal is the rounding off-by-one — not the dropped notification
     /// the fixed-spec demo already catches.)
     private func capture(

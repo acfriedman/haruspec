@@ -75,8 +75,11 @@ private final class GreedySeamCart: PromoCart {
 }
 
 final class SpecPlanTests: XCTestCase {
-    /// The authored spec — identical source on the "base" and "branch" side, as it would be in git.
-    /// Only the factory differs per test, standing in for what a checkout does to the code under it.
+    /// Returns the authored spec — identical source on the "base" and "branch" side, as it would be in
+    /// git. Only the factory differs per test, standing in for what a checkout does to the code under it.
+    ///
+    /// - Parameter system: Builds the baseline cart from a seam context.
+    /// - Returns: The `promo-cart.plan` spec, baselined on `system`.
     private func cart(system: @escaping (SeamContext) -> PromoCart) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.plan")
             .operations {

@@ -5,8 +5,13 @@ import HaruspecSpec
 import XCTest
 
 final class QualificationTests: XCTestCase {
-    /// The serialization tests' cart, with the promo op renameable so a replay can be driven into
-    /// the abstain tier (a plan op this build no longer declares).
+    /// Returns the serialization tests' cart, with the promo op renameable so a replay can be driven
+    /// into the abstain tier (a plan op this build no longer declares).
+    ///
+    /// - Parameters:
+    ///   - system: Builds the baseline cart from a seam context.
+    ///   - promoLabel: The label the promo op is declared under.
+    /// - Returns: The `promo-cart.qualification` spec, baselined on `system`.
     private func cart(
         system: @escaping (SeamContext) -> PromoCart,
         promoLabel: String = "promo"

@@ -73,7 +73,12 @@ final class TraceOriginTests: XCTestCase {
         XCTAssertEqual(second.map(\.symbol), ["CartManager"])
     }
 
-    /// Build the recorder *inside* the binding: it picks the collector up at init, so a capture that
+    /// Returns the trace origins collected while `body` records into a fresh recorder.
+    ///
+    /// - Parameter body: The instrumented work, given the recorder it records into.
+    /// - Returns: The origins reported while `body` ran; empty when nothing reported one.
+    ///
+    /// The recorder is built *inside* the binding: it picks the collector up at init, so a capture that
     /// starts outside a verification contributes nothing rather than leaking into the last one.
     private func collect(_ body: (TraceRecorder) -> Void) -> [TraceOrigin] {
         let collector = OriginCollector()

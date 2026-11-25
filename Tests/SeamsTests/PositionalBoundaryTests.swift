@@ -4,13 +4,21 @@
 import XCTest
 
 /// Per-position boundary pinning. The defect these pin: an edge was applied to a seam's whole *track*,
-/// so an op applied three times took the same value at all three readings. Two things went wrong with
-/// that. A basket built by one repeated `add` could never be mixed while edges were being covered — it
-/// was three of the same SKU — so mixed baskets survived only in the random tail. And an edge changed
-/// meaning: `quantity = 20` intended as "one line at max" said "every line at max", which can trip a
-/// cart-wide cap and report a divergence that has nothing to do with the edge it aimed at.
+/// so an op applied three times took the same value at all three readings.
+///
+/// Two things went wrong with that. A basket built by one repeated `add` could never be mixed while
+/// edges were being covered — it was three of the same SKU — so mixed baskets survived only in the
+/// random tail. And an edge changed meaning: `quantity = 20` intended as "one line at max" said "every
+/// line at max", which can trip a cart-wide cap and report a divergence that has nothing to do with the
+/// edge it aimed at.
 final class PositionalBoundaryTests: XCTestCase {
-    /// A golden template: one track per seam, `readings` values each (an op applied that many times).
+    /// Returns a golden template: one track per seam, `readings` values each (an op applied that many
+    /// times).
+    ///
+    /// - Parameters:
+    ///   - seams: The value each seam reads, keyed by seam name.
+    ///   - readings: How many readings each track holds; at least zero.
+    /// - Returns: Cassette data whose track for each seam repeats its value `readings` times.
     private func golden(_ seams: [String: Int64], readings: Int) -> CassetteData {
         CassetteData(tracks: seams.mapValues { Array(repeating: CanonicalValue.int($0), count: readings) })
     }
@@ -167,9 +175,16 @@ final class PositionalBoundaryTests: XCTestCase {
         XCTAssertGreaterThan(track.last ?? 0, 100, "the second reading is what separates the branches")
     }
 
-    /// Reads `qty` twice; the branches differ only when the *second* reading is extreme. The first
-    /// reading is therefore irrelevant, and a counterexample that still carries it is a lead, not a
-    /// reproduction.
+    /// Returns the trace of a cart that reads `qty` twice and posts the sum; the branches differ only
+    /// when the *second* reading is extreme.
+    ///
+    /// - Parameters:
+    ///   - cassette: The cassette the `qty` seam replays from or records to.
+    ///   - clamp: Whether this is the branch that caps the second reading at 100.
+    /// - Returns: The trace holding one `CartTotal` notification.
+    ///
+    /// The first reading is therefore irrelevant, and a counterexample that still carries it is a lead,
+    /// not a reproduction.
     private func runTwoAdds(cassette: Cassette, clamp: Bool) -> Trace {
         let recorder = TraceRecorder(name: "cart", clock: ManualClock())
         let center = RecordingNotificationCenter()

@@ -74,7 +74,13 @@ final class HTMLReportTests: XCTestCase {
         XCTAssertTrue(html.contains("2/2"))
     }
 
-    /// No page produced anywhere may reference a remote asset — that's what makes it openable offline.
+    /// Asserts that `html` is a full document with inlined CSS and no remote asset reference. No page
+    /// produced anywhere may reference a remote asset — that's what makes it openable offline.
+    ///
+    /// - Parameters:
+    ///   - html: The rendered HTML report.
+    ///   - file: The file of the calling assertion, defaulted at the call site.
+    ///   - line: The line of the calling assertion, defaulted at the call site.
     private func assertSelfContained(_ html: String, file: StaticString = #filePath, line: UInt = #line) {
         for needle in ["http://", "https://", "src=", "//cdn", "url("] {
             XCTAssertFalse(

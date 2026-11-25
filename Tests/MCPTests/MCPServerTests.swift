@@ -102,7 +102,11 @@ final class MCPServerTests: XCTestCase {
         XCTAssertTrue(text(of: result).contains("Cart.checkout"))
     }
 
-    /// Two tiny traces on disk: a golden, an identical copy, and a diverging candidate.
+    /// Writes tiny traces to a fresh temporary directory: a golden, an identical copy, and a diverging
+    /// candidate.
+    ///
+    /// - Returns: The file URL of each trace; the directory is removed at teardown.
+    /// - Throws: The file-system error when creating the directory or writing a trace fails.
     private func writeTraces() throws -> (golden: URL, same: URL, diverged: URL) {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("mcp-traces-\(UUID().uuidString)", isDirectory: true)
@@ -186,7 +190,12 @@ final class MCPServerTests: XCTestCase {
         XCTAssertEqual(refused["isError"] as? Bool, true, "an unparseable line never reaches the doc")
     }
 
-    /// A scratch git repository on branch `feature/points`; `configured` adds `.haruspec/config.json`.
+    /// Creates a scratch git repository on branch `feature/points`, removed at teardown.
+    ///
+    /// - Parameter configured: Whether the repository carries a `.haruspec/config.json`.
+    /// - Returns: The repository's root directory.
+    /// - Throws: The error `Process` throws when `git` cannot launch, or the file-system error when
+    ///   creating the directory or writing the config fails.
     private func scratchRepository(configured: Bool) throws -> URL {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("mcp-local-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

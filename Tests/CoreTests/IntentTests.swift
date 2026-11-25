@@ -51,7 +51,14 @@ final class IntentTests: XCTestCase {
         XCTAssertTrue(classified.isEquivalent)
     }
 
-    /// A value mismatch as the diff builds one: the field and both values carried structurally.
+    /// Returns a value mismatch as the diff builds one: the field and both values carried structurally.
+    ///
+    /// - Parameters:
+    ///   - label: The label of the diverging event.
+    ///   - field: The payload field whose value differs.
+    ///   - baseline: The field's value on the baseline side.
+    ///   - candidate: The field's value on the candidate side.
+    /// - Returns: A `.valueMismatch` divergence at sequence 0 on both sides.
     private func changed(
         _ label: String,
         _ field: String,

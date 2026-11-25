@@ -16,7 +16,12 @@ final class OpScopedIntentTests: XCTestCase {
         TraceEvent(seq: seq, kind: .notification, label: label, tier: .semantic, op: op)
     }
 
-    /// A real comparison, so the divergences carry the diff's op stamp, plus a runner's evidence.
+    /// Returns a real comparison, so the divergences carry the diff's op stamp, plus a runner's evidence.
+    ///
+    /// - Parameters:
+    ///   - baseline: The baseline trace's events.
+    ///   - candidate: The candidate trace's events.
+    /// - Returns: The diff of the two traces and the probe evidence holding both.
     private func compare(
         _ baseline: [TraceEvent],
         _ candidate: [TraceEvent]

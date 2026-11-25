@@ -55,7 +55,15 @@ final class SeamHarnessEndToEndTests: XCTestCase {
         )
     }
 
-    /// Stand-in for production code. `pricing` is the only thing that differs between branches.
+    /// Returns the trace of a stand-in for production code. `pricing` is the only thing that differs
+    /// between branches.
+    ///
+    /// - Parameters:
+    ///   - cassette: The cassette the clock, RNG, and defaults seams replay from or record to.
+    ///   - pricing: The pricing branch: the total, in cents, for a subtotal in cents and an A/B bucket
+    ///     in `0 ..< 100`.
+    /// - Returns: The trace holding the session-started and checkout-completed notifications and
+    ///   markers.
     private func runSession(
         cassette: Cassette,
         pricing: (_ subtotal: Int, _ bucket: Int) -> Int
@@ -86,13 +94,25 @@ final class SeamHarnessEndToEndTests: XCTestCase {
         return recorder.trace()
     }
 
-    /// Changed pricing: an unconditional +25 fee — a regression attributable to the code, independent
-    /// of which bucket was recorded, so the assertion is deterministic.
+    /// Returns changed pricing: an unconditional +25 fee — a regression attributable to the code,
+    /// independent of which bucket was recorded, so the assertion is deterministic.
+    ///
+    /// - Parameters:
+    ///   - subtotal: The order subtotal, in cents.
+    ///   - bucket: The A/B bucket, in `0 ..< 100`.
+    /// - Returns: The total, in cents: the baseline total plus 25.
     private func changedPricing(_ subtotal: Int, _ bucket: Int) -> Int {
         baselinePricing(subtotal, bucket) + 25
     }
 
-    /// Baseline pricing: a bucket-gated A/B discount (so the RNG seam genuinely affects the output).
+    /// Returns baseline pricing: a bucket-gated A/B discount (so the RNG seam genuinely affects the
+    /// output).
+    ///
+    /// - Parameters:
+    ///   - subtotal: The order subtotal, in cents.
+    ///   - bucket: The A/B bucket, in `0 ..< 100`.
+    /// - Returns: The total, in cents: the subtotal less 100 when `bucket` is below 50, else the
+    ///   subtotal.
     private func baselinePricing(_ subtotal: Int, _ bucket: Int) -> Int {
         subtotal - (bucket < 50 ? 100 : 0)
     }

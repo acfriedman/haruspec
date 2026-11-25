@@ -4,7 +4,9 @@ import XCTest
 
 /// Extension mode end-to-end on a real captured module: an *intended* feature change (loyalty points)
 /// that also carries a **collateral** regression. The oracle must absorb the declared additions while
-/// still catching the undeclared one. Migration parity is the special case where nothing is declared.
+/// still catching the undeclared one.
+///
+/// Migration parity is the special case where nothing is declared.
 final class ExtensionModeTests: XCTestCase {
     /// Without an intent spec (parity mode), the feature's intended additions look just like the
     /// collateral regression: every divergence is `.collateral` and gates.

@@ -32,8 +32,10 @@ final class BypassingLedger: AuditedLedger {
 
 /// What the ledger announces through — a collaborator boundary. It is stamped *in this file*, which
 /// carries a deliberate `NotificationCenter.default` reach, so its double's declaring file is this
-/// one. That placement is the point of the scoping tests: an audit that reads collaborator sources
-/// gates the subject on this file; one scoped by injection does not.
+/// one.
+///
+/// That placement is the point of the scoping tests: an audit that reads collaborator sources gates
+/// the subject on this file; one scoped by injection does not.
 @Haruspec
 protocol Announcing: AnyObject {
     func announce(total: Int)

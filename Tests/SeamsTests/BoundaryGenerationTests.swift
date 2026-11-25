@@ -4,11 +4,15 @@ import XCTest
 
 /// Boundary-first generation. Bugs cluster at the ends of a domain, and uniform sampling reaches an
 /// end only by luck — over `.int(0 ... 20)` a given edge shows up in 95% of 64-draw runs but only 21%
-/// of 5-draw runs, and a `.double` range never lands on its bounds at all. Enumerating the edges first
-/// makes edge coverage a property of the design rather than of the budget: trimming a budget then drops
-/// random middles and keeps the ends.
+/// of 5-draw runs, and a `.double` range never lands on its bounds at all.
+///
+/// Enumerating the edges first makes edge coverage a property of the design rather than of the budget:
+/// trimming a budget then drops random middles and keeps the ends.
 final class BoundaryGenerationTests: XCTestCase {
-    /// A golden template: one track per seam, two readings each (an op applied twice).
+    /// Returns a golden template: one track per seam, two readings each (an op applied twice).
+    ///
+    /// - Parameter seams: The value each seam reads, keyed by seam name.
+    /// - Returns: Cassette data whose track for each seam holds its value twice.
     private func golden(_ seams: [String: Int64]) -> CassetteData {
         CassetteData(tracks: seams.mapValues { [CanonicalValue.int($0), CanonicalValue.int($0)] })
     }

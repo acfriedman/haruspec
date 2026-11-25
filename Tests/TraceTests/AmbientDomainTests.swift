@@ -41,13 +41,16 @@ final class AmbientDomainTests: XCTestCase {
     }
 }
 
+/// Records a `work` marker from a subject that declares nothing.
+///
+/// - Parameter recorder: The recorder the marker is recorded into.
+///
 /// A domain is supposed to describe *the code*: "this is MainActor-isolated", "this runs on the cart
 /// queue". For code that declares no isolation at all, there is no such fact — and a resolver that
 /// answers with wherever the caller happened to be makes the harness part of the measurement.
 ///
 /// That is the same failure `worker-N` had, one level up: a field meant to remove scheduling
 /// nondeterminism, reintroducing it.
-/// A subject that declares nothing.
 private func recordUndeclaredWork(into recorder: TraceRecorder) {
     TraceContext.$current.withValue(recorder) { Haruspec.marker("work") }
 }

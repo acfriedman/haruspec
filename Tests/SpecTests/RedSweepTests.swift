@@ -10,6 +10,7 @@ import XCTest
 // dedupe the reports list beside the reported case.
 
 /// Two bugs. The loud one fails every probe: `CartChanged` carries the subtotal from before the add.
+///
 /// The quiet one fails only at the top of the quantity domain: a single 20-coffee basket loses a cent.
 private final class LoudAndQuietBugCart: PromoCart {
     private let center: NotificationCenter

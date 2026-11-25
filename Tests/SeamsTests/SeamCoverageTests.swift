@@ -87,11 +87,19 @@ final class SeamCoverageTests: XCTestCase {
         )
     }
 
-    /// "Production" logic reads a clock + a discount from the cassette and posts the total. With
-    /// `extraSeam`, the *changed* branch reaches a new boundary (a surcharge flag) the golden never
-    /// recorded — and whose value happens to be 0 in this environment, so the observable trace is
-    /// *identical*. The trace diff alone would call that EQUIVALENT (a false pass); coverage must catch
-    /// the unrecorded boundary and abstain.
+    /// Returns the trace of "production" logic that reads a clock + a discount from the cassette and
+    /// posts the total. With `extraSeam`, the *changed* branch reaches a new boundary (a surcharge flag)
+    /// the golden never recorded — and whose value happens to be 0 in this environment, so the
+    /// observable trace is *identical*.
+    ///
+    /// - Parameters:
+    ///   - cassette: The cassette the seams replay from or record to.
+    ///   - extraSeam: Whether this is the changed branch, which also reads a `surcharge` seam.
+    /// - Returns: The trace holding the `CheckoutCompleted` notification and the `checkout.completed`
+    ///   marker.
+    ///
+    /// The trace diff alone would call that EQUIVALENT (a false pass); coverage must catch the
+    /// unrecorded boundary and abstain.
     private func runSession(cassette: Cassette, extraSeam: Bool) -> Trace {
         let recorder = TraceRecorder(name: "session", clock: ManualClock())
         let center = RecordingNotificationCenter()

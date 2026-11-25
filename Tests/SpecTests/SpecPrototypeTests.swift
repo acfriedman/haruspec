@@ -222,7 +222,10 @@ final class SpecPrototypeTests: XCTestCase {
         print("=== ARG PARAMETERIZATION END ===")
     }
 
-    /// The entire authored surface — this is all a developer writes. No recorder, interceptor, or context.
+    /// Returns the entire authored surface — all a developer writes. No recorder, interceptor, or
+    /// context.
+    ///
+    /// - Returns: The three-op `promo-cart` spec, not yet baselined.
     private func cart() -> Spec<PromoCart> {
         Spec<PromoCart>("promo-cart")
             .operations {
@@ -275,16 +278,24 @@ final class SpecPrototypeTests: XCTestCase {
         )
     }
 
-    /// The spec declares *no* `.observe(...)` allowlist, so capture is all-notifications by default.
+    /// Returns a spec that declares *no* `.observe(...)` allowlist, so capture is all-notifications by
+    /// default.
+    ///
+    /// - Returns: The one-op `analytics-cart` spec, not yet baselined.
     private func analyticsCart() -> Spec<AnalyticsCart> {
         Spec<AnalyticsCart>("analytics-cart")
             .operations { Op("add") { $0.addItem() } }
     }
 }
 
-/// System factories, typed to the protocol so the differential harness sees one system type across the
-/// baseline and each candidate. (An inline `{ GoodCart(...) }` returns a concrete type upcast to the
-/// protocol `S`, which defeats closure-parameter inference — a typed factory is the clean idiom.)
+/// Returns the good cart; the system factories are typed to the protocol so the differential harness
+/// sees one system type across the baseline and each candidate.
+///
+/// - Parameter ctx: The seam context the capture builds the system in.
+/// - Returns: A `GoodCart` posting to the context's notification center.
+///
+/// (An inline `{ GoodCart(...) }` returns a concrete type upcast to the protocol `S`, which defeats
+/// closure-parameter inference — a typed factory is the clean idiom.)
 private func makeGood(_ ctx: SeamContext) -> PromoCart {
     GoodCart(center: ctx.notifications)
 }

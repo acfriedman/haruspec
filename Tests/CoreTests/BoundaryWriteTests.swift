@@ -2,8 +2,10 @@
 import XCTest
 
 /// Property state on a trace comes two ways, and both gate. A `.snapshot` is the harness reading a
-/// property back at the end of a capture — the state contract. A `.stateChange` is a write that
-/// crossed a boundary (a forwarder's or double's setter) — an interaction, compared like a call.
+/// property back at the end of a capture — the state contract.
+///
+/// A `.stateChange` is a write that crossed a boundary (a forwarder's or double's setter) — an
+/// interaction, compared like a call.
 final class BoundaryWriteTests: XCTestCase {
     func testASnapshotValueMismatchGates() {
         let diff = BehavioralDiff.compare(

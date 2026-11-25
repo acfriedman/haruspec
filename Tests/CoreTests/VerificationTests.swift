@@ -3,8 +3,10 @@ import XCTest
 
 /// The three-tier verdict lives on `VerificationResult`, which composes a pure `TraceDiff` with a
 /// `Coverage` signal. These tests pin the soundness core — the `resolve` downgrade rule — against
-/// hand-built diffs + coverage, no capture or replay needed. The one law under test: **never emit a
-/// false EQUIVALENT**; an uncovered surface downgrades to CANNOT-VERIFY, a real divergence stands.
+/// hand-built diffs + coverage, no capture or replay needed.
+///
+/// The one law under test: **never emit a false EQUIVALENT**; an uncovered surface downgrades to
+/// CANNOT-VERIFY, a real divergence stands.
 final class VerificationTests: XCTestCase {
     private func diff(_ verdict: TraceDiff.Verdict, _ divergences: [Divergence] = []) -> TraceDiff {
         TraceDiff(verdict: verdict, baselineName: "base", candidateName: "cand", divergences: divergences)

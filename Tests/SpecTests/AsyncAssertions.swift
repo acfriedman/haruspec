@@ -3,6 +3,13 @@ import XCTest
 /// The async twin of `XCTAssertThrowsError`, whose autoclosure is synchronous and so cannot hold an
 /// `await`.
 ///
+/// - Parameters:
+///   - message: The failure message for when nothing is thrown.
+///   - file: The file of the calling assertion, defaulted at the call site.
+///   - line: The line of the calling assertion, defaulted at the call site.
+///   - expression: The async work expected to throw.
+///   - handler: Inspects the thrown error; the default ignores it.
+///
 /// Takes an ordinary closure rather than an `@autoclosure`, even though an autoclosure may itself be
 /// `async` and would read closer to the XCTest original. SwiftFormat cannot see that such a parameter
 /// is async and strips the `await` inside it as redundant, which then fails to compile — a formatter

@@ -4,9 +4,11 @@ import XCTest
 
 /// How many times each op appears. `Ordering(repeating:)` was one number for every op, which stopped
 /// fitting once ops collapsed — one `add` wants applying six times where one `applyPromo` wants two, and
-/// raising the global dial buys both. Worse, an *exact* count means every sequence runs every op the same
-/// number of times, so a state that needs an op to be absent or scarce is unreachable no matter how many
-/// orderings are sampled. A range is what reaches it.
+/// raising the global dial buys both.
+///
+/// Worse, an *exact* count means every sequence runs every op the same number of times, so a state that
+/// needs an op to be absent or scarce is unreachable no matter how many orderings are sampled. A range is
+/// what reaches it.
 final class OpMultiplicityTests: XCTestCase {
     private func labelCounts(_ orderings: [[Op<PromoCart>]], _ label: String) -> Set<Int> {
         Set(orderings.map { $0.filter { $0.label == label }.count })

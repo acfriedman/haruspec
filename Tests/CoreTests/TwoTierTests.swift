@@ -64,12 +64,25 @@ final class TwoTierTests: XCTestCase {
         ])
     }
 
-    /// Internal call mechanics — the fragile, code-symbol-named tier.
+    /// Returns internal call mechanics — the fragile, code-symbol-named tier.
+    ///
+    /// - Parameters:
+    ///   - seq: The event's position in the trace.
+    ///   - label: The code symbol called.
+    ///   - payload: The call's arguments; `nil` for none.
+    /// - Returns: A structural-tier `.call` event on subject 1.
     private func structural(_ seq: Int, _ label: String, _ payload: CanonicalValue? = nil) -> TraceEvent {
         TraceEvent(seq: seq, kind: .call, label: label, subject: 1, payload: payload, tier: .structural)
     }
 
-    /// A durable, observable product side effect (a notification) — semantic tier, carries a real value.
+    /// Returns a durable, observable product side effect (a notification) — semantic tier, carries a real
+    /// value.
+    ///
+    /// - Parameters:
+    ///   - seq: The event's position in the trace.
+    ///   - label: The notification's name.
+    ///   - payload: The notification's value.
+    /// - Returns: A semantic-tier `.notification` event on subject 1.
     private func semantic(_ seq: Int, _ label: String, _ payload: CanonicalValue) -> TraceEvent {
         TraceEvent(seq: seq, kind: .notification, label: label, subject: 1, payload: payload, tier: .semantic)
     }

@@ -144,7 +144,11 @@ final class DerivedOpsTests: XCTestCase {
         NegativeBlindCart(center: context.notifications)
     }
 
-    /// The collapsed spec: the derivation plus its authored residue — the sku values and the `.last()`.
+    /// Returns the collapsed spec: the derivation plus its authored residue — the sku values and the
+    /// `.last()`.
+    ///
+    /// - Parameter name: The name the spec is reported under.
+    /// - Returns: The settled `MeteredCart` spec.
     private func cartSpec(_ name: String) -> Spec<MeteredCart> {
         Spec<MeteredCart>(name) {
             Amend("add").varying("sku", over: .oneOf("COFFEE", "MUG"))

@@ -73,6 +73,8 @@ final class MainActorDomainTests: XCTestCase {
 
 /// Records a marker from a frame that declares no isolation, as a stamped double or the recording
 /// notification center does, whatever its caller's isolation.
+///
+/// - Parameter label: The name the marker is recorded under.
 private func recordFromNonisolatedCode(_ label: String) {
     Haruspec.marker(label)
 }

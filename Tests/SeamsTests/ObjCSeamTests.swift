@@ -8,9 +8,14 @@ import XCTest
 /// point: the ObjC method `deviceToken` carries **no annotation at all** and is still swizzlable,
 /// because ObjC dispatches through `objc_msgSend` by nature. This is why "ObjC is the easy case."
 extension LegacyObjCManager {
-    /// The paired swizzle target (harness code — would be `#if DEBUG`). `dynamic` is still needed on
-    /// *this* Swift method so its internal self-call goes through objc dispatch to the original; the
-    /// original ObjC `deviceToken` needed nothing.
+    /// Returns the device token through the `objc.deviceToken` seam: the paired swizzle target (harness
+    /// code — would be `#if DEBUG`).
+    ///
+    /// - Returns: The token the installed cassette replays or records, or the original token when no
+    ///   cassette is installed; empty when the cassette yields no string.
+    ///
+    /// `dynamic` is still needed on *this* Swift method so its internal self-call goes through objc
+    /// dispatch to the original; the original ObjC `deviceToken` needed nothing.
     @objc dynamic func seam_deviceToken() -> String {
         guard let cassette = Seam.cassette else { return seam_deviceToken() }
         return cassette.string(seam: "objc.deviceToken", live: { self.seam_deviceToken() }) ?? ""

@@ -18,8 +18,12 @@ final class VariantDeterminismTests: XCTestCase {
         XCTAssertEqual(variants.map(\.tracks), fromOther.map(\.tracks))
     }
 
-    /// The same tracks, stored so that walking them visits the seams in another order: built in reverse
-    /// into a much larger table.
+    /// Returns the same tracks, stored so that walking them visits the seams in another order: built in
+    /// reverse into a much larger table.
+    ///
+    /// - Parameter tracks: The tracks to copy, keyed by seam name.
+    /// - Returns: A copy whose walk order differs from `tracks`; `tracks` itself, after recording a test
+    ///   failure, when no other order is found.
     private func reordered(_ tracks: [String: [CanonicalValue]]) -> [String: [CanonicalValue]] {
         for capacity in [64, 128, 256, 512] {
             var copy: [String: [CanonicalValue]] = [:]

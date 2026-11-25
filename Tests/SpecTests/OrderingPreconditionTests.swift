@@ -5,7 +5,11 @@ import HaruspecTrace
 import XCTest
 
 final class OrderingPreconditionTests: XCTestCase {
-    /// A space far past any cap, with nothing declared about ordering — the "unchanged behavior" control.
+    /// Returns a spec whose space is far past any cap, with nothing declared about ordering — the
+    /// "unchanged behavior" control.
+    ///
+    /// - Parameter orderingMax: The most orderings the spec may explore.
+    /// - Returns: The four-op spec, baselined on the good cart.
     private func unconstrainedSpec(orderingMax: Int) -> BaselinedSpec<PromoCart> {
         Spec<PromoCart>("promo-cart.unconstrained")
             .operations {
@@ -56,7 +60,12 @@ final class OrderingPreconditionTests: XCTestCase {
         )
     }
 
-    /// Five repeatable ops so the space is far past any cap and sampling — not enumeration — is in play.
+    /// Returns five repeatable ops so the space is far past any cap and sampling — not enumeration — is
+    /// in play.
+    ///
+    /// - Parameter hard: Whether `remove`'s dependence on `add` is a hard gate (`requires`) rather than
+    ///   a soft precondition (`after`).
+    /// - Returns: The ops `add`, `remove`, `promo`, `audit`, and a last `checkout`.
     private func gatedOps(hard: Bool) -> [Op<PromoCart>] {
         let remove = Op<PromoCart>("remove") { _ in }
         return [

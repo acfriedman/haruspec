@@ -5,9 +5,11 @@ import XCTest
 
 /// Property-based generation at the seam, differential flavor. A single recorded cassette proves
 /// equivalence on ONE path; a path-dependent regression the golden input never triggers slips through as
-/// EQUIVALENT. Generating many seam-vectors and diffing baseline vs candidate over the surface catches
-/// it — the `SeamCoverageTests` money-shot one level deeper: a *value*-dependent miss, not an unrecorded
-/// boundary — and a held run *credits domain coverage*, raising the reported surface past a single point.
+/// EQUIVALENT.
+///
+/// Generating many seam-vectors and diffing baseline vs candidate over the surface catches it — the
+/// `SeamCoverageTests` money-shot one level deeper: a *value*-dependent miss, not an unrecorded boundary
+/// — and a held run *credits domain coverage*, raising the reported surface past a single point.
 final class PropertyBasedTests: XCTestCase {
     private static let checkoutCompleted = Notification.Name("CheckoutCompleted")
 
@@ -113,8 +115,17 @@ final class PropertyBasedTests: XCTestCase {
         return recording.snapshot()
     }
 
-    /// "Production" checkout. Reads a `discount` value seam (the same `cassette.int` primitive `SeamClock`
-    /// / `SeamRNG` wrap) and a `noise` seam it does *not* act on, then posts the total computed by `total`.
+    /// Returns the trace of a "production" checkout that reads a `discount` value seam and a `noise` seam
+    /// it does *not* act on, then posts the total computed by `total`.
+    ///
+    /// - Parameters:
+    ///   - cassette: The cassette the seams replay from or record to.
+    ///   - subtotal: The order subtotal, in cents.
+    ///   - total: The pricing branch: the total, in cents, for a subtotal and a discount in cents.
+    /// - Returns: The trace holding the `CheckoutCompleted` notification and the `checkout.completed`
+    ///   marker.
+    ///
+    /// The `discount` seam is the same `cassette.int` primitive `SeamClock` / `SeamRNG` wrap.
     private func runCheckout(
         cassette: Cassette,
         subtotal: Int64,
@@ -133,7 +144,13 @@ final class PropertyBasedTests: XCTestCase {
         return recorder.trace()
     }
 
-    /// Pricing branches: baseline, a behavior-preserving refactor, and a path-dependent regression.
+    /// Returns the baseline pricing, the first of the pricing branches: baseline, a behavior-preserving
+    /// refactor, and a path-dependent regression.
+    ///
+    /// - Parameters:
+    ///   - subtotal: The order subtotal, in cents.
+    ///   - discount: The discount, in cents.
+    /// - Returns: The total, in cents: the subtotal less the discount.
     private func baseline(_ subtotal: Int64, _ discount: Int64) -> Int64 {
         subtotal - discount
     }

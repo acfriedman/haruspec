@@ -98,8 +98,11 @@ private func makeGood(_ ctx: SeamContext) -> PromoCart {
     GoodCart(center: ctx.notifications)
 }
 
-/// The wiring an adopting app writes once, so each check is a one-liner: an unapplied initializer
-/// reference with the shared collaborators bound here rather than repeated per port.
+/// Returns the wiring an adopting app writes once, so each check is a one-liner: an unapplied
+/// initializer reference with the shared collaborators bound here rather than repeated per port.
+///
+/// - Parameter make: Builds the cart, given the notification center it posts to.
+/// - Returns: A factory that builds the cart on a seam context's notification center.
 private func port(_ make: @escaping (NotificationCenter) -> some PromoCart) -> (SeamContext) -> PromoCart {
     { context in make(context.notifications) }
 }
