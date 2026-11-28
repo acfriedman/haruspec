@@ -2,6 +2,10 @@
 
 Your code's current behavior is the baseline: prove a change did what you intended, and nothing else.
 
+<!-- lyceum:video -->
+[![Haruspec in five minutes: a narrated explainer](https://pub-c5942e9d3ad74171900bad15b82132ab.r2.dev/videos/overview/poster.jpg)](https://pub-c5942e9d3ad74171900bad15b82132ab.r2.dev/videos/overview/index.html)
+<!-- /lyceum:video -->
+
 ![Tests](https://github.com/acfriedman/haruspec/actions/workflows/tests.yml/badge.svg)
 ![Swift 6.2](https://img.shields.io/badge/Swift-6.2-orange)
 ![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20iOS-blue)
