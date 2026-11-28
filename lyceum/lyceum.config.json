@@ -9,5 +9,16 @@
     "openai"
   ],
   "pronounce": {},
-  "allowSpoken": []
+  "allowSpoken": [],
+  "store": {
+    "endpoint": "https://0c79d010ba18e0050f25bb99a1d849d1.r2.cloudflarestorage.com",
+    "bucket": "haruspec",
+    "public": "https://pub-c5942e9d3ad74171900bad15b82132ab.r2.dev"
+  },
+  "coverage": {
+    "explains": [
+      "README.md",
+      "docs/*.md"
+    ]
+  }
 }

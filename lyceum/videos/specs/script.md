@@ -33,6 +33,9 @@ sources:
   - example-xcode-migration/LegacyAppTests/SubjectBoundaries.swift (the stamped Cart protocol with its pasted initializer, the conformance lines)
   - example-xcode-migration/LegacyAppTests/CartMigrationSpec.swift (the three amendment lines, the campaign suite with check and expecting diverged)
   - example-xcode-migration/LegacyAppTests/CollaboratorBoundaries.swift (the Product generator and the catalogue of product codes)
+
+# The one file this video explains.
+explains: "docs/specs.md"
 verified:
   ".": "b2f1975473ac"
   example-xcode-migration: "c177f1d3f947"

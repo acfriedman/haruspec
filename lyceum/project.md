@@ -35,7 +35,7 @@ Paths are relative to the root of this repository (`haruspec/`):
 
 `example-xcode-migration/` (a checkout beside this one) is the dogfood app: real specs in
 `LegacyAppTests/`, real plans in `HaruspecPlans/`. Cite it only where the engine has no equivalent, since
-the staleness routine has to clone it to check those sources.
+CI has to clone it to check those sources.
 
 ## House rules
 
@@ -54,14 +54,19 @@ the staleness routine has to clone it to check those sources.
 
 ## Review and delivery
 
-- **Gates:** show Andrew the intent and arc before narrating. He may waive the script review; still show
-  the arc.
-- **Delivery:** send the finished MP4 to him directly. Renders stay out of git (`videos/*/dist/`).
-- **Commits:** on a branch in this repository, fast-forwarded into `main`, with no pull request, and only
-  when he asks. Push only when he asks.
-- **Voice key:** `OPENAI_KEY` lives in this project's own `.env` (gitignored). Lyceum reads no `.env`
-  above the project.
-- **Revisions:** re-render only the changed scene (`npm run render -- <video> --scene <id>`, `--draft` for
-  a quick 720p look), and the whole video once he approves.
-- **Staleness:** a weekly routine runs `npx lyceum stale` here. After Andrew approves a video, run
-  `npx lyceum stale --mark <video>` so it is measured from that commit.
+CI makes and refreshes these videos unattended, and nobody reviews them, so every claim must come from
+the code at the current commit. Each video tells the story of the one file it explains (`explains:`):
+the root `README.md` or a page in `docs/`.
+
+- **Runs:** `.github/workflows/lyceum.yml` runs on a push to `main`, weekly, and by hand. It asks
+  `lyceum ci plan` what needs work, an agent revises each video, and `lyceum ship` gates it and
+  publishes it to the project's store (Cloudflare R2) at a fixed URL.
+- **Embeds:** each file shows its video as a thumbnail, between `lyceum:video` markers that
+  `lyceum embed` writes. Never edit those files outside that block.
+- **Landing:** changes land as pull requests from `lyceum/refresh-*` branches, queued to merge
+  themselves once Andrew approves (`main` needs one approval). The video is public before then.
+- **Keys:** CI reads them from Actions secrets. On the Mac, `OPENAI_KEY` and the store's keys live in this
+  project's own `.env` (gitignored). Lyceum reads no `.env` above the project.
+- **By hand:** a video made or revised here goes through the same gates: `npx lyceum stale --mark
+  <video>`, then `npx lyceum ship <video>`. Re-render only a changed scene while working
+  (`npm run render -- <video> --scene <id>`, `--draft` for a quick 720p look).

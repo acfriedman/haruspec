@@ -27,6 +27,9 @@ sources:
   - Sources/Local/LocalCheck.swift (records the merge base once per base commit, replays only the specs the change touches)
   - Scripts/haruspec (the launcher behind .haruspec/bin/haruspec init and check)
   - Package.swift (the Haruspec umbrella product)
+
+# The one file this video explains.
+explains: "README.md"
 verified: "b2f1975473ac"
 ---
 
