@@ -30,7 +30,7 @@ sources:
 
 # The one file this video explains.
 explains: "README.md"
-verified: "b2f1975473ac"
+verified: "77aa1872a6dc"
 ---
 
 <!--
